@@ -95,6 +95,66 @@ func (Handler) ListDepts(c fiber.Ctx) error {
 	return c.JSON(response.Success([]fiber.Map{fixtureDept()}))
 }
 
+func (Handler) DataRuleModels(c fiber.Ctx) error {
+	return c.JSON(response.Success([]string{"user", "role", "dept"}))
+}
+
+func (Handler) DataRuleModelColumns(c fiber.Ctx) error {
+	return c.JSON(response.Success([]fiber.Map{
+		{"key": "id", "comment": "ID"},
+		{"key": "dept_id", "comment": "部门 ID"},
+	}))
+}
+
+func (Handler) DataRuleValueTemplateVariables(c fiber.Ctx) error {
+	return c.JSON(response.Success([]fiber.Map{
+		{"key": "user_id", "comment": "当前用户 ID"},
+		{"key": "dept_id", "comment": "当前部门 ID"},
+	}))
+}
+
+func (Handler) GetAllDataRules(c fiber.Ctx) error {
+	return c.JSON(response.Success([]fiber.Map{fixtureDataRule()}))
+}
+
+func (Handler) GetDataRule(c fiber.Ctx) error {
+	return c.JSON(response.Success(fixtureDataRule()))
+}
+
+func (Handler) ListDataRules(c fiber.Ctx) error {
+	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{fixtureDataRule()}, 1, 1, 20, "/api/v1/sys/data-rules")))
+}
+
+func (Handler) GetAllDataScopes(c fiber.Ctx) error {
+	return c.JSON(response.Success([]fiber.Map{fixtureDataScope()}))
+}
+
+func (Handler) GetDataScope(c fiber.Ctx) error {
+	return c.JSON(response.Success(fixtureDataScope()))
+}
+
+func (Handler) GetDataScopeRules(c fiber.Ctx) error {
+	scope := fixtureDataScope()
+	scope["rules"] = []fiber.Map{fixtureDataRule()}
+	return c.JSON(response.Success(scope))
+}
+
+func (Handler) ListDataScopes(c fiber.Ctx) error {
+	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{fixtureDataScope()}, 1, 1, 20, "/api/v1/sys/data-scopes")))
+}
+
+func (Handler) ListPlugins(c fiber.Ctx) error {
+	return c.JSON(response.Success([]fiber.Map{fixturePlugin()}))
+}
+
+func (Handler) PluginChanged(c fiber.Ctx) error {
+	return c.JSON(response.Success(false))
+}
+
+func (Handler) DownloadPlugin(c fiber.Ctx) error {
+	return c.SendString("plugin fixture")
+}
+
 func (Handler) ListLoginLogs(c fiber.Ctx) error {
 	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{}, 0, 1, 20, "/api/v1/logs/login")))
 }
@@ -217,5 +277,38 @@ func fixtureDept() fiber.Map {
 		"updated_time": nil,
 		"deleted_time": nil,
 		"children":     []fiber.Map{},
+	}
+}
+
+func fixtureDataRule() fiber.Map {
+	return fiber.Map{
+		"name":         "本人数据",
+		"model":        "user",
+		"column":       "id",
+		"operator":     0,
+		"expression":   0,
+		"value":        "{{ user_id }}",
+		"id":           1,
+		"created_time": fixtureTime,
+		"updated_time": nil,
+	}
+}
+
+func fixtureDataScope() fiber.Map {
+	return fiber.Map{
+		"name":         "本人数据范围",
+		"status":       1,
+		"id":           1,
+		"created_time": fixtureTime,
+		"updated_time": nil,
+	}
+}
+
+func fixturePlugin() fiber.Map {
+	return fiber.Map{
+		"name":        "dict",
+		"version":     "0.0.8",
+		"description": "Dictionary data plugin",
+		"status":      true,
 	}
 }

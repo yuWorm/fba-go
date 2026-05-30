@@ -102,6 +102,47 @@ func TestLoadIncludesSecondBatchAdminParityPriorityRoutes(t *testing.T) {
 	}
 }
 
+func TestLoadIncludesThirdBatchAdminParityPriorityRoutes(t *testing.T) {
+	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		method           string
+		path             string
+		samplePath       string
+		responseEnvelope *bool
+	}{
+		{"GET", "/api/v1/sys/data-rules/models", "", nil},
+		{"GET", "/api/v1/sys/data-rules/models/{model}/columns", "/api/v1/sys/data-rules/models/user/columns", nil},
+		{"GET", "/api/v1/sys/data-rules/value-template-variables", "", nil},
+		{"GET", "/api/v1/sys/data-rules/all", "", nil},
+		{"GET", "/api/v1/sys/data-rules/{pk}", "/api/v1/sys/data-rules/1", nil},
+		{"GET", "/api/v1/sys/data-rules", "", nil},
+		{"GET", "/api/v1/sys/data-scopes/all", "", nil},
+		{"GET", "/api/v1/sys/data-scopes/{pk}", "/api/v1/sys/data-scopes/1", nil},
+		{"GET", "/api/v1/sys/data-scopes/{pk}/rules", "/api/v1/sys/data-scopes/1/rules", nil},
+		{"GET", "/api/v1/sys/data-scopes", "", nil},
+		{"GET", "/api/v1/sys/plugins", "", nil},
+		{"GET", "/api/v1/sys/plugins/changed", "", nil},
+		{"GET", "/api/v1/sys/plugins/{plugin}", "/api/v1/sys/plugins/dict", boolPtr(false)},
+	} {
+		route := findPriorityRoute(loaded.API.PriorityRoutes, tc.method, tc.path)
+		if route == nil {
+			t.Fatalf("missing priority route %s %s", tc.method, tc.path)
+		}
+		if route.SamplePath != tc.samplePath {
+			t.Fatalf("%s %s sample_path = %q, want %q", tc.method, tc.path, route.SamplePath, tc.samplePath)
+		}
+		if tc.responseEnvelope != nil {
+			if route.ResponseEnvelope == nil || *route.ResponseEnvelope != *tc.responseEnvelope {
+				t.Fatalf("%s %s response_envelope = %v, want %v", tc.method, tc.path, route.ResponseEnvelope, *tc.responseEnvelope)
+			}
+		}
+	}
+}
+
 func TestSnapshotWritesAPIContractSummary(t *testing.T) {
 	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
 	if err != nil {
@@ -282,6 +323,10 @@ func findPriorityRoute(routes []contract.Route, method, path string) *contract.R
 
 func hasPriorityRoute(routes []contract.Route, method, path string) bool {
 	return findPriorityRoute(routes, method, path) != nil
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 type fakeResponse struct {

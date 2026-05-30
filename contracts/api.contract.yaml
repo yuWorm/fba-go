@@ -71,6 +71,51 @@ priority_routes:
     path: /api/v1/sys/depts
     owner: plugin:admin
   - method: GET
+    path: /api/v1/sys/data-rules/models
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-rules/models/{model}/columns
+    sample_path: /api/v1/sys/data-rules/models/user/columns
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-rules/value-template-variables
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-rules/all
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-rules/{pk}
+    sample_path: /api/v1/sys/data-rules/1
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-rules
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-scopes/all
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-scopes/{pk}
+    sample_path: /api/v1/sys/data-scopes/1
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-scopes/{pk}/rules
+    sample_path: /api/v1/sys/data-scopes/1/rules
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-scopes
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/plugins
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/plugins/changed
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/plugins/{plugin}
+    sample_path: /api/v1/sys/plugins/dict
+    owner: plugin:admin
+    response_envelope: false
+  - method: GET
     path: /api/v1/logs/login
     owner: plugin:admin
   - method: GET
