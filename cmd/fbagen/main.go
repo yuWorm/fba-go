@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	fbcontract "github.com/yuWorm/fba-go/cmd/fbagen/internal/contract"
 	fbplugin "github.com/yuWorm/fba-go/cmd/fbagen/internal/plugin"
 	fbswagger "github.com/yuWorm/fba-go/cmd/fbagen/internal/swagger"
 )
@@ -26,6 +27,10 @@ func run(args []string) error {
 		return runPluginScan(args[2:])
 	case "swagger scan":
 		return runSwaggerScan(args[2:])
+	case "contract snapshot":
+		return runContractSnapshot(args[2:])
+	case "contract test":
+		return runContractTest(args[2:])
 	default:
 		return fmt.Errorf("unknown command %s %s", args[0], args[1])
 	}
@@ -86,4 +91,46 @@ func splitModes(value string) []string {
 		}
 	}
 	return modes
+}
+
+func runContractSnapshot(args []string) error {
+	fs := flag.NewFlagSet("contract snapshot", flag.ContinueOnError)
+	contractDir := fs.String("contract", "contracts", "contract directory")
+	out := fs.String("out", "internal/generated/api.contract.snapshot.json", "snapshot output")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	contracts, err := fbcontract.Load(*contractDir)
+	if err != nil {
+		return err
+	}
+	snapshot, err := fbcontract.Snapshot(contracts)
+	if err != nil {
+		return err
+	}
+	return fbcontract.WriteSnapshot(*out, snapshot)
+}
+
+func runContractTest(args []string) error {
+	fs := flag.NewFlagSet("contract test", flag.ContinueOnError)
+	baseURL := fs.String("base-url", "", "base URL")
+	contractDir := fs.String("contract", "contracts", "contract directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	contracts, err := fbcontract.Load(*contractDir)
+	if err != nil {
+		return err
+	}
+	result, err := fbcontract.Test(fbcontract.TestOptions{
+		BaseURL:   *baseURL,
+		Contracts: contracts,
+	})
+	if err != nil {
+		return err
+	}
+	if !result.Passed {
+		return fmt.Errorf("contract test failed: %d failure(s)", len(result.Failures))
+	}
+	return nil
 }
