@@ -88,6 +88,15 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		path   string
 		body   string
 	}{
+		{"POST", "/api/v1/sys/users", `{"username":"contract_user","password":"Passw0rd!","nickname":"Contract User","email":null,"phone":null,"dept_id":1,"roles":[1]}`},
+		{"PUT", "/api/v1/sys/users/1", `{"dept_id":null,"username":"admin","nickname":"Admin","avatar":null,"email":null,"phone":null,"roles":[1]}`},
+		{"PUT", "/api/v1/sys/users/1/permissions?type=status", ""},
+		{"PUT", "/api/v1/sys/users/me/password", `{"old_password":"old-password","new_password":"new-password","confirm_password":"new-password"}`},
+		{"PUT", "/api/v1/sys/users/1/password", `{"password":"new-password"}`},
+		{"PUT", "/api/v1/sys/users/me/nickname", `{"nickname":"Admin"}`},
+		{"PUT", "/api/v1/sys/users/me/avatar", `{"avatar":"https://example.invalid/avatar.png"}`},
+		{"PUT", "/api/v1/sys/users/me/email", `{"captcha":"123456","email":"admin@example.com"}`},
+		{"DELETE", "/api/v1/sys/users/999999", ""},
 		{"POST", "/api/v1/sys/roles", `{"name":"Contract Role","status":1,"is_filter_scopes":true,"remark":null}`},
 		{"PUT", "/api/v1/sys/roles/1", `{"name":"admin","status":1,"is_filter_scopes":true,"remark":null}`},
 		{"PUT", "/api/v1/sys/roles/1/menus", `{"menus":[1]}`},
@@ -133,6 +142,19 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 			t.Fatalf("%s %s status = %d body = %s", tc.method, tc.path, resp.StatusCode, body)
 		}
 	}
+
+	uploadBody := "--fba-contract\r\nContent-Disposition: form-data; name=\"file\"; filename=\"contract.txt\"\r\nContent-Type: text/plain\r\n\r\ncontract\r\n--fba-contract--\r\n"
+	req := httptest.NewRequest("POST", "/api/v1/sys/files/upload", strings.NewReader(uploadBody))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=fba-contract")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("POST /api/v1/sys/files/upload error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /api/v1/sys/files/upload status = %d body = %s", resp.StatusCode, body)
+	}
 }
 
 func TestAdminPluginRegistersPythonCompatibleRouteMetadata(t *testing.T) {
@@ -158,6 +180,15 @@ func TestAdminPluginRegistersPythonCompatibleRouteMetadata(t *testing.T) {
 		"GET /sys/users/:pk":                           true,
 		"GET /sys/users/:pk/roles":                     true,
 		"GET /sys/users":                               true,
+		"POST /sys/users":                              true,
+		"PUT /sys/users/:pk":                           true,
+		"PUT /sys/users/:pk/permissions":               true,
+		"PUT /sys/users/me/password":                   true,
+		"PUT /sys/users/:pk/password":                  true,
+		"PUT /sys/users/me/nickname":                   true,
+		"PUT /sys/users/me/avatar":                     true,
+		"PUT /sys/users/me/email":                      true,
+		"DELETE /sys/users/:pk":                        true,
 		"GET /sys/roles/all":                           true,
 		"GET /sys/roles/:pk/menus":                     true,
 		"GET /sys/roles/:pk/scopes":                    true,
@@ -196,6 +227,7 @@ func TestAdminPluginRegistersPythonCompatibleRouteMetadata(t *testing.T) {
 		"PUT /sys/data-scopes/:pk":                     true,
 		"PUT /sys/data-scopes/:pk/rules":               true,
 		"DELETE /sys/data-scopes":                      true,
+		"POST /sys/files/upload":                       true,
 		"GET /sys/plugins":                             true,
 		"GET /sys/plugins/changed":                     true,
 		"GET /sys/plugins/:plugin":                     true,
@@ -238,6 +270,8 @@ func TestAdminPluginRegistersPythonCompatibleRouteMetadata(t *testing.T) {
 		"PUT /sys/data-scopes/:pk":       "data:scope:edit",
 		"PUT /sys/data-scopes/:pk/rules": "data:scope:rule:edit",
 		"DELETE /sys/data-scopes":        "data:scope:del",
+		"DELETE /sys/users/:pk":          "sys:user:del",
+		"POST /sys/files/upload":         "sys:file:upload",
 		"DELETE /logs/login":             "log:login:del",
 		"DELETE /logs/login/all":         "log:login:clear",
 		"DELETE /logs/opera":             "log:opera:del",
@@ -250,6 +284,25 @@ func TestAdminPluginRegistersPythonCompatibleRouteMetadata(t *testing.T) {
 		}
 		if route.Permission != permission {
 			t.Fatalf("%s Permission = %q, want %q", key, route.Permission, permission)
+		}
+	}
+
+	for _, key := range []string{
+		"POST /sys/users",
+		"PUT /sys/users/:pk",
+		"PUT /sys/users/:pk/permissions",
+		"PUT /sys/users/me/password",
+		"PUT /sys/users/:pk/password",
+		"PUT /sys/users/me/nickname",
+		"PUT /sys/users/me/avatar",
+		"PUT /sys/users/me/email",
+	} {
+		route, ok := got[key]
+		if !ok {
+			t.Fatalf("route %s not registered; registered routes: %v", key, maps.Keys(got))
+		}
+		if route.Permission != "" {
+			t.Fatalf("%s Permission = %q, want empty", key, route.Permission)
 		}
 	}
 }

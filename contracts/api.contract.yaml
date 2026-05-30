@@ -35,6 +35,52 @@ priority_routes:
   - method: GET
     path: /api/v1/sys/users
     owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/users
+    owner: plugin:admin
+    request:
+      body: '{"username":"contract_user","password":"Passw0rd!","nickname":"Contract User","email":null,"phone":null,"dept_id":1,"roles":[1]}'
+  - method: PUT
+    path: /api/v1/sys/users/{pk}
+    sample_path: /api/v1/sys/users/1
+    owner: plugin:admin
+    request:
+      body: '{"dept_id":null,"username":"admin","nickname":"Admin","avatar":null,"email":null,"phone":null,"roles":[1]}'
+  - method: PUT
+    path: /api/v1/sys/users/{pk}/permissions
+    sample_path: "/api/v1/sys/users/1/permissions?type=status"
+    owner: plugin:admin
+  - method: PUT
+    path: /api/v1/sys/users/me/password
+    owner: plugin:admin
+    request:
+      body: '{"old_password":"old-password","new_password":"new-password","confirm_password":"new-password"}'
+  - method: PUT
+    path: /api/v1/sys/users/{pk}/password
+    sample_path: /api/v1/sys/users/1/password
+    owner: plugin:admin
+    request:
+      body: '{"password":"new-password"}'
+  - method: PUT
+    path: /api/v1/sys/users/me/nickname
+    owner: plugin:admin
+    request:
+      body: '{"nickname":"Admin"}'
+  - method: PUT
+    path: /api/v1/sys/users/me/avatar
+    owner: plugin:admin
+    request:
+      body: '{"avatar":"https://example.invalid/avatar.png"}'
+  - method: PUT
+    path: /api/v1/sys/users/me/email
+    owner: plugin:admin
+    request:
+      body: '{"captcha":"123456","email":"admin@example.com"}'
+  - method: DELETE
+    path: /api/v1/sys/users/{pk}
+    sample_path: /api/v1/sys/users/999999
+    owner: plugin:admin
+    permission: sys:user:del
   - method: GET
     path: /api/v1/sys/roles/all
     owner: plugin:admin
@@ -214,6 +260,13 @@ priority_routes:
     permission: data:scope:del
     request:
       body: '{"pks":[999999]}'
+  - method: POST
+    path: /api/v1/sys/files/upload
+    owner: plugin:admin
+    permission: sys:file:upload
+    request:
+      content_type: multipart/form-data; boundary=fba-contract
+      body: "--fba-contract\r\nContent-Disposition: form-data; name=\"file\"; filename=\"contract.txt\"\r\nContent-Type: text/plain\r\n\r\ncontract\r\n--fba-contract--\r\n"
   - method: GET
     path: /api/v1/sys/plugins
     owner: plugin:admin
@@ -412,11 +465,9 @@ routes:
   - method: POST
     path: /api/v1/sys/users
     owner: plugin:admin
-    permission: sys:user:add
   - method: PUT
     path: /api/v1/sys/users/{pk}
     owner: plugin:admin
-    permission: sys:user:edit
   - method: PUT
     path: /api/v1/sys/users/{pk}/permissions
     owner: plugin:admin
@@ -576,6 +627,7 @@ routes:
   - method: POST
     path: /api/v1/sys/files/upload
     owner: plugin:admin
+    permission: sys:file:upload
 
   - method: GET
     path: /api/v1/sys/plugins

@@ -9,24 +9,7 @@ import (
 const fixtureTime = "2026-05-30 00:00:00"
 
 func (Handler) GetUser(c fiber.Ctx) error {
-	return c.JSON(response.Success(fiber.Map{
-		"dept_id":         nil,
-		"username":        "admin",
-		"nickname":        "Admin",
-		"avatar":          nil,
-		"email":           nil,
-		"phone":           nil,
-		"id":              1,
-		"uuid":            "fixture-user",
-		"status":          1,
-		"is_superuser":    true,
-		"is_staff":        true,
-		"is_multi_login":  true,
-		"join_time":       fixtureTime,
-		"last_login_time": nil,
-		"dept":            nil,
-		"roles":           []fiber.Map{fixtureRole()},
-	}))
+	return c.JSON(response.Success(fixtureUser()))
 }
 
 func (Handler) GetUserRoles(c fiber.Ctx) error {
@@ -34,26 +17,64 @@ func (Handler) GetUserRoles(c fiber.Ctx) error {
 }
 
 func (Handler) ListUsers(c fiber.Ctx) error {
-	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{
-		{
-			"dept_id":         nil,
-			"username":        "admin",
-			"nickname":        "Admin",
-			"avatar":          nil,
-			"email":           nil,
-			"phone":           nil,
-			"id":              1,
-			"uuid":            "fixture-user",
-			"status":          1,
-			"is_superuser":    true,
-			"is_staff":        true,
-			"is_multi_login":  true,
-			"join_time":       fixtureTime,
-			"last_login_time": nil,
-			"dept":            nil,
-			"roles":           []fiber.Map{fixtureRole()},
-		},
-	}, 1, 1, 20, "/api/v1/sys/users")))
+	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{fixtureUser()}, 1, 1, 20, "/api/v1/sys/users")))
+}
+
+func (Handler) CreateUser(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success(fixtureUser()))
+}
+
+func (Handler) UpdateUser(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateUserPermission(c fiber.Ctx) error {
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateCurrentUserPassword(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) ResetUserPassword(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateCurrentUserNickname(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateCurrentUserAvatar(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateCurrentUserEmail(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) DeleteUser(c fiber.Ctx) error {
+	return c.JSON(response.Success[any](nil))
 }
 
 func (Handler) GetAllRoles(c fiber.Ctx) error {
@@ -263,6 +284,10 @@ func (Handler) DeleteDataScopes(c fiber.Ctx) error {
 	return c.JSON(response.Success[any](nil))
 }
 
+func (Handler) UploadFile(c fiber.Ctx) error {
+	return c.JSON(response.Success(fiber.Map{"url": "/static/upload/contract.txt"}))
+}
+
 func (Handler) ListPlugins(c fiber.Ctx) error {
 	return c.JSON(response.Success([]fiber.Map{fixturePlugin()}))
 }
@@ -388,6 +413,27 @@ func (Handler) DeleteSession(c fiber.Ctx) error {
 func bindBody(c fiber.Ctx) error {
 	var body map[string]any
 	return c.Bind().Body(&body)
+}
+
+func fixtureUser() fiber.Map {
+	return fiber.Map{
+		"dept_id":         nil,
+		"username":        "admin",
+		"nickname":        "Admin",
+		"avatar":          nil,
+		"email":           nil,
+		"phone":           nil,
+		"id":              1,
+		"uuid":            "fixture-user",
+		"status":          1,
+		"is_superuser":    true,
+		"is_staff":        true,
+		"is_multi_login":  true,
+		"join_time":       fixtureTime,
+		"last_login_time": nil,
+		"dept":            nil,
+		"roles":           []fiber.Map{fixtureRole()},
+	}
 }
 
 func fixtureRole() fiber.Map {

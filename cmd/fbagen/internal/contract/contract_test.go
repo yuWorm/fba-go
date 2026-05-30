@@ -195,6 +195,15 @@ func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 		bodyRequired bool
 		permission   string
 	}{
+		{"POST", "/api/v1/sys/users", "", true, ""},
+		{"PUT", "/api/v1/sys/users/{pk}", "/api/v1/sys/users/1", true, ""},
+		{"PUT", "/api/v1/sys/users/{pk}/permissions", "/api/v1/sys/users/1/permissions?type=status", false, ""},
+		{"PUT", "/api/v1/sys/users/me/password", "", true, ""},
+		{"PUT", "/api/v1/sys/users/{pk}/password", "/api/v1/sys/users/1/password", true, ""},
+		{"PUT", "/api/v1/sys/users/me/nickname", "", true, ""},
+		{"PUT", "/api/v1/sys/users/me/avatar", "", true, ""},
+		{"PUT", "/api/v1/sys/users/me/email", "", true, ""},
+		{"DELETE", "/api/v1/sys/users/{pk}", "/api/v1/sys/users/999999", false, "sys:user:del"},
 		{"POST", "/api/v1/sys/roles", "", true, "sys:role:add"},
 		{"PUT", "/api/v1/sys/roles/{pk}", "/api/v1/sys/roles/1", true, "sys:role:edit"},
 		{"PUT", "/api/v1/sys/roles/{pk}/menus", "/api/v1/sys/roles/1/menus", true, "sys:role:menu:edit"},
@@ -213,6 +222,7 @@ func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 		{"PUT", "/api/v1/sys/data-scopes/{pk}", "/api/v1/sys/data-scopes/1", true, "data:scope:edit"},
 		{"PUT", "/api/v1/sys/data-scopes/{pk}/rules", "/api/v1/sys/data-scopes/1/rules", true, "data:scope:rule:edit"},
 		{"DELETE", "/api/v1/sys/data-scopes", "", true, "data:scope:del"},
+		{"POST", "/api/v1/sys/files/upload", "", true, "sys:file:upload"},
 		{"POST", "/api/v1/sys/plugins", "/api/v1/sys/plugins?type=git&repo_url=https://example.invalid/plugin.git", false, ""},
 		{"DELETE", "/api/v1/sys/plugins/{plugin}", "/api/v1/sys/plugins/dict", false, ""},
 		{"PUT", "/api/v1/sys/plugins/{plugin}/status", "/api/v1/sys/plugins/dict/status", false, ""},
@@ -235,6 +245,14 @@ func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 		if route.Permission != tc.permission {
 			t.Fatalf("%s %s permission = %q, want %q", tc.method, tc.path, route.Permission, tc.permission)
 		}
+	}
+
+	upload := findPriorityRoute(loaded.API.PriorityRoutes, "POST", "/api/v1/sys/files/upload")
+	if upload == nil {
+		t.Fatal("missing priority route POST /api/v1/sys/files/upload")
+	}
+	if upload.Request == nil || upload.Request.ContentType != "multipart/form-data; boundary=fba-contract" {
+		t.Fatalf("POST /api/v1/sys/files/upload content_type = %#v, want multipart sample", upload.Request)
 	}
 }
 
