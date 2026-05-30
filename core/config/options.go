@@ -1,10 +1,15 @@
 package config
 
-import "github.com/gofiber/fiber/v3"
+import (
+	"context"
+
+	"github.com/gofiber/fiber/v3"
+)
 
 type Options struct {
 	App   AppOptions
 	Fiber fiber.Config
+	Hooks Hooks
 }
 
 type AppOptions struct {
@@ -13,6 +18,13 @@ type AppOptions struct {
 	Environment string
 	APIBasePath string
 	Timezone    string
+}
+
+type Hook func(context.Context) error
+
+type Hooks struct {
+	OnStart    []Hook
+	OnShutdown []Hook
 }
 
 func (o Options) WithDefaults() Options {

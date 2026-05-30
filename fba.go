@@ -6,6 +6,8 @@ import (
 )
 
 type Application = app.Application
+type Hook = config.Hook
+type Hooks = config.Hooks
 type Options = config.Options
 
 func NewApplication(opts Options) (Application, error) {
