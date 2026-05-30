@@ -21,12 +21,19 @@ type APIContract struct {
 }
 
 type Route struct {
-	Method           string `yaml:"method" json:"method"`
-	Path             string `yaml:"path" json:"path"`
-	SamplePath       string `yaml:"sample_path,omitempty" json:"sample_path,omitempty"`
-	Owner            string `yaml:"owner,omitempty" json:"owner,omitempty"`
-	Permission       string `yaml:"permission,omitempty" json:"permission,omitempty"`
-	ResponseEnvelope *bool  `yaml:"response_envelope,omitempty" json:"response_envelope,omitempty"`
+	Method           string         `yaml:"method" json:"method"`
+	Path             string         `yaml:"path" json:"path"`
+	SamplePath       string         `yaml:"sample_path,omitempty" json:"sample_path,omitempty"`
+	Request          *RequestSample `yaml:"request,omitempty" json:"request,omitempty"`
+	Owner            string         `yaml:"owner,omitempty" json:"owner,omitempty"`
+	Permission       string         `yaml:"permission,omitempty" json:"permission,omitempty"`
+	ResponseEnvelope *bool          `yaml:"response_envelope,omitempty" json:"response_envelope,omitempty"`
+}
+
+type RequestSample struct {
+	ContentType string            `yaml:"content_type,omitempty" json:"content_type,omitempty"`
+	Headers     map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+	Body        string            `yaml:"body,omitempty" json:"body,omitempty"`
 }
 
 type ResponseContract struct {

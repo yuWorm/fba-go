@@ -54,10 +54,15 @@ func probeRoute(client *http.Client, baseURL string, route Route, response Respo
 	if route.SamplePath != "" {
 		probePath = route.SamplePath
 	}
-	req, err := http.NewRequest(route.Method, strings.TrimRight(baseURL, "/")+probePath, nil)
+	var requestBody io.Reader
+	if route.Request != nil && route.Request.Body != "" {
+		requestBody = strings.NewReader(route.Request.Body)
+	}
+	req, err := http.NewRequest(route.Method, strings.TrimRight(baseURL, "/")+probePath, requestBody)
 	if err != nil {
 		return err
 	}
+	applyRequestSample(req, route.Request)
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -68,6 +73,23 @@ func probeRoute(client *http.Client, baseURL string, route Route, response Respo
 		return fmt.Errorf("route returned %d", resp.StatusCode)
 	}
 	return validateResponseEnvelope(resp, route, response)
+}
+
+func applyRequestSample(req *http.Request, sample *RequestSample) {
+	if sample == nil {
+		return
+	}
+	for key, value := range sample.Headers {
+		req.Header.Set(key, value)
+	}
+	if sample.Body == "" {
+		return
+	}
+	contentType := sample.ContentType
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	req.Header.Set("Content-Type", contentType)
 }
 
 func validateResponseEnvelope(resp *http.Response, route Route, response ResponseContract) error {

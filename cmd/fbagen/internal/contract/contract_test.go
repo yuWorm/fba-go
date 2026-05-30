@@ -143,6 +143,45 @@ func TestLoadIncludesThirdBatchAdminParityPriorityRoutes(t *testing.T) {
 	}
 }
 
+func TestLoadIncludesWriteMethodParityPriorityRoutes(t *testing.T) {
+	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		method       string
+		path         string
+		samplePath   string
+		bodyRequired bool
+	}{
+		{"POST", "/api/v1/dict-types", "", true},
+		{"PUT", "/api/v1/dict-types/{pk}", "/api/v1/dict-types/1", true},
+		{"DELETE", "/api/v1/dict-types", "", true},
+		{"POST", "/api/v1/dict-datas", "", true},
+		{"PUT", "/api/v1/dict-datas/{pk}", "/api/v1/dict-datas/1", true},
+		{"DELETE", "/api/v1/dict-datas", "", true},
+		{"DELETE", "/api/v1/tasks/{task_id}/cancel", "/api/v1/tasks/task-1/cancel", false},
+		{"DELETE", "/api/v1/task-results", "", true},
+		{"POST", "/api/v1/schedulers", "", true},
+		{"PUT", "/api/v1/schedulers/{pk}", "/api/v1/schedulers/1", true},
+		{"PUT", "/api/v1/schedulers/{pk}/status", "/api/v1/schedulers/1/status", false},
+		{"POST", "/api/v1/schedulers/{pk}/execute", "/api/v1/schedulers/1/execute", false},
+		{"DELETE", "/api/v1/schedulers/{pk}", "/api/v1/schedulers/1", false},
+	} {
+		route := findPriorityRoute(loaded.API.PriorityRoutes, tc.method, tc.path)
+		if route == nil {
+			t.Fatalf("missing priority route %s %s", tc.method, tc.path)
+		}
+		if route.SamplePath != tc.samplePath {
+			t.Fatalf("%s %s sample_path = %q, want %q", tc.method, tc.path, route.SamplePath, tc.samplePath)
+		}
+		if tc.bodyRequired && (route.Request == nil || route.Request.Body == "") {
+			t.Fatalf("%s %s missing request body sample", tc.method, tc.path)
+		}
+	}
+}
+
 func TestSnapshotWritesAPIContractSummary(t *testing.T) {
 	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
 	if err != nil {
@@ -312,6 +351,51 @@ func TestRunnerUsesPriorityRouteSamplePath(t *testing.T) {
 	}
 }
 
+func TestRunnerSendsRequestSampleBody(t *testing.T) {
+	loaded := contract.Contracts{
+		API: contract.APIContract{
+			PriorityRoutes: []contract.Route{
+				{
+					Method: "POST",
+					Path:   "/api/v1/dict-types",
+					Request: &contract.RequestSample{
+						ContentType: "application/json",
+						Body:        `{"name":"契约类型","code":"contract_status","remark":null}`,
+					},
+				},
+			},
+		},
+		Response: contract.ResponseContract{
+			Success: contract.ResponseSuccess{
+				Envelope:       true,
+				RequiredFields: []string{"code", "msg", "data"},
+				Code:           200,
+				Msg:            "请求成功",
+			},
+		},
+	}
+
+	result, err := contract.Test(contract.TestOptions{
+		BaseURL:   "http://fba.test",
+		Contracts: loaded,
+		Client: &http.Client{Transport: assertRequestTransport{
+			t:            t,
+			wantMethod:   "POST",
+			wantPath:     "/api/v1/dict-types",
+			wantType:     "application/json",
+			wantBody:     `{"name":"契约类型","code":"contract_status","remark":null}`,
+			status:       http.StatusOK,
+			responseBody: `{"code":200,"msg":"请求成功","data":null}`,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Test() error = %v", err)
+	}
+	if !result.Passed {
+		t.Fatalf("Passed = false, failures = %+v", result.Failures)
+	}
+}
+
 func findPriorityRoute(routes []contract.Route, method, path string) *contract.Route {
 	for i := range routes {
 		if routes[i].Method == method && routes[i].Path == path {
@@ -349,6 +433,42 @@ func (transport fakeTransport) RoundTrip(req *http.Request) (*http.Response, err
 	return &http.Response{
 		StatusCode: status,
 		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+		Request:    req,
+	}, nil
+}
+
+type assertRequestTransport struct {
+	t            *testing.T
+	wantMethod   string
+	wantPath     string
+	wantType     string
+	wantBody     string
+	status       int
+	responseBody string
+}
+
+func (transport assertRequestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	transport.t.Helper()
+	if req.Method != transport.wantMethod {
+		transport.t.Fatalf("method = %s, want %s", req.Method, transport.wantMethod)
+	}
+	if req.URL.Path != transport.wantPath {
+		transport.t.Fatalf("path = %s, want %s", req.URL.Path, transport.wantPath)
+	}
+	if got := req.Header.Get("Content-Type"); got != transport.wantType {
+		transport.t.Fatalf("Content-Type = %q, want %q", got, transport.wantType)
+	}
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		transport.t.Fatalf("ReadAll(request body) error = %v", err)
+	}
+	if string(body) != transport.wantBody {
+		transport.t.Fatalf("body = %q, want %q", body, transport.wantBody)
+	}
+	return &http.Response{
+		StatusCode: transport.status,
+		Body:       io.NopCloser(strings.NewReader(transport.responseBody)),
 		Header:     make(http.Header),
 		Request:    req,
 	}, nil

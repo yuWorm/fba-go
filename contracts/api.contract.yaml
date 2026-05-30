@@ -136,6 +136,25 @@ priority_routes:
   - method: GET
     path: /api/v1/dict-types
     owner: plugin:dict
+  - method: POST
+    path: /api/v1/dict-types
+    owner: plugin:dict
+    permission: dict:type:add
+    request:
+      body: '{"name":"契约类型","code":"contract_status","remark":null}'
+  - method: PUT
+    path: /api/v1/dict-types/{pk}
+    sample_path: /api/v1/dict-types/1
+    owner: plugin:dict
+    permission: dict:type:edit
+    request:
+      body: '{"name":"通用状态","code":"sys_status","remark":"系统通用状态：1/0"}'
+  - method: DELETE
+    path: /api/v1/dict-types
+    owner: plugin:dict
+    permission: dict:type:del
+    request:
+      body: '{"pks":[999999]}'
   - method: GET
     path: /api/v1/dict-datas/all
     owner: plugin:dict
@@ -146,17 +165,68 @@ priority_routes:
   - method: GET
     path: /api/v1/dict-datas
     owner: plugin:dict
+  - method: POST
+    path: /api/v1/dict-datas
+    owner: plugin:dict
+    permission: dict:data:add
+    request:
+      body: '{"type_id":1,"label":"契约","value":"contract","color":null,"sort":99,"status":1,"remark":null}'
+  - method: PUT
+    path: /api/v1/dict-datas/{pk}
+    sample_path: /api/v1/dict-datas/1
+    owner: plugin:dict
+    permission: dict:data:edit
+    request:
+      body: '{"type_id":1,"label":"停用","value":"0","color":"red","sort":1,"status":1,"remark":"停用状态"}'
+  - method: DELETE
+    path: /api/v1/dict-datas
+    owner: plugin:dict
+    permission: dict:data:del
+    request:
+      body: '{"pks":[999999]}'
   - method: GET
     path: /api/v1/tasks/registered
+    owner: plugin:task
+  - method: DELETE
+    path: /api/v1/tasks/{task_id}/cancel
+    sample_path: /api/v1/tasks/task-1/cancel
     owner: plugin:task
   - method: GET
     path: /api/v1/task-results
     owner: plugin:task
+  - method: DELETE
+    path: /api/v1/task-results
+    owner: plugin:task
+    request:
+      body: '{"pks":[999999]}'
   - method: GET
     path: /api/v1/schedulers/all
     owner: plugin:task
   - method: GET
     path: /api/v1/schedulers
+    owner: plugin:task
+  - method: POST
+    path: /api/v1/schedulers
+    owner: plugin:task
+    request:
+      body: '{"name":"Contract Scheduler","task":"task_demo","args":[],"kwargs":{},"queue":null,"exchange":null,"routing_key":null,"start_time":null,"expire_time":null,"expire_seconds":null,"type":0,"interval_every":10,"interval_period":"seconds","crontab":"* * * * *","one_off":false,"remark":null}'
+  - method: PUT
+    path: /api/v1/schedulers/{pk}
+    sample_path: /api/v1/schedulers/1
+    owner: plugin:task
+    request:
+      body: '{"name":"Fixture","task":"task_demo","args":[],"kwargs":{},"queue":null,"exchange":null,"routing_key":null,"start_time":null,"expire_time":null,"expire_seconds":null,"type":0,"interval_every":10,"interval_period":"seconds","crontab":"* * * * *","one_off":false,"remark":null}'
+  - method: PUT
+    path: /api/v1/schedulers/{pk}/status
+    sample_path: /api/v1/schedulers/1/status
+    owner: plugin:task
+  - method: POST
+    path: /api/v1/schedulers/{pk}/execute
+    sample_path: /api/v1/schedulers/1/execute
+    owner: plugin:task
+  - method: DELETE
+    path: /api/v1/schedulers/{pk}
+    sample_path: /api/v1/schedulers/1
     owner: plugin:task
 
 routes:
