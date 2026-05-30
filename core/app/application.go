@@ -7,6 +7,7 @@ import (
 	"github.com/yuWorm/fba-go/core/config"
 	"github.com/yuWorm/fba-go/core/di"
 	"github.com/yuWorm/fba-go/core/fiberx"
+	"github.com/yuWorm/fba-go/core/observability"
 )
 
 type Application interface {
@@ -26,6 +27,7 @@ type application struct {
 func New(opts config.Options) (Application, error) {
 	opts = opts.WithDefaults()
 	fx := fiberx.New(opts)
+	observability.RegisterCoreRoutes(fx.App, observability.NewReadiness())
 	return &application{
 		container: di.New(),
 		http:      fx.App,
