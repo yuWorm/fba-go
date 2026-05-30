@@ -12,6 +12,13 @@ type RoleFilter struct {
 	Status *int
 }
 
+type UserFilter struct {
+	Dept     *int
+	Username string
+	Phone    string
+	Status   *int
+}
+
 type MenuFilter struct {
 	Title  string
 	Status *int
@@ -34,6 +41,14 @@ type DataScopeFilter struct {
 }
 
 type Repository interface {
+	GetUser(ctx context.Context, id int) (model.User, error)
+	GetUserByUsername(ctx context.Context, username string) (model.User, error)
+	ListUsers(ctx context.Context, filter UserFilter, page int, size int) ([]model.User, int64, error)
+	CreateUser(ctx context.Context, param dto.UserCreateParam) (model.User, error)
+	UpdateUser(ctx context.Context, id int, param dto.UserUpdateParam) error
+	UpdateUserPermission(ctx context.Context, id int, permissionType string) error
+	DeleteUser(ctx context.Context, id int) error
+	UserRoles(ctx context.Context, userID int) ([]model.Role, error)
 	AllRoles(ctx context.Context) ([]model.Role, error)
 	GetRole(ctx context.Context, id int) (model.Role, error)
 	ListRoles(ctx context.Context, filter RoleFilter, page int, size int) ([]model.Role, int64, error)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -15,14 +16,17 @@ var ErrNotFound = errors.New("not found")
 
 type MemoryRepository struct {
 	mu              sync.RWMutex
+	users           []model.User
 	roles           []model.Role
 	menus           []model.Menu
 	depts           []model.Dept
 	dataRules       []model.DataRule
 	scopes          []model.DataScope
+	userRoles       map[int][]int
 	scopeRules      map[int][]int
 	roleMenus       map[int][]int
 	roleScopes      map[int][]int
+	nextUserID      int
 	nextRoleID      int
 	nextMenuID      int
 	nextDeptID      int
@@ -31,6 +35,12 @@ type MemoryRepository struct {
 }
 
 func NewMemoryRepository(seed model.Seed) *MemoryRepository {
+	nextUserID := 1
+	for _, item := range seed.Users {
+		if item.ID >= nextUserID {
+			nextUserID = item.ID + 1
+		}
+	}
 	nextRoleID := 1
 	for _, item := range seed.Roles {
 		if item.ID >= nextRoleID {
@@ -62,20 +72,176 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 		}
 	}
 	return &MemoryRepository{
+		users:           append([]model.User(nil), seed.Users...),
 		roles:           append([]model.Role(nil), seed.Roles...),
 		menus:           append([]model.Menu(nil), seed.Menus...),
 		depts:           append([]model.Dept(nil), seed.Depts...),
 		dataRules:       append([]model.DataRule(nil), seed.DataRules...),
 		scopes:          append([]model.DataScope(nil), seed.DataScopes...),
+		userRoles:       cloneIDMap(seed.UserRoles),
 		scopeRules:      cloneIDMap(seed.ScopeRules),
 		roleMenus:       cloneIDMap(seed.RoleMenus),
 		roleScopes:      cloneIDMap(seed.RoleScopes),
+		nextUserID:      nextUserID,
 		nextRoleID:      nextRoleID,
 		nextMenuID:      nextMenuID,
 		nextDeptID:      nextDeptID,
 		nextDataRuleID:  nextDataRuleID,
 		nextDataScopeID: nextDataScopeID,
 	}
+}
+
+func (r *MemoryRepository) GetUser(_ context.Context, id int) (model.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.users {
+		if item.ID == id {
+			return item, nil
+		}
+	}
+	return model.User{}, ErrNotFound
+}
+
+func (r *MemoryRepository) GetUserByUsername(_ context.Context, username string) (model.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.users {
+		if item.Username == username {
+			return item, nil
+		}
+	}
+	return model.User{}, ErrNotFound
+}
+
+func (r *MemoryRepository) ListUsers(_ context.Context, filter UserFilter, page int, size int) ([]model.User, int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]model.User, 0, len(r.users))
+	for _, item := range r.users {
+		if filter.Dept != nil && (item.DeptID == nil || *item.DeptID != *filter.Dept) {
+			continue
+		}
+		if filter.Username != "" && !strings.Contains(item.Username, filter.Username) {
+			continue
+		}
+		if filter.Phone != "" && (item.Phone == nil || !strings.Contains(*item.Phone, filter.Phone)) {
+			continue
+		}
+		if filter.Status != nil && item.Status != *filter.Status {
+			continue
+		}
+		items = append(items, item)
+	}
+	sortUsers(items)
+	return pageSlice(items, page, size), int64(len(items)), nil
+}
+
+func (r *MemoryRepository) CreateUser(_ context.Context, param dto.UserCreateParam) (model.User, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	deptID := param.DeptID
+	if !hasDept(r.depts, deptID) {
+		return model.User{}, ErrNotFound
+	}
+	for _, roleID := range param.Roles {
+		if !hasRole(r.roles, roleID) {
+			return model.User{}, ErrNotFound
+		}
+	}
+	nickname := param.Username
+	if param.Nickname != nil && *param.Nickname != "" {
+		nickname = *param.Nickname
+	}
+	id := r.nextUser()
+	user := model.User{
+		ID:           id,
+		UUID:         "fixture-user-" + strconv.Itoa(id),
+		DeptID:       &deptID,
+		Username:     param.Username,
+		Nickname:     nickname,
+		Password:     param.Password,
+		Email:        param.Email,
+		Phone:        param.Phone,
+		Status:       1,
+		IsSuperuser:  false,
+		IsStaff:      false,
+		IsMultiLogin: false,
+		JoinTime:     model.SeedData().Users[0].JoinTime,
+	}
+	r.users = append(r.users, user)
+	r.userRoles[id] = append([]int(nil), param.Roles...)
+	return user, nil
+}
+
+func (r *MemoryRepository) UpdateUser(_ context.Context, id int, param dto.UserUpdateParam) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if param.DeptID != nil && !hasDept(r.depts, *param.DeptID) {
+		return ErrNotFound
+	}
+	for _, roleID := range param.Roles {
+		if !hasRole(r.roles, roleID) {
+			return ErrNotFound
+		}
+	}
+	for i := range r.users {
+		if r.users[i].ID == id {
+			r.users[i].DeptID = param.DeptID
+			r.users[i].Username = param.Username
+			r.users[i].Nickname = param.Nickname
+			r.users[i].Avatar = param.Avatar
+			r.users[i].Email = param.Email
+			r.users[i].Phone = param.Phone
+			r.userRoles[id] = append([]int(nil), param.Roles...)
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) UpdateUserPermission(_ context.Context, id int, permissionType string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.users {
+		if r.users[i].ID == id {
+			switch permissionType {
+			case "superuser":
+				r.users[i].IsSuperuser = !r.users[i].IsSuperuser
+			case "staff":
+				r.users[i].IsStaff = !r.users[i].IsStaff
+			case "status":
+				if r.users[i].Status == 1 {
+					r.users[i].Status = 0
+				} else {
+					r.users[i].Status = 1
+				}
+			case "multi_login":
+				r.users[i].IsMultiLogin = !r.users[i].IsMultiLogin
+			default:
+				return ErrNotFound
+			}
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) DeleteUser(_ context.Context, id int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.users = deleteByIDs(r.users, []int{id}, func(item model.User) int { return item.ID })
+	delete(r.userRoles, id)
+	return nil
+}
+
+func (r *MemoryRepository) UserRoles(_ context.Context, userID int) ([]model.Role, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if !hasUser(r.users, userID) {
+		return nil, ErrNotFound
+	}
+	return rolesByIDs(r.roles, r.userRoles[userID]), nil
 }
 
 func (r *MemoryRepository) AllRoles(context.Context) ([]model.Role, error) {
@@ -148,6 +314,9 @@ func (r *MemoryRepository) DeleteRoles(_ context.Context, ids []int) error {
 	for _, id := range ids {
 		delete(r.roleMenus, id)
 		delete(r.roleScopes, id)
+		for userID, roleIDs := range r.userRoles {
+			r.userRoles[userID] = deleteInt(roleIDs, id)
+		}
 	}
 	return nil
 }
@@ -563,6 +732,12 @@ func (r *MemoryRepository) nextRole() int {
 	return id
 }
 
+func (r *MemoryRepository) nextUser() int {
+	id := r.nextUserID
+	r.nextUserID++
+	return id
+}
+
 func (r *MemoryRepository) nextMenu() int {
 	id := r.nextMenuID
 	r.nextMenuID++
@@ -649,6 +824,19 @@ func menusByIDs(items []model.Menu, ids []int) []model.Menu {
 	return result
 }
 
+func rolesByIDs(items []model.Role, ids []int) []model.Role {
+	result := make([]model.Role, 0, len(ids))
+	for _, id := range ids {
+		for _, item := range items {
+			if item.ID == id {
+				result = append(result, item)
+				break
+			}
+		}
+	}
+	return result
+}
+
 func scopesByIDs(items []model.DataScope, ids []int) []model.DataScope {
 	result := make([]model.DataScope, 0, len(ids))
 	for _, id := range ids {
@@ -697,6 +885,33 @@ func hasMenu(items []model.Menu, id int) bool {
 	return false
 }
 
+func hasUser(items []model.User, id int) bool {
+	for _, item := range items {
+		if item.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func hasRole(items []model.Role, id int) bool {
+	for _, item := range items {
+		if item.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func hasDept(items []model.Dept, id int) bool {
+	for _, item := range items {
+		if item.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func hasScope(items []model.DataScope, id int) bool {
 	for _, item := range items {
 		if item.ID == id {
@@ -713,6 +928,12 @@ func hasDataRule(items []model.DataRule, id int) bool {
 		}
 	}
 	return false
+}
+
+func sortUsers(items []model.User) {
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].ID > items[j].ID
+	})
 }
 
 func sortMenus(items []model.Menu) {

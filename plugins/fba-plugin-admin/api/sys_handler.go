@@ -12,33 +12,79 @@ import (
 
 const fixtureTime = "2026-05-30 00:00:00"
 
-func (Handler) GetUser(c fiber.Ctx) error {
-	return c.JSON(response.Success(fixtureUser()))
-}
-
-func (Handler) GetUserRoles(c fiber.Ctx) error {
-	return c.JSON(response.Success([]fiber.Map{fixtureRole()}))
-}
-
-func (Handler) ListUsers(c fiber.Ctx) error {
-	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{fixtureUser()}, 1, 1, 20, "/api/v1/sys/users")))
-}
-
-func (Handler) CreateUser(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) GetUser(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
 		return err
 	}
-	return c.JSON(response.Success(fixtureUser()))
+	user, err := h.users.Get(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(user))
 }
 
-func (Handler) UpdateUser(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) GetUserRoles(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	roles, err := h.users.Roles(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(roles))
+}
+
+func (h Handler) ListUsers(c fiber.Ctx) error {
+	page, size := pageParams(c)
+	users, err := h.users.List(c.RequestCtx(), repo.UserFilter{
+		Dept:     intPtrQuery(c, "dept"),
+		Username: c.Query("username"),
+		Phone:    c.Query("phone"),
+		Status:   intPtrQuery(c, "status"),
+	}, page, size, "/api/v1/sys/users")
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(users))
+}
+
+func (h Handler) CreateUser(c fiber.Ctx) error {
+	var param dto.UserCreateParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	user, err := h.users.Create(c.RequestCtx(), param)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(user))
+}
+
+func (h Handler) UpdateUser(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.UserUpdateParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.users.Update(c.RequestCtx(), id, param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateUserPermission(c fiber.Ctx) error {
+func (h Handler) UpdateUserPermission(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	if err := h.users.UpdatePermission(c.RequestCtx(), id, c.Query("type")); err != nil {
+		return err
+	}
 	return c.JSON(response.Success[any](nil))
 }
 
@@ -77,7 +123,14 @@ func (Handler) UpdateCurrentUserEmail(c fiber.Ctx) error {
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) DeleteUser(c fiber.Ctx) error {
+func (h Handler) DeleteUser(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	if err := h.users.Delete(c.RequestCtx(), id); err != nil {
+		return err
+	}
 	return c.JSON(response.Success[any](nil))
 }
 

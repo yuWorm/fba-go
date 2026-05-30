@@ -396,6 +396,75 @@ func TestCurrentUserMatchesPythonSchema(t *testing.T) {
 	}
 }
 
+func TestUserEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"operator","password":"Passw0rd!","nickname":"Operator","email":"operator@example.com","phone":"13900000000","dept_id":1,"roles":[1]}`)
+	assertStatusOK(t, resp)
+	created := assertEnvelopeMap(t, body)
+	if created["username"] != "operator" {
+		t.Fatalf("created user username = %v, want operator", created["username"])
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/users?dept=1&username=oper&phone=139&status=1", "")
+	assertStatusOK(t, resp)
+	page := assertEnvelopeMap(t, body)
+	items, ok := page["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("filtered user items = %T len %d, want one item", page["items"], len(items))
+	}
+	user := assertMap(t, items[0])
+	if user["username"] != "operator" {
+		t.Fatalf("filtered user username = %v, want operator", user["username"])
+	}
+	id := int(user["id"].(float64))
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/users/"+itoa(id)+"/roles", "")
+	assertStatusOK(t, resp)
+	roles := assertEnvelopeSlice(t, body)
+	if len(roles) != 1 {
+		t.Fatalf("user roles count = %d, want 1", len(roles))
+	}
+	role := assertMap(t, roles[0])
+	if role["id"] != float64(1) {
+		t.Fatalf("user role id = %v, want 1", role["id"])
+	}
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/"+itoa(id), `{"dept_id":1,"username":"operator","nickname":"Operator Updated","avatar":null,"email":"operator-updated@example.com","phone":"13900000001","roles":[1]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/users/"+itoa(id), "")
+	assertStatusOK(t, resp)
+	detail := assertEnvelopeMap(t, body)
+	if detail["nickname"] != "Operator Updated" {
+		t.Fatalf("updated user nickname = %v, want Operator Updated", detail["nickname"])
+	}
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/"+itoa(id)+"/permissions?type=status", "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/users/"+itoa(id), "")
+	assertStatusOK(t, resp)
+	detail = assertEnvelopeMap(t, body)
+	if detail["status"] != float64(0) {
+		t.Fatalf("toggled user status = %v, want 0", detail["status"])
+	}
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/users/"+itoa(id), "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/users?username=operator", "")
+	assertStatusOK(t, resp)
+	page = assertEnvelopeMap(t, body)
+	items, ok = page["items"].([]any)
+	if !ok || len(items) != 0 {
+		t.Fatalf("deleted user items = %T len %d, want empty list", page["items"], len(items))
+	}
+}
+
 func TestSidebarMenusMatchesPythonVben5Schema(t *testing.T) {
 	app := newAdminApp(t)
 	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/menus/sidebar", "")

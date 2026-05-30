@@ -68,11 +68,13 @@ type DataScope struct {
 }
 
 type Seed struct {
+	Users      []User
 	Roles      []Role
 	Menus      []Menu
 	Depts      []Dept
 	DataRules  []DataRule
 	DataScopes []DataScope
+	UserRoles  map[int][]int
 	RoleMenus  map[int][]int
 	RoleScopes map[int][]int
 	ScopeRules map[int][]int
@@ -85,6 +87,19 @@ func SeedData() Seed {
 	created := seedTime()
 	headquartersName := "总部"
 	return Seed{
+		Users: []User{
+			{
+				ID:           1,
+				UUID:         "fixture-user",
+				Username:     "admin",
+				Nickname:     "Admin",
+				Status:       1,
+				IsSuperuser:  true,
+				IsStaff:      true,
+				IsMultiLogin: true,
+				JoinTime:     created,
+			},
+		},
 		Roles: []Role{
 			{
 				ID:             1,
@@ -140,6 +155,7 @@ func SeedData() Seed {
 				CreatedTime: created,
 			},
 		},
+		UserRoles:  map[int][]int{1: {1}},
 		RoleMenus:  map[int][]int{1: {1}},
 		RoleScopes: map[int][]int{},
 		ScopeRules: map[int][]int{1: {1}},

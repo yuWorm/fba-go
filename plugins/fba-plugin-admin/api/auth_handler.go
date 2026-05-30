@@ -13,6 +13,7 @@ const refreshCookieName = "fba_refresh_token"
 const refreshCookieMaxAgeSeconds = 60 * 60 * 24 * 7
 
 type Handler struct {
+	users      *service.UserService
 	roles      *service.RoleService
 	menus      *service.MenuService
 	depts      *service.DeptService
@@ -23,6 +24,7 @@ type Handler struct {
 func NewHandler() Handler {
 	repository := repo.NewMemoryRepository(repo.SeedData())
 	return Handler{
+		users:      service.NewUserService(repository),
 		roles:      service.NewRoleService(repository),
 		menus:      service.NewMenuService(repository),
 		depts:      service.NewDeptService(repository),
