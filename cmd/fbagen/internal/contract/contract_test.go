@@ -256,6 +256,41 @@ func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 	}
 }
 
+func TestLoadIncludesNoticePluginPriorityRoutes(t *testing.T) {
+	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		method       string
+		path         string
+		samplePath   string
+		bodyRequired bool
+		permission   string
+	}{
+		{"GET", "/api/v1/sys/notices/{pk}", "/api/v1/sys/notices/1", false, ""},
+		{"GET", "/api/v1/sys/notices", "", false, ""},
+		{"POST", "/api/v1/sys/notices", "", true, "sys:notice:add"},
+		{"PUT", "/api/v1/sys/notices/{pk}", "/api/v1/sys/notices/1", true, "sys:notice:edit"},
+		{"DELETE", "/api/v1/sys/notices", "", true, "sys:notice:del"},
+	} {
+		route := findPriorityRoute(loaded.API.PriorityRoutes, tc.method, tc.path)
+		if route == nil {
+			t.Fatalf("missing priority route %s %s", tc.method, tc.path)
+		}
+		if route.SamplePath != tc.samplePath {
+			t.Fatalf("%s %s sample_path = %q, want %q", tc.method, tc.path, route.SamplePath, tc.samplePath)
+		}
+		if tc.bodyRequired && (route.Request == nil || route.Request.Body == "") {
+			t.Fatalf("%s %s missing request body sample", tc.method, tc.path)
+		}
+		if route.Permission != tc.permission {
+			t.Fatalf("%s %s permission = %q, want %q", tc.method, tc.path, route.Permission, tc.permission)
+		}
+	}
+}
+
 func TestPriorityRoutesCoverDeclaredAPIRoutes(t *testing.T) {
 	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
 	if err != nil {

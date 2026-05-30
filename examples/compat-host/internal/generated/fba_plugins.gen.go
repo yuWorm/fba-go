@@ -3,10 +3,11 @@ package generated
 
 import (
 	plugin "github.com/yuWorm/fba-go/core/plugin"
-	plugin2 "github.com/yuWorm/fba-go/internal/testplugin/order"
+	plugin3 "github.com/yuWorm/fba-go/internal/testplugin/order"
 	plugin0 "github.com/yuWorm/fba-plugin-admin"
 	plugin1 "github.com/yuWorm/fba-plugin-dict"
-	plugin3 "github.com/yuWorm/fba-plugin-task"
+	plugin2 "github.com/yuWorm/fba-plugin-notice"
+	plugin4 "github.com/yuWorm/fba-plugin-task"
 )
 
 func RegisterPlugins(reg *plugin.Registry) error {
@@ -20,6 +21,9 @@ func RegisterPlugins(reg *plugin.Registry) error {
 		return err
 	}
 	if err := reg.Add(plugin3.FBAPlugin(), plugin.ModeAuto); err != nil {
+		return err
+	}
+	if err := reg.Add(plugin4.FBAPlugin(), plugin.ModeAuto); err != nil {
 		return err
 	}
 	return nil

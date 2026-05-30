@@ -5,6 +5,9 @@ plugins:
   - id: dict
     module: github.com/yuWorm/fba-plugin-dict
     mode: auto
+  - id: notice
+    module: github.com/yuWorm/fba-plugin-notice
+    mode: auto
   - id: task
     module: github.com/yuWorm/fba-plugin-task
     mode: auto

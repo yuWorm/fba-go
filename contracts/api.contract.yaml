@@ -330,6 +330,32 @@ priority_routes:
     sample_path: "/api/v1/monitors/sessions/1?session_uuid=fixture-session"
     owner: plugin:admin
   - method: GET
+    path: /api/v1/sys/notices/{pk}
+    sample_path: /api/v1/sys/notices/1
+    owner: plugin:notice
+  - method: GET
+    path: /api/v1/sys/notices
+    owner: plugin:notice
+  - method: POST
+    path: /api/v1/sys/notices
+    owner: plugin:notice
+    permission: sys:notice:add
+    request:
+      body: '{"title":"Contract Notice","type":0,"status":1,"content":"hello notice"}'
+  - method: PUT
+    path: /api/v1/sys/notices/{pk}
+    sample_path: /api/v1/sys/notices/1
+    owner: plugin:notice
+    permission: sys:notice:edit
+    request:
+      body: '{"title":"System Notice","type":0,"status":1,"content":"updated notice"}'
+  - method: DELETE
+    path: /api/v1/sys/notices
+    owner: plugin:notice
+    permission: sys:notice:del
+    request:
+      body: '{"pks":[999999]}'
+  - method: GET
     path: /api/v1/dict-types/all
     owner: plugin:dict
   - method: GET
@@ -699,6 +725,25 @@ routes:
   - method: DELETE
     path: /api/v1/monitors/sessions/{pk}
     owner: plugin:admin
+
+  - method: GET
+    path: /api/v1/sys/notices/{pk}
+    owner: plugin:notice
+  - method: GET
+    path: /api/v1/sys/notices
+    owner: plugin:notice
+  - method: POST
+    path: /api/v1/sys/notices
+    owner: plugin:notice
+    permission: sys:notice:add
+  - method: PUT
+    path: /api/v1/sys/notices/{pk}
+    owner: plugin:notice
+    permission: sys:notice:edit
+  - method: DELETE
+    path: /api/v1/sys/notices
+    owner: plugin:notice
+    permission: sys:notice:del
 
   - method: GET
     path: /api/v1/tasks/registered

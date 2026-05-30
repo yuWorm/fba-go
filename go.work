@@ -5,5 +5,6 @@ use (
 	./examples/compat-host
 	./plugins/fba-plugin-admin
 	./plugins/fba-plugin-dict
+	./plugins/fba-plugin-notice
 	./plugins/fba-plugin-task
 )

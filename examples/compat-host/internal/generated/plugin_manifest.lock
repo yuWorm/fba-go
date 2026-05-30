@@ -11,6 +11,11 @@
       "mode": "auto"
     },
     {
+      "id": "notice",
+      "module": "github.com/yuWorm/fba-plugin-notice",
+      "mode": "auto"
+    },
+    {
       "id": "order",
       "module": "github.com/yuWorm/fba-go/internal/testplugin/order",
       "mode": "auto"
