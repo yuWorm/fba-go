@@ -196,6 +196,27 @@ func (Handler) ListDataRules(c fiber.Ctx) error {
 	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{fixtureDataRule()}, 1, 1, 20, "/api/v1/sys/data-rules")))
 }
 
+func (Handler) CreateDataRule(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateDataRule(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) DeleteDataRules(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
 func (Handler) GetAllDataScopes(c fiber.Ctx) error {
 	return c.JSON(response.Success([]fiber.Map{fixtureDataScope()}))
 }
@@ -214,12 +235,52 @@ func (Handler) ListDataScopes(c fiber.Ctx) error {
 	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{fixtureDataScope()}, 1, 1, 20, "/api/v1/sys/data-scopes")))
 }
 
+func (Handler) CreateDataScope(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateDataScope(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateDataScopeRules(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) DeleteDataScopes(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
 func (Handler) ListPlugins(c fiber.Ctx) error {
 	return c.JSON(response.Success([]fiber.Map{fixturePlugin()}))
 }
 
 func (Handler) PluginChanged(c fiber.Ctx) error {
 	return c.JSON(response.Success(false))
+}
+
+func (Handler) InstallPlugin(c fiber.Ctx) error {
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UninstallPlugin(c fiber.Ctx) error {
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdatePluginStatus(c fiber.Ctx) error {
+	return c.JSON(response.Success[any](nil))
 }
 
 func (Handler) DownloadPlugin(c fiber.Ctx) error {
@@ -230,8 +291,30 @@ func (Handler) ListLoginLogs(c fiber.Ctx) error {
 	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{}, 0, 1, 20, "/api/v1/logs/login")))
 }
 
+func (Handler) DeleteLoginLogs(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) DeleteAllLoginLogs(c fiber.Ctx) error {
+	return c.JSON(response.Success[any](nil))
+}
+
 func (Handler) ListOperaLogs(c fiber.Ctx) error {
 	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{}, 0, 1, 20, "/api/v1/logs/opera")))
+}
+
+func (Handler) DeleteOperaLogs(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) DeleteAllOperaLogs(c fiber.Ctx) error {
+	return c.JSON(response.Success[any](nil))
 }
 
 func (Handler) ServerMonitor(c fiber.Ctx) error {
@@ -296,6 +379,10 @@ func (Handler) RedisMonitor(c fiber.Ctx) error {
 
 func (Handler) ListSessions(c fiber.Ctx) error {
 	return c.JSON(response.Success([]fiber.Map{}))
+}
+
+func (Handler) DeleteSession(c fiber.Ctx) error {
+	return c.JSON(response.Success[any](nil))
 }
 
 func bindBody(c fiber.Ctx) error {

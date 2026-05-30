@@ -155,6 +155,25 @@ priority_routes:
   - method: GET
     path: /api/v1/sys/data-rules
     owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/data-rules
+    owner: plugin:admin
+    permission: data:rule:add
+    request:
+      body: '{"name":"Contract Rule","model":"user","column":"id","operator":0,"expression":0,"value":"{{ user_id }}"}'
+  - method: PUT
+    path: /api/v1/sys/data-rules/{pk}
+    sample_path: /api/v1/sys/data-rules/1
+    owner: plugin:admin
+    permission: data:rule:edit
+    request:
+      body: '{"name":"本人数据","model":"user","column":"id","operator":0,"expression":0,"value":"{{ user_id }}"}'
+  - method: DELETE
+    path: /api/v1/sys/data-rules
+    owner: plugin:admin
+    permission: data:rule:del
+    request:
+      body: '{"pks":[999999]}'
   - method: GET
     path: /api/v1/sys/data-scopes/all
     owner: plugin:admin
@@ -169,6 +188,32 @@ priority_routes:
   - method: GET
     path: /api/v1/sys/data-scopes
     owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/data-scopes
+    owner: plugin:admin
+    permission: data:scope:add
+    request:
+      body: '{"name":"Contract Scope","status":1}'
+  - method: PUT
+    path: /api/v1/sys/data-scopes/{pk}
+    sample_path: /api/v1/sys/data-scopes/1
+    owner: plugin:admin
+    permission: data:scope:edit
+    request:
+      body: '{"name":"本人数据范围","status":1}'
+  - method: PUT
+    path: /api/v1/sys/data-scopes/{pk}/rules
+    sample_path: /api/v1/sys/data-scopes/1/rules
+    owner: plugin:admin
+    permission: data:scope:rule:edit
+    request:
+      body: '{"rules":[1]}'
+  - method: DELETE
+    path: /api/v1/sys/data-scopes
+    owner: plugin:admin
+    permission: data:scope:del
+    request:
+      body: '{"pks":[999999]}'
   - method: GET
     path: /api/v1/sys/plugins
     owner: plugin:admin
@@ -180,12 +225,44 @@ priority_routes:
     sample_path: /api/v1/sys/plugins/dict
     owner: plugin:admin
     response_envelope: false
+  - method: POST
+    path: /api/v1/sys/plugins
+    sample_path: "/api/v1/sys/plugins?type=git&repo_url=https://example.invalid/plugin.git"
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/sys/plugins/{plugin}
+    sample_path: /api/v1/sys/plugins/dict
+    owner: plugin:admin
+  - method: PUT
+    path: /api/v1/sys/plugins/{plugin}/status
+    sample_path: /api/v1/sys/plugins/dict/status
+    owner: plugin:admin
   - method: GET
     path: /api/v1/logs/login
     owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/logs/login
+    owner: plugin:admin
+    permission: log:login:del
+    request:
+      body: '{"pks":[999999]}'
+  - method: DELETE
+    path: /api/v1/logs/login/all
+    owner: plugin:admin
+    permission: log:login:clear
   - method: GET
     path: /api/v1/logs/opera
     owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/logs/opera
+    owner: plugin:admin
+    permission: log:opera:del
+    request:
+      body: '{"pks":[999999]}'
+  - method: DELETE
+    path: /api/v1/logs/opera/all
+    owner: plugin:admin
+    permission: log:opera:clear
   - method: GET
     path: /api/v1/monitors/server
     owner: plugin:admin
@@ -194,6 +271,10 @@ priority_routes:
     owner: plugin:admin
   - method: GET
     path: /api/v1/monitors/sessions
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/monitors/sessions/{pk}
+    sample_path: "/api/v1/monitors/sessions/1?session_uuid=fixture-session"
     owner: plugin:admin
   - method: GET
     path: /api/v1/dict-types/all
@@ -453,15 +534,15 @@ routes:
   - method: POST
     path: /api/v1/sys/data-rules
     owner: plugin:admin
-    permission: data:scope:rule:add
+    permission: data:rule:add
   - method: PUT
     path: /api/v1/sys/data-rules/{pk}
     owner: plugin:admin
-    permission: data:scope:rule:edit
+    permission: data:rule:edit
   - method: DELETE
     path: /api/v1/sys/data-rules
     owner: plugin:admin
-    permission: data:scope:rule:del
+    permission: data:rule:del
 
   - method: GET
     path: /api/v1/sys/data-scopes/all
@@ -478,15 +559,19 @@ routes:
   - method: POST
     path: /api/v1/sys/data-scopes
     owner: plugin:admin
+    permission: data:scope:add
   - method: PUT
     path: /api/v1/sys/data-scopes/{pk}
     owner: plugin:admin
+    permission: data:scope:edit
   - method: PUT
     path: /api/v1/sys/data-scopes/{pk}/rules
     owner: plugin:admin
+    permission: data:scope:rule:edit
   - method: DELETE
     path: /api/v1/sys/data-scopes
     owner: plugin:admin
+    permission: data:scope:del
 
   - method: POST
     path: /api/v1/sys/files/upload
@@ -517,18 +602,22 @@ routes:
   - method: DELETE
     path: /api/v1/logs/login
     owner: plugin:admin
+    permission: log:login:del
   - method: DELETE
     path: /api/v1/logs/login/all
     owner: plugin:admin
+    permission: log:login:clear
   - method: GET
     path: /api/v1/logs/opera
     owner: plugin:admin
   - method: DELETE
     path: /api/v1/logs/opera
     owner: plugin:admin
+    permission: log:opera:del
   - method: DELETE
     path: /api/v1/logs/opera/all
     owner: plugin:admin
+    permission: log:opera:clear
 
   - method: GET
     path: /api/v1/monitors/server

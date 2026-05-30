@@ -193,18 +193,34 @@ func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 		path         string
 		samplePath   string
 		bodyRequired bool
+		permission   string
 	}{
-		{"POST", "/api/v1/sys/roles", "", true},
-		{"PUT", "/api/v1/sys/roles/{pk}", "/api/v1/sys/roles/1", true},
-		{"PUT", "/api/v1/sys/roles/{pk}/menus", "/api/v1/sys/roles/1/menus", true},
-		{"PUT", "/api/v1/sys/roles/{pk}/scopes", "/api/v1/sys/roles/1/scopes", true},
-		{"DELETE", "/api/v1/sys/roles", "", true},
-		{"POST", "/api/v1/sys/menus", "", true},
-		{"PUT", "/api/v1/sys/menus/{pk}", "/api/v1/sys/menus/1", true},
-		{"DELETE", "/api/v1/sys/menus/{pk}", "/api/v1/sys/menus/1", false},
-		{"POST", "/api/v1/sys/depts", "", true},
-		{"PUT", "/api/v1/sys/depts/{pk}", "/api/v1/sys/depts/1", true},
-		{"DELETE", "/api/v1/sys/depts/{pk}", "/api/v1/sys/depts/1", false},
+		{"POST", "/api/v1/sys/roles", "", true, "sys:role:add"},
+		{"PUT", "/api/v1/sys/roles/{pk}", "/api/v1/sys/roles/1", true, "sys:role:edit"},
+		{"PUT", "/api/v1/sys/roles/{pk}/menus", "/api/v1/sys/roles/1/menus", true, "sys:role:menu:edit"},
+		{"PUT", "/api/v1/sys/roles/{pk}/scopes", "/api/v1/sys/roles/1/scopes", true, ""},
+		{"DELETE", "/api/v1/sys/roles", "", true, "sys:role:del"},
+		{"POST", "/api/v1/sys/menus", "", true, "sys:menu:add"},
+		{"PUT", "/api/v1/sys/menus/{pk}", "/api/v1/sys/menus/1", true, "sys:menu:edit"},
+		{"DELETE", "/api/v1/sys/menus/{pk}", "/api/v1/sys/menus/1", false, "sys:menu:del"},
+		{"POST", "/api/v1/sys/depts", "", true, ""},
+		{"PUT", "/api/v1/sys/depts/{pk}", "/api/v1/sys/depts/1", true, ""},
+		{"DELETE", "/api/v1/sys/depts/{pk}", "/api/v1/sys/depts/1", false, ""},
+		{"POST", "/api/v1/sys/data-rules", "", true, "data:rule:add"},
+		{"PUT", "/api/v1/sys/data-rules/{pk}", "/api/v1/sys/data-rules/1", true, "data:rule:edit"},
+		{"DELETE", "/api/v1/sys/data-rules", "", true, "data:rule:del"},
+		{"POST", "/api/v1/sys/data-scopes", "", true, "data:scope:add"},
+		{"PUT", "/api/v1/sys/data-scopes/{pk}", "/api/v1/sys/data-scopes/1", true, "data:scope:edit"},
+		{"PUT", "/api/v1/sys/data-scopes/{pk}/rules", "/api/v1/sys/data-scopes/1/rules", true, "data:scope:rule:edit"},
+		{"DELETE", "/api/v1/sys/data-scopes", "", true, "data:scope:del"},
+		{"POST", "/api/v1/sys/plugins", "/api/v1/sys/plugins?type=git&repo_url=https://example.invalid/plugin.git", false, ""},
+		{"DELETE", "/api/v1/sys/plugins/{plugin}", "/api/v1/sys/plugins/dict", false, ""},
+		{"PUT", "/api/v1/sys/plugins/{plugin}/status", "/api/v1/sys/plugins/dict/status", false, ""},
+		{"DELETE", "/api/v1/logs/login", "", true, "log:login:del"},
+		{"DELETE", "/api/v1/logs/login/all", "", false, "log:login:clear"},
+		{"DELETE", "/api/v1/logs/opera", "", true, "log:opera:del"},
+		{"DELETE", "/api/v1/logs/opera/all", "", false, "log:opera:clear"},
+		{"DELETE", "/api/v1/monitors/sessions/{pk}", "/api/v1/monitors/sessions/1?session_uuid=fixture-session", false, ""},
 	} {
 		route := findPriorityRoute(loaded.API.PriorityRoutes, tc.method, tc.path)
 		if route == nil {
@@ -215,6 +231,9 @@ func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 		}
 		if tc.bodyRequired && (route.Request == nil || route.Request.Body == "") {
 			t.Fatalf("%s %s missing request body sample", tc.method, tc.path)
+		}
+		if route.Permission != tc.permission {
+			t.Fatalf("%s %s permission = %q, want %q", tc.method, tc.path, route.Permission, tc.permission)
 		}
 	}
 }
