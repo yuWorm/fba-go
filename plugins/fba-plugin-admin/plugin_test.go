@@ -577,6 +577,84 @@ func TestPluginEndpointsAreStatefulAndPythonCompatible(t *testing.T) {
 	}
 }
 
+func TestLogEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/logs/login?username=admin&status=1&ip=127", "")
+	assertStatusOK(t, resp)
+	page := assertEnvelopeMap(t, body)
+	items, ok := page["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("filtered login log items = %T len %d, want one item", page["items"], len(items))
+	}
+	loginLog := assertMap(t, items[0])
+	assertKeys(t, loginLog, "id", "user_uuid", "username", "status", "ip", "country", "region", "city", "user_agent", "browser", "os", "device", "msg", "login_time", "created_time")
+	if loginLog["username"] != "admin" {
+		t.Fatalf("login log username = %v, want admin", loginLog["username"])
+	}
+	loginLogID := int(loginLog["id"].(float64))
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/logs/login", `{"pks":[`+itoa(loginLogID)+`]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/logs/login?username=admin", "")
+	assertStatusOK(t, resp)
+	page = assertEnvelopeMap(t, body)
+	items, ok = page["items"].([]any)
+	if !ok || len(items) != 0 {
+		t.Fatalf("deleted login log items = %T len %d, want empty list", page["items"], len(items))
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/logs/opera?username=admin&status=1&ip=127", "")
+	assertStatusOK(t, resp)
+	page = assertEnvelopeMap(t, body)
+	items, ok = page["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("filtered opera log items = %T len %d, want one item", page["items"], len(items))
+	}
+	operaLog := assertMap(t, items[0])
+	assertKeys(t, operaLog, "id", "trace_id", "username", "method", "title", "path", "ip", "country", "region", "city", "user_agent", "browser", "os", "device", "args", "status", "code", "msg", "cost_time", "opera_time", "created_time")
+	if operaLog["path"] != "/api/v1/sys/users" {
+		t.Fatalf("opera log path = %v, want /api/v1/sys/users", operaLog["path"])
+	}
+	operaLogID := int(operaLog["id"].(float64))
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/logs/opera", `{"pks":[`+itoa(operaLogID)+`]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/logs/opera?username=admin", "")
+	assertStatusOK(t, resp)
+	page = assertEnvelopeMap(t, body)
+	items, ok = page["items"].([]any)
+	if !ok || len(items) != 0 {
+		t.Fatalf("deleted opera log items = %T len %d, want empty list", page["items"], len(items))
+	}
+}
+
+func TestUploadFileUsesMultipartFilenameLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	uploadBody := "--fba-upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audit.txt\"\r\nContent-Type: text/plain\r\n\r\nhello\r\n--fba-upload--\r\n"
+	req := httptest.NewRequest("POST", "/api/v1/sys/files/upload", strings.NewReader(uploadBody))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=fba-upload")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("POST /sys/files/upload error = %v", err)
+	}
+	defer resp.Body.Close()
+	assertStatusOK(t, resp)
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode upload body: %v", err)
+	}
+	data := assertEnvelopeMap(t, body)
+	if data["url"] != "/static/upload/audit.txt" {
+		t.Fatalf("upload url = %v, want /static/upload/audit.txt", data["url"])
+	}
+}
+
 func TestSidebarMenusMatchesPythonVben5Schema(t *testing.T) {
 	app := newAdminApp(t)
 	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/menus/sidebar", "")

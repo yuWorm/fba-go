@@ -40,6 +40,12 @@ type DataScopeFilter struct {
 	Status *int
 }
 
+type LogFilter struct {
+	Username string
+	Status   *int
+	IP       string
+}
+
 type Repository interface {
 	GetUser(ctx context.Context, id int) (model.User, error)
 	GetUserByUsername(ctx context.Context, username string) (model.User, error)
@@ -95,6 +101,12 @@ type Repository interface {
 	UninstallPlugin(ctx context.Context, id string) error
 	TogglePluginStatus(ctx context.Context, id string) error
 	PluginsChanged(ctx context.Context) (bool, error)
+	ListLoginLogs(ctx context.Context, filter LogFilter, page int, size int) ([]model.LoginLog, int64, error)
+	DeleteLoginLogs(ctx context.Context, ids []int) error
+	DeleteAllLoginLogs(ctx context.Context) error
+	ListOperaLogs(ctx context.Context, filter LogFilter, page int, size int) ([]model.OperaLog, int64, error)
+	DeleteOperaLogs(ctx context.Context, ids []int) error
+	DeleteAllOperaLogs(ctx context.Context) error
 }
 
 func SeedData() model.Seed {

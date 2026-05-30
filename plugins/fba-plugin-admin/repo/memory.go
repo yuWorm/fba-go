@@ -23,6 +23,8 @@ type MemoryRepository struct {
 	dataRules       []model.DataRule
 	scopes          []model.DataScope
 	plugins         []model.Plugin
+	loginLogs       []model.LoginLog
+	operaLogs       []model.OperaLog
 	pluginsChanged  bool
 	userRoles       map[int][]int
 	scopeRules      map[int][]int
@@ -81,6 +83,8 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 		dataRules:       append([]model.DataRule(nil), seed.DataRules...),
 		scopes:          append([]model.DataScope(nil), seed.DataScopes...),
 		plugins:         clonePlugins(seed.Plugins),
+		loginLogs:       cloneLoginLogs(seed.LoginLogs),
+		operaLogs:       cloneOperaLogs(seed.OperaLogs),
 		userRoles:       cloneIDMap(seed.UserRoles),
 		scopeRules:      cloneIDMap(seed.ScopeRules),
 		roleMenus:       cloneIDMap(seed.RoleMenus),
@@ -862,6 +866,68 @@ func (r *MemoryRepository) PluginsChanged(context.Context) (bool, error) {
 	return r.pluginsChanged, nil
 }
 
+func (r *MemoryRepository) ListLoginLogs(_ context.Context, filter LogFilter, page int, size int) ([]model.LoginLog, int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]model.LoginLog, 0, len(r.loginLogs))
+	for _, item := range r.loginLogs {
+		if !matchesLogFilter(item.Username, item.Status, item.IP, filter) {
+			continue
+		}
+		items = append(items, item)
+	}
+	sortLoginLogs(items)
+	return pageSlice(items, page, size), int64(len(items)), nil
+}
+
+func (r *MemoryRepository) DeleteLoginLogs(_ context.Context, ids []int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.loginLogs = deleteByIDs(r.loginLogs, ids, func(item model.LoginLog) int { return item.ID })
+	return nil
+}
+
+func (r *MemoryRepository) DeleteAllLoginLogs(context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.loginLogs = nil
+	return nil
+}
+
+func (r *MemoryRepository) ListOperaLogs(_ context.Context, filter LogFilter, page int, size int) ([]model.OperaLog, int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]model.OperaLog, 0, len(r.operaLogs))
+	for _, item := range r.operaLogs {
+		username := ""
+		if item.Username != nil {
+			username = *item.Username
+		}
+		if !matchesLogFilter(username, item.Status, item.IP, filter) {
+			continue
+		}
+		items = append(items, cloneOperaLog(item))
+	}
+	sortOperaLogs(items)
+	return pageSlice(items, page, size), int64(len(items)), nil
+}
+
+func (r *MemoryRepository) DeleteOperaLogs(_ context.Context, ids []int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.operaLogs = deleteByIDs(r.operaLogs, ids, func(item model.OperaLog) int { return item.ID })
+	return nil
+}
+
+func (r *MemoryRepository) DeleteAllOperaLogs(context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.operaLogs = nil
+	return nil
+}
+
 func (r *MemoryRepository) nextRole() int {
 	id := r.nextRoleID
 	r.nextRoleID++
@@ -927,6 +993,29 @@ func clonePlugin(item model.Plugin) model.Plugin {
 	item.Tags = append([]string(nil), item.Tags...)
 	item.Database = append([]string(nil), item.Database...)
 	item.DependsOn = append([]string(nil), item.DependsOn...)
+	return item
+}
+
+func cloneLoginLogs(source []model.LoginLog) []model.LoginLog {
+	return append([]model.LoginLog(nil), source...)
+}
+
+func cloneOperaLogs(source []model.OperaLog) []model.OperaLog {
+	result := make([]model.OperaLog, 0, len(source))
+	for _, item := range source {
+		result = append(result, cloneOperaLog(item))
+	}
+	return result
+}
+
+func cloneOperaLog(item model.OperaLog) model.OperaLog {
+	if item.Args != nil {
+		args := make(map[string]any, len(item.Args))
+		for key, value := range item.Args {
+			args[key] = value
+		}
+		item.Args = args
+	}
 	return item
 }
 
@@ -1027,6 +1116,19 @@ func filterKnownIDs(ids []int, exists func(int) bool) []int {
 	return result
 }
 
+func matchesLogFilter(username string, status int, ip string, filter LogFilter) bool {
+	if filter.Username != "" && !strings.Contains(username, filter.Username) {
+		return false
+	}
+	if filter.Status != nil && status != *filter.Status {
+		return false
+	}
+	if filter.IP != "" && !strings.Contains(ip, filter.IP) {
+		return false
+	}
+	return true
+}
+
 func hasMenu(items []model.Menu, id int) bool {
 	for _, item := range items {
 		if item.ID == id {
@@ -1120,6 +1222,24 @@ func sortDataScopes(items []model.DataScope) {
 func sortPlugins(items []model.Plugin) {
 	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].ID < items[j].ID
+	})
+}
+
+func sortLoginLogs(items []model.LoginLog) {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].CreatedTime.Equal(items[j].CreatedTime) {
+			return items[i].ID > items[j].ID
+		}
+		return items[i].CreatedTime.After(items[j].CreatedTime)
+	})
+}
+
+func sortOperaLogs(items []model.OperaLog) {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].CreatedTime.Equal(items[j].CreatedTime) {
+			return items[i].ID > items[j].ID
+		}
+		return items[i].CreatedTime.After(items[j].CreatedTime)
 	})
 }
 

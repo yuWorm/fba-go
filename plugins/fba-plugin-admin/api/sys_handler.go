@@ -4,7 +4,6 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/yuWorm/fba-go/core/pagination"
 	"github.com/yuWorm/fba-go/core/response"
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/repo"
@@ -585,8 +584,16 @@ func (h Handler) DeleteDataScopes(c fiber.Ctx) error {
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UploadFile(c fiber.Ctx) error {
-	return c.JSON(response.Success(fiber.Map{"url": "/static/upload/contract.txt"}))
+func (h Handler) UploadFile(c fiber.Ctx) error {
+	file, err := c.FormFile("file")
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "file is required")
+	}
+	uploaded, err := h.files.Upload(c.RequestCtx(), file.Filename)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(uploaded))
 }
 
 func (h Handler) ListPlugins(c fiber.Ctx) error {
@@ -634,33 +641,65 @@ func (h Handler) DownloadPlugin(c fiber.Ctx) error {
 	return c.SendString(body)
 }
 
-func (Handler) ListLoginLogs(c fiber.Ctx) error {
-	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{}, 0, 1, 20, "/api/v1/logs/login")))
+func (h Handler) ListLoginLogs(c fiber.Ctx) error {
+	page, size := pageParams(c)
+	logs, err := h.logs.ListLogin(c.RequestCtx(), repo.LogFilter{
+		Username: c.Query("username"),
+		Status:   intPtrQuery(c, "status"),
+		IP:       c.Query("ip"),
+	}, page, size, "/api/v1/logs/login")
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(logs))
 }
 
-func (Handler) DeleteLoginLogs(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) DeleteLoginLogs(c fiber.Ctx) error {
+	var param dto.DeleteParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.logs.DeleteLogin(c.RequestCtx(), param.PKs); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) DeleteAllLoginLogs(c fiber.Ctx) error {
-	return c.JSON(response.Success[any](nil))
-}
-
-func (Handler) ListOperaLogs(c fiber.Ctx) error {
-	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{}, 0, 1, 20, "/api/v1/logs/opera")))
-}
-
-func (Handler) DeleteOperaLogs(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) DeleteAllLoginLogs(c fiber.Ctx) error {
+	if err := h.logs.ClearLogin(c.RequestCtx()); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) DeleteAllOperaLogs(c fiber.Ctx) error {
+func (h Handler) ListOperaLogs(c fiber.Ctx) error {
+	page, size := pageParams(c)
+	logs, err := h.logs.ListOpera(c.RequestCtx(), repo.LogFilter{
+		Username: c.Query("username"),
+		Status:   intPtrQuery(c, "status"),
+		IP:       c.Query("ip"),
+	}, page, size, "/api/v1/logs/opera")
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(logs))
+}
+
+func (h Handler) DeleteOperaLogs(c fiber.Ctx) error {
+	var param dto.DeleteParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.logs.DeleteOpera(c.RequestCtx(), param.PKs); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (h Handler) DeleteAllOperaLogs(c fiber.Ctx) error {
+	if err := h.logs.ClearOpera(c.RequestCtx()); err != nil {
+		return err
+	}
 	return c.JSON(response.Success[any](nil))
 }
 
