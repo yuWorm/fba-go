@@ -9,8 +9,6 @@ import (
 	"github.com/yuWorm/fba-plugin-admin/repo"
 )
 
-const fixtureTime = "2026-05-30 00:00:00"
-
 func (h Handler) GetUser(c fiber.Ctx) error {
 	id, err := parseID(c.Params("pk"))
 	if err != nil {
@@ -738,11 +736,6 @@ func (h Handler) DeleteSession(c fiber.Ctx) error {
 	return c.JSON(response.Success[any](nil))
 }
 
-func bindBody(c fiber.Ctx) error {
-	var body map[string]any
-	return c.Bind().Body(&body)
-}
-
 func parseID(raw string) (int, error) {
 	id, err := strconv.Atoi(raw)
 	if err != nil {
@@ -773,111 +766,4 @@ func intPtrQuery(c fiber.Ctx, name string) *int {
 		return nil
 	}
 	return &value
-}
-
-func fixtureUser() fiber.Map {
-	return fiber.Map{
-		"dept_id":         nil,
-		"username":        "admin",
-		"nickname":        "Admin",
-		"avatar":          nil,
-		"email":           nil,
-		"phone":           nil,
-		"id":              1,
-		"uuid":            "fixture-user",
-		"status":          1,
-		"is_superuser":    true,
-		"is_staff":        true,
-		"is_multi_login":  true,
-		"join_time":       fixtureTime,
-		"last_login_time": nil,
-		"dept":            nil,
-		"roles":           []fiber.Map{fixtureRole()},
-	}
-}
-
-func fixtureRole() fiber.Map {
-	return fiber.Map{
-		"name":             "admin",
-		"status":           1,
-		"is_filter_scopes": true,
-		"remark":           nil,
-		"id":               1,
-		"created_time":     fixtureTime,
-		"updated_time":     nil,
-	}
-}
-
-func fixtureMenu() fiber.Map {
-	return fiber.Map{
-		"title":        "仪表盘",
-		"name":         "Dashboard",
-		"path":         "/dashboard",
-		"parent_id":    nil,
-		"sort":         0,
-		"icon":         "lucide:layout-dashboard",
-		"type":         1,
-		"component":    "Layout",
-		"perms":        nil,
-		"status":       1,
-		"display":      1,
-		"cache":        1,
-		"link":         nil,
-		"remark":       nil,
-		"id":           1,
-		"created_time": fixtureTime,
-		"updated_time": nil,
-		"children":     []fiber.Map{},
-	}
-}
-
-func fixtureDept() fiber.Map {
-	return fiber.Map{
-		"name":         "总部",
-		"parent_id":    nil,
-		"sort":         0,
-		"leader":       nil,
-		"phone":        nil,
-		"email":        nil,
-		"status":       1,
-		"id":           1,
-		"deleted":      0,
-		"created_time": fixtureTime,
-		"updated_time": nil,
-		"deleted_time": nil,
-		"children":     []fiber.Map{},
-	}
-}
-
-func fixtureDataRule() fiber.Map {
-	return fiber.Map{
-		"name":         "本人数据",
-		"model":        "user",
-		"column":       "id",
-		"operator":     0,
-		"expression":   0,
-		"value":        "{{ user_id }}",
-		"id":           1,
-		"created_time": fixtureTime,
-		"updated_time": nil,
-	}
-}
-
-func fixtureDataScope() fiber.Map {
-	return fiber.Map{
-		"name":         "本人数据范围",
-		"status":       1,
-		"id":           1,
-		"created_time": fixtureTime,
-		"updated_time": nil,
-	}
-}
-
-func fixturePlugin() fiber.Map {
-	return fiber.Map{
-		"name":        "dict",
-		"version":     "0.0.8",
-		"description": "Dictionary data plugin",
-		"status":      true,
-	}
 }
