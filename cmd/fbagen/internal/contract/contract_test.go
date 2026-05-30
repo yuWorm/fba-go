@@ -63,6 +63,45 @@ func TestLoadIncludesFirstBatchPythonParityPriorityRoutes(t *testing.T) {
 	}
 }
 
+func TestLoadIncludesSecondBatchAdminParityPriorityRoutes(t *testing.T) {
+	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		method     string
+		path       string
+		samplePath string
+	}{
+		{"GET", "/api/v1/sys/users/{pk}", "/api/v1/sys/users/1"},
+		{"GET", "/api/v1/sys/users/{pk}/roles", "/api/v1/sys/users/1/roles"},
+		{"GET", "/api/v1/sys/users", ""},
+		{"GET", "/api/v1/sys/roles/all", ""},
+		{"GET", "/api/v1/sys/roles/{pk}/menus", "/api/v1/sys/roles/1/menus"},
+		{"GET", "/api/v1/sys/roles/{pk}/scopes", "/api/v1/sys/roles/1/scopes"},
+		{"GET", "/api/v1/sys/roles/{pk}", "/api/v1/sys/roles/1"},
+		{"GET", "/api/v1/sys/roles", ""},
+		{"GET", "/api/v1/sys/menus/{pk}", "/api/v1/sys/menus/1"},
+		{"GET", "/api/v1/sys/menus", ""},
+		{"GET", "/api/v1/sys/depts/{pk}", "/api/v1/sys/depts/1"},
+		{"GET", "/api/v1/sys/depts", ""},
+		{"GET", "/api/v1/logs/login", ""},
+		{"GET", "/api/v1/logs/opera", ""},
+		{"GET", "/api/v1/monitors/server", ""},
+		{"GET", "/api/v1/monitors/redis", ""},
+		{"GET", "/api/v1/monitors/sessions", ""},
+	} {
+		route := findPriorityRoute(loaded.API.PriorityRoutes, tc.method, tc.path)
+		if route == nil {
+			t.Fatalf("missing priority route %s %s", tc.method, tc.path)
+		}
+		if route.SamplePath != tc.samplePath {
+			t.Fatalf("%s %s sample_path = %q, want %q", tc.method, tc.path, route.SamplePath, tc.samplePath)
+		}
+	}
+}
+
 func TestSnapshotWritesAPIContractSummary(t *testing.T) {
 	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
 	if err != nil {

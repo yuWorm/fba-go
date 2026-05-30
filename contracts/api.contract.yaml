@@ -25,7 +25,65 @@ priority_routes:
     path: /api/v1/sys/users/me
     owner: plugin:admin
   - method: GET
+    path: /api/v1/sys/users/{pk}
+    sample_path: /api/v1/sys/users/1
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/users/{pk}/roles
+    sample_path: /api/v1/sys/users/1/roles
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/users
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/roles/all
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/roles/{pk}/menus
+    sample_path: /api/v1/sys/roles/1/menus
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/roles/{pk}/scopes
+    sample_path: /api/v1/sys/roles/1/scopes
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/roles/{pk}
+    sample_path: /api/v1/sys/roles/1
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/roles
+    owner: plugin:admin
+  - method: GET
     path: /api/v1/sys/menus/sidebar
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/menus/{pk}
+    sample_path: /api/v1/sys/menus/1
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/menus
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/depts/{pk}
+    sample_path: /api/v1/sys/depts/1
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/depts
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/logs/login
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/logs/opera
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/monitors/server
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/monitors/redis
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/monitors/sessions
     owner: plugin:admin
   - method: GET
     path: /api/v1/dict-types/all

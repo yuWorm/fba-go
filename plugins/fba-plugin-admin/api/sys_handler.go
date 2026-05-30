@@ -1,0 +1,221 @@
+package api
+
+import (
+	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/pagination"
+	"github.com/yuWorm/fba-go/core/response"
+)
+
+const fixtureTime = "2026-05-30 00:00:00"
+
+func (Handler) GetUser(c fiber.Ctx) error {
+	return c.JSON(response.Success(fiber.Map{
+		"dept_id":         nil,
+		"username":        "admin",
+		"nickname":        "Admin",
+		"avatar":          nil,
+		"email":           nil,
+		"phone":           nil,
+		"id":              1,
+		"uuid":            "fixture-user",
+		"status":          1,
+		"is_superuser":    true,
+		"is_staff":        true,
+		"is_multi_login":  true,
+		"join_time":       fixtureTime,
+		"last_login_time": nil,
+		"dept":            nil,
+		"roles":           []fiber.Map{fixtureRole()},
+	}))
+}
+
+func (Handler) GetUserRoles(c fiber.Ctx) error {
+	return c.JSON(response.Success([]fiber.Map{fixtureRole()}))
+}
+
+func (Handler) ListUsers(c fiber.Ctx) error {
+	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{
+		{
+			"dept_id":         nil,
+			"username":        "admin",
+			"nickname":        "Admin",
+			"avatar":          nil,
+			"email":           nil,
+			"phone":           nil,
+			"id":              1,
+			"uuid":            "fixture-user",
+			"status":          1,
+			"is_superuser":    true,
+			"is_staff":        true,
+			"is_multi_login":  true,
+			"join_time":       fixtureTime,
+			"last_login_time": nil,
+			"dept":            nil,
+			"roles":           []fiber.Map{fixtureRole()},
+		},
+	}, 1, 1, 20, "/api/v1/sys/users")))
+}
+
+func (Handler) GetAllRoles(c fiber.Ctx) error {
+	return c.JSON(response.Success([]fiber.Map{fixtureRole()}))
+}
+
+func (Handler) GetRoleMenus(c fiber.Ctx) error {
+	return c.JSON(response.Success([]fiber.Map{fixtureMenu()}))
+}
+
+func (Handler) GetRoleScopes(c fiber.Ctx) error {
+	return c.JSON(response.Success([]int{}))
+}
+
+func (Handler) GetRole(c fiber.Ctx) error {
+	role := fixtureRole()
+	role["menus"] = []fiber.Map{fixtureMenu()}
+	role["scopes"] = []fiber.Map{}
+	return c.JSON(response.Success(role))
+}
+
+func (Handler) ListRoles(c fiber.Ctx) error {
+	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{fixtureRole()}, 1, 1, 20, "/api/v1/sys/roles")))
+}
+
+func (Handler) GetMenu(c fiber.Ctx) error {
+	return c.JSON(response.Success(fixtureMenu()))
+}
+
+func (Handler) ListMenus(c fiber.Ctx) error {
+	return c.JSON(response.Success([]fiber.Map{fixtureMenu()}))
+}
+
+func (Handler) GetDept(c fiber.Ctx) error {
+	return c.JSON(response.Success(fixtureDept()))
+}
+
+func (Handler) ListDepts(c fiber.Ctx) error {
+	return c.JSON(response.Success([]fiber.Map{fixtureDept()}))
+}
+
+func (Handler) ListLoginLogs(c fiber.Ctx) error {
+	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{}, 0, 1, 20, "/api/v1/logs/login")))
+}
+
+func (Handler) ListOperaLogs(c fiber.Ctx) error {
+	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{}, 0, 1, 20, "/api/v1/logs/opera")))
+}
+
+func (Handler) ServerMonitor(c fiber.Ctx) error {
+	return c.JSON(response.Success(fiber.Map{
+		"cpu": fiber.Map{
+			"physical_num": 1,
+			"logical_num":  1,
+			"max_freq":     0,
+			"min_freq":     0,
+			"current_freq": 0,
+			"usage":        0,
+		},
+		"mem": fiber.Map{
+			"total": 0,
+			"used":  0,
+			"free":  0,
+			"usage": 0,
+		},
+		"sys": fiber.Map{
+			"name": "fba-go",
+			"os":   "go",
+			"ip":   "127.0.0.1",
+			"arch": "unknown",
+		},
+		"disk": []fiber.Map{},
+		"service": fiber.Map{
+			"name":      "fba-go",
+			"version":   "0.1.0",
+			"home":      "",
+			"startup":   fixtureTime,
+			"elapsed":   "0s",
+			"cpu_usage": "0%",
+			"mem_vms":   "0B",
+			"mem_rss":   "0B",
+			"mem_free":  "0B",
+		},
+	}))
+}
+
+func (Handler) RedisMonitor(c fiber.Ctx) error {
+	return c.JSON(response.Success(fiber.Map{
+		"info": fiber.Map{
+			"redis_version":             "",
+			"redis_mode":                "",
+			"role":                      "",
+			"tcp_port":                  "",
+			"uptime":                    "0s",
+			"connected_clients":         "0",
+			"blocked_clients":           "0",
+			"used_memory_human":         "0B",
+			"used_memory_rss_human":     "0B",
+			"maxmemory_human":           "0B",
+			"mem_fragmentation_ratio":   "0",
+			"instantaneous_ops_per_sec": "0",
+			"total_commands_processed":  "0",
+			"rejected_connections":      "0",
+			"keys_num":                  "0",
+		},
+		"stats": []fiber.Map{},
+	}))
+}
+
+func (Handler) ListSessions(c fiber.Ctx) error {
+	return c.JSON(response.Success([]fiber.Map{}))
+}
+
+func fixtureRole() fiber.Map {
+	return fiber.Map{
+		"name":             "admin",
+		"status":           1,
+		"is_filter_scopes": true,
+		"remark":           nil,
+		"id":               1,
+		"created_time":     fixtureTime,
+		"updated_time":     nil,
+	}
+}
+
+func fixtureMenu() fiber.Map {
+	return fiber.Map{
+		"title":        "仪表盘",
+		"name":         "Dashboard",
+		"path":         "/dashboard",
+		"parent_id":    nil,
+		"sort":         0,
+		"icon":         "lucide:layout-dashboard",
+		"type":         1,
+		"component":    "Layout",
+		"perms":        nil,
+		"status":       1,
+		"display":      1,
+		"cache":        1,
+		"link":         nil,
+		"remark":       nil,
+		"id":           1,
+		"created_time": fixtureTime,
+		"updated_time": nil,
+		"children":     []fiber.Map{},
+	}
+}
+
+func fixtureDept() fiber.Map {
+	return fiber.Map{
+		"name":         "总部",
+		"parent_id":    nil,
+		"sort":         0,
+		"leader":       nil,
+		"phone":        nil,
+		"email":        nil,
+		"status":       1,
+		"id":           1,
+		"deleted":      0,
+		"created_time": fixtureTime,
+		"updated_time": nil,
+		"deleted_time": nil,
+		"children":     []fiber.Map{},
+	}
+}
