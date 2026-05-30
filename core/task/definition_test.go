@@ -46,6 +46,11 @@ func TestMapAsynqStateReturnsPythonCompatibleStatus(t *testing.T) {
 		"retry":     task.StatusRetry,
 		"archived":  task.StatusFailure,
 		"pending":   task.StatusPending,
+		"STARTED":   task.StatusStarted,
+		"SUCCESS":   task.StatusSuccess,
+		"RETRY":     task.StatusRetry,
+		"FAILURE":   task.StatusFailure,
+		"PENDING":   task.StatusPending,
 	}
 
 	for state, want := range cases {

@@ -20,6 +20,16 @@ const (
 
 func MapAsynqState(state string) CompatibleStatus {
 	switch state {
+	case "PENDING":
+		return StatusPending
+	case "STARTED":
+		return StatusStarted
+	case "SUCCESS":
+		return StatusSuccess
+	case "RETRY":
+		return StatusRetry
+	case "FAILURE":
+		return StatusFailure
 	case "active":
 		return StatusStarted
 	case "completed":

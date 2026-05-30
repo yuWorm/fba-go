@@ -1,9 +1,17 @@
 package task
 
 import (
+	"os"
+	"time"
+
+	"github.com/yuWorm/fba-go/core/db"
 	"github.com/yuWorm/fba-go/core/plugin"
+	"github.com/yuWorm/fba-go/core/redisx"
 	coretask "github.com/yuWorm/fba-go/core/task"
 	taskapi "github.com/yuWorm/fba-plugin-task/api"
+	taskmigration "github.com/yuWorm/fba-plugin-task/migration"
+	"github.com/yuWorm/fba-plugin-task/repo"
+	"github.com/yuWorm/fba-plugin-task/service"
 )
 
 func FBAPlugin() plugin.Module {
@@ -26,7 +34,34 @@ func (Module) Meta() plugin.Meta {
 func (Module) Register(ctx plugin.Context) error {
 	var registry *coretask.Registry
 	_ = ctx.Container().Resolve(&registry)
-	handler := taskapi.NewHandler(registry)
+
+	repository := repo.Repository(repo.NewMemoryRepository(repo.SeedData()))
+	var provider db.Provider
+	if ctx.Container().Resolve(&provider) && provider != nil && provider.Write() != nil {
+		repository = repo.NewGORMRepository(provider)
+		if err := ctx.Migration(taskmigration.AutoMigrate(provider)); err != nil {
+			return err
+		}
+	}
+
+	executor := service.Executor(service.NoopExecutor{})
+	_ = ctx.Container().Resolve(&executor)
+
+	leader := service.LeaderLease(service.NoopLeaderLease{})
+	var redisClient redisx.RedisClient
+	if ctx.Container().Resolve(&redisClient) && redisClient != nil {
+		nodeID, _ := os.Hostname()
+		if nodeID == "" {
+			nodeID = "fba-go"
+		}
+		ttl := ctx.Config().Task.SchedulerLockTTL
+		if ttl <= 0 {
+			ttl = 30 * time.Second
+		}
+		leader = service.NewRedisLeaderLease(redisClient, redisx.NewKeys(ctx.Config().Redis.KeyPrefix).SchedulerLeader(), nodeID, ttl)
+	}
+
+	handler := taskapi.NewHandler(service.New(repository, registry, executor, leader))
 
 	for _, route := range []plugin.Route{
 		{Method: "GET", Path: "/tasks/registered", Summary: "Registered tasks", AuthRequired: true, Handler: handler.RegisteredTasks},

@@ -9,10 +9,12 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/db"
 	"github.com/yuWorm/fba-go/core/di"
 	"github.com/yuWorm/fba-go/core/plugin"
 	coretask "github.com/yuWorm/fba-go/core/task"
 	task "github.com/yuWorm/fba-plugin-task"
+	"gorm.io/gorm"
 )
 
 func TestTaskPluginRegistersPythonCompatibleRoutes(t *testing.T) {
@@ -81,6 +83,28 @@ func TestRegisteredTasksUseCoreRegistryAndMatchPythonSchema(t *testing.T) {
 	assertKeys(t, item, "name", "task")
 	if item["task"] != "task_demo" {
 		t.Fatalf("task = %v, want task_demo", item["task"])
+	}
+}
+
+func TestTaskPluginRegistersMigrationWhenDBProviderExists(t *testing.T) {
+	container := di.New()
+	if err := container.Provide(func() db.Provider {
+		return db.NewGORMProvider(&gorm.DB{}, nil)
+	}); err != nil {
+		t.Fatalf("Provide() error = %v", err)
+	}
+	ctx := plugin.NewContext(plugin.ContextOptions{Container: container})
+
+	if err := task.FBAPlugin().Register(ctx); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	migrations := ctx.Migrations()
+	if len(migrations) != 1 {
+		t.Fatalf("migrations = %d, want 1", len(migrations))
+	}
+	if migrations[0].Scope != "plugin:task" {
+		t.Fatalf("migration scope = %q, want plugin:task", migrations[0].Scope)
 	}
 }
 
