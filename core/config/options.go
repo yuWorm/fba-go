@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -10,6 +11,7 @@ type Options struct {
 	App    AppOptions
 	Fiber  fiber.Config
 	Logger LoggerOptions
+	Redis  RedisOptions
 	Hooks  Hooks
 }
 
@@ -43,6 +45,27 @@ type RotationOptions struct {
 	MaxAge     int
 	MaxBackups int
 	Compress   bool
+}
+
+type RedisOptions struct {
+	Mode string
+
+	Addr  string
+	Addrs []string
+
+	Username string
+	Password string
+	DB       int
+
+	MasterName string
+
+	PoolSize     int
+	MinIdleConns int
+	DialTimeout  time.Duration
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+
+	KeyPrefix string
 }
 
 func (o Options) WithDefaults() Options {
