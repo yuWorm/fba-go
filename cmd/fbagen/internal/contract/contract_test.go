@@ -1,9 +1,10 @@
 package contract_test
 
 import (
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/yuWorm/fba-go/cmd/fbagen/internal/contract"
@@ -48,16 +49,6 @@ func TestSnapshotWritesAPIContractSummary(t *testing.T) {
 }
 
 func TestRunnerReportsMissingPriorityRoute(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/auth/captcha" {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"code":200,"msg":"请求成功","data":null}`))
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-
 	loaded := contract.Contracts{
 		API: contract.APIContract{
 			PriorityRoutes: []contract.Route{
@@ -68,8 +59,9 @@ func TestRunnerReportsMissingPriorityRoute(t *testing.T) {
 	}
 
 	result, err := contract.Test(contract.TestOptions{
-		BaseURL:   server.URL,
+		BaseURL:   "http://fba.test",
 		Contracts: loaded,
+		Client:    &http.Client{Transport: fakeTransport{}},
 	})
 	if err != nil {
 		t.Fatalf("Test() error = %v", err)
@@ -80,4 +72,21 @@ func TestRunnerReportsMissingPriorityRoute(t *testing.T) {
 	if len(result.Failures) != 1 {
 		t.Fatalf("failures = %d, want 1", len(result.Failures))
 	}
+}
+
+type fakeTransport struct{}
+
+func (fakeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	status := http.StatusNotFound
+	body := `{"code":404,"msg":"Not Found","data":null}`
+	if req.URL.Path == "/api/v1/auth/captcha" {
+		status = http.StatusOK
+		body = `{"code":200,"msg":"请求成功","data":null}`
+	}
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+		Request:    req,
+	}, nil
 }

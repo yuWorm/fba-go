@@ -1,8 +1,23 @@
 {
   "plugins": [
     {
+      "id": "admin",
+      "module": "github.com/yuWorm/fba-plugin-admin",
+      "mode": "auto"
+    },
+    {
+      "id": "dict",
+      "module": "github.com/yuWorm/fba-plugin-dict",
+      "mode": "auto"
+    },
+    {
       "id": "order",
       "module": "github.com/yuWorm/fba-go/internal/testplugin/order",
+      "mode": "auto"
+    },
+    {
+      "id": "task",
+      "module": "github.com/yuWorm/fba-plugin-task",
       "mode": "auto"
     }
   ]

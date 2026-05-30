@@ -3,11 +3,23 @@ package generated
 
 import (
 	plugin "github.com/yuWorm/fba-go/core/plugin"
-	plugin0 "github.com/yuWorm/fba-go/internal/testplugin/order"
+	plugin2 "github.com/yuWorm/fba-go/internal/testplugin/order"
+	plugin0 "github.com/yuWorm/fba-plugin-admin"
+	plugin1 "github.com/yuWorm/fba-plugin-dict"
+	plugin3 "github.com/yuWorm/fba-plugin-task"
 )
 
 func RegisterPlugins(reg *plugin.Registry) error {
 	if err := reg.Add(plugin0.FBAPlugin(), plugin.ModeAuto); err != nil {
+		return err
+	}
+	if err := reg.Add(plugin1.FBAPlugin(), plugin.ModeAuto); err != nil {
+		return err
+	}
+	if err := reg.Add(plugin2.FBAPlugin(), plugin.ModeAuto); err != nil {
+		return err
+	}
+	if err := reg.Add(plugin3.FBAPlugin(), plugin.ModeAuto); err != nil {
 		return err
 	}
 	return nil
