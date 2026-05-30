@@ -6,14 +6,9 @@ import (
 )
 
 func (Handler) CurrentUser(c fiber.Ctx) error {
-	return c.JSON(response.Success(fiber.Map{
-		"id":           1,
-		"username":     "admin",
-		"nickname":     "Admin",
-		"is_superuser": true,
-		"is_staff":     true,
-		"roles":        []fiber.Map{},
-		"menus":        []fiber.Map{},
-		"depts":        []fiber.Map{},
+	return c.JSON(response.Success(currentUserInfo{
+		userInfoDetail: fixtureUserInfo(),
+		Dept:           nil,
+		Roles:          []string{},
 	}))
 }

@@ -13,7 +13,7 @@ func TestSuccessMarshalsCompatibleEnvelopeWithNullData(t *testing.T) {
 		t.Fatalf("Marshal() error = %v", err)
 	}
 
-	const want = `{"code":200,"msg":"成功","data":null}`
+	const want = `{"code":200,"msg":"请求成功","data":null}`
 	if string(got) != want {
 		t.Fatalf("Success() JSON = %s, want %s", got, want)
 	}

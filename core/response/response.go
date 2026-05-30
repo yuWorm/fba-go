@@ -16,7 +16,7 @@ type ErrorResponse struct {
 func Success[T any](data T) Response[T] {
 	return Response[T]{
 		Code: 200,
-		Msg:  "成功",
+		Msg:  "请求成功",
 		Data: data,
 	}
 }

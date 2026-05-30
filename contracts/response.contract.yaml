@@ -7,7 +7,7 @@ success:
     - msg
     - data
   code: 200
-  msg: 成功
+  msg: 请求成功
   data_when_empty: null
 
 error:

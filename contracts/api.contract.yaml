@@ -2,6 +2,9 @@ version: 1
 base_path: /api/v1
 
 priority_routes:
+  - method: POST
+    path: /api/v1/auth/login/swagger
+    owner: plugin:admin
   - method: GET
     path: /api/v1/auth/captcha
     owner: plugin:admin

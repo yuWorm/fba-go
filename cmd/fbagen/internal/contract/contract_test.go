@@ -21,6 +21,9 @@ func TestLoadParsesContracts(t *testing.T) {
 	if loaded.Response.Success.Code != 200 {
 		t.Fatalf("success code = %d, want 200", loaded.Response.Success.Code)
 	}
+	if loaded.Response.Success.Msg != "请求成功" {
+		t.Fatalf("success msg = %q, want 请求成功", loaded.Response.Success.Msg)
+	}
 	if loaded.Redis.Keys["access_token"].Pattern != "fba:token:{user_id}:{session_uuid}" {
 		t.Fatalf("access token key = %+v", loaded.Redis.Keys["access_token"])
 	}
@@ -48,7 +51,7 @@ func TestRunnerReportsMissingPriorityRoute(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/auth/captcha" {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"code":200,"msg":"成功","data":null}`))
+			_, _ = w.Write([]byte(`{"code":200,"msg":"请求成功","data":null}`))
 			return
 		}
 		http.NotFound(w, r)
