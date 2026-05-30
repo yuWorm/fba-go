@@ -1,0 +1,11 @@
+id: dict
+name: Dict Plugin
+version: 0.0.8
+description: Dictionary data plugin
+author: wu-clan
+tags:
+  - other
+depends_on:
+  - id: admin
+    optional: true
+auto_inject_default: true

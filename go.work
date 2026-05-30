@@ -4,4 +4,5 @@ use (
 	.
 	./examples/compat-host
 	./plugins/fba-plugin-admin
+	./plugins/fba-plugin-dict
 )
