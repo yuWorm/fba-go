@@ -32,6 +32,21 @@ type Menu struct {
 	UpdatedTime *time.Time
 }
 
+type Dept struct {
+	ID          int
+	Name        string
+	ParentID    *int
+	Sort        int
+	Leader      *string
+	Phone       *string
+	Email       *string
+	Status      int
+	Deleted     int
+	CreatedTime time.Time
+	UpdatedTime *time.Time
+	DeletedTime *time.Time
+}
+
 type DataScope struct {
 	ID          int
 	Name        string
@@ -43,6 +58,7 @@ type DataScope struct {
 type Seed struct {
 	Roles      []Role
 	Menus      []Menu
+	Depts      []Dept
 	DataScopes []DataScope
 	RoleMenus  map[int][]int
 	RoleScopes map[int][]int
@@ -53,6 +69,7 @@ func SeedData() Seed {
 	dashboardIcon := "lucide:layout-dashboard"
 	dashboardComponent := "Layout"
 	created := seedTime()
+	headquartersName := "总部"
 	return Seed{
 		Roles: []Role{
 			{
@@ -76,6 +93,16 @@ func SeedData() Seed {
 				Status:      1,
 				Display:     1,
 				Cache:       1,
+				CreatedTime: created,
+			},
+		},
+		Depts: []Dept{
+			{
+				ID:          1,
+				Name:        headquartersName,
+				Sort:        0,
+				Status:      1,
+				Deleted:     0,
 				CreatedTime: created,
 			},
 		},

@@ -17,6 +17,13 @@ type MenuFilter struct {
 	Status *int
 }
 
+type DeptFilter struct {
+	Name   string
+	Leader string
+	Phone  string
+	Status *int
+}
+
 type Repository interface {
 	AllRoles(ctx context.Context) ([]model.Role, error)
 	GetRole(ctx context.Context, id int) (model.Role, error)
@@ -35,6 +42,11 @@ type Repository interface {
 	CreateMenu(ctx context.Context, param dto.MenuParam) error
 	UpdateMenu(ctx context.Context, id int, param dto.MenuParam) error
 	DeleteMenu(ctx context.Context, id int) error
+	GetDept(ctx context.Context, id int) (model.Dept, error)
+	ListDepts(ctx context.Context, filter DeptFilter) ([]model.Dept, error)
+	CreateDept(ctx context.Context, param dto.DeptParam) error
+	UpdateDept(ctx context.Context, id int, param dto.DeptParam) error
+	DeleteDept(ctx context.Context, id int) error
 }
 
 func SeedData() model.Seed {

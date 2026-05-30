@@ -17,11 +17,13 @@ type MemoryRepository struct {
 	mu         sync.RWMutex
 	roles      []model.Role
 	menus      []model.Menu
+	depts      []model.Dept
 	scopes     []model.DataScope
 	roleMenus  map[int][]int
 	roleScopes map[int][]int
 	nextRoleID int
 	nextMenuID int
+	nextDeptID int
 }
 
 func NewMemoryRepository(seed model.Seed) *MemoryRepository {
@@ -37,14 +39,22 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 			nextMenuID = item.ID + 1
 		}
 	}
+	nextDeptID := 1
+	for _, item := range seed.Depts {
+		if item.ID >= nextDeptID {
+			nextDeptID = item.ID + 1
+		}
+	}
 	return &MemoryRepository{
 		roles:      append([]model.Role(nil), seed.Roles...),
 		menus:      append([]model.Menu(nil), seed.Menus...),
+		depts:      append([]model.Dept(nil), seed.Depts...),
 		scopes:     append([]model.DataScope(nil), seed.DataScopes...),
 		roleMenus:  cloneIDMap(seed.RoleMenus),
 		roleScopes: cloneIDMap(seed.RoleScopes),
 		nextRoleID: nextRoleID,
 		nextMenuID: nextMenuID,
+		nextDeptID: nextDeptID,
 	}
 }
 
@@ -276,6 +286,84 @@ func (r *MemoryRepository) DeleteMenu(_ context.Context, id int) error {
 	return nil
 }
 
+func (r *MemoryRepository) GetDept(_ context.Context, id int) (model.Dept, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.depts {
+		if item.ID == id {
+			return item, nil
+		}
+	}
+	return model.Dept{}, ErrNotFound
+}
+
+func (r *MemoryRepository) ListDepts(_ context.Context, filter DeptFilter) ([]model.Dept, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]model.Dept, 0, len(r.depts))
+	for _, item := range r.depts {
+		if filter.Name != "" && !strings.Contains(item.Name, filter.Name) {
+			continue
+		}
+		if filter.Leader != "" && (item.Leader == nil || !strings.Contains(*item.Leader, filter.Leader)) {
+			continue
+		}
+		if filter.Phone != "" && (item.Phone == nil || !strings.HasPrefix(*item.Phone, filter.Phone)) {
+			continue
+		}
+		if filter.Status != nil && item.Status != *filter.Status {
+			continue
+		}
+		items = append(items, item)
+	}
+	sortDepts(items)
+	return items, nil
+}
+
+func (r *MemoryRepository) CreateDept(_ context.Context, param dto.DeptParam) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.depts = append(r.depts, model.Dept{
+		ID:          r.nextDept(),
+		Name:        param.Name,
+		ParentID:    param.ParentID,
+		Sort:        param.Sort,
+		Leader:      param.Leader,
+		Phone:       param.Phone,
+		Email:       param.Email,
+		Status:      param.Status,
+		Deleted:     0,
+		CreatedTime: model.SeedData().Depts[0].CreatedTime,
+	})
+	return nil
+}
+
+func (r *MemoryRepository) UpdateDept(_ context.Context, id int, param dto.DeptParam) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.depts {
+		if r.depts[i].ID == id {
+			r.depts[i].Name = param.Name
+			r.depts[i].ParentID = param.ParentID
+			r.depts[i].Sort = param.Sort
+			r.depts[i].Leader = param.Leader
+			r.depts[i].Phone = param.Phone
+			r.depts[i].Email = param.Email
+			r.depts[i].Status = param.Status
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) DeleteDept(_ context.Context, id int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.depts = deleteByIDs(r.depts, []int{id}, func(item model.Dept) int { return item.ID })
+	return nil
+}
+
 func (r *MemoryRepository) nextRole() int {
 	id := r.nextRoleID
 	r.nextRoleID++
@@ -285,6 +373,12 @@ func (r *MemoryRepository) nextRole() int {
 func (r *MemoryRepository) nextMenu() int {
 	id := r.nextMenuID
 	r.nextMenuID++
+	return id
+}
+
+func (r *MemoryRepository) nextDept() int {
+	id := r.nextDeptID
+	r.nextDeptID++
 	return id
 }
 
@@ -395,6 +489,15 @@ func hasScope(items []model.DataScope, id int) bool {
 }
 
 func sortMenus(items []model.Menu) {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Sort != items[j].Sort {
+			return items[i].Sort < items[j].Sort
+		}
+		return items[i].ID < items[j].ID
+	})
+}
+
+func sortDepts(items []model.Dept) {
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].Sort != items[j].Sort {
 			return items[i].Sort < items[j].Sort

@@ -264,29 +264,65 @@ func (h Handler) DeleteMenu(c fiber.Ctx) error {
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) GetDept(c fiber.Ctx) error {
-	return c.JSON(response.Success(fixtureDept()))
+func (h Handler) GetDept(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	dept, err := h.depts.Get(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(dept))
 }
 
-func (Handler) ListDepts(c fiber.Ctx) error {
-	return c.JSON(response.Success([]fiber.Map{fixtureDept()}))
+func (h Handler) ListDepts(c fiber.Ctx) error {
+	depts, err := h.depts.Tree(c.RequestCtx(), repo.DeptFilter{
+		Name:   c.Query("name"),
+		Leader: c.Query("leader"),
+		Phone:  c.Query("phone"),
+		Status: intPtrQuery(c, "status"),
+	})
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(depts))
 }
 
-func (Handler) CreateDept(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) CreateDept(c fiber.Ctx) error {
+	var param dto.DeptParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.depts.Create(c.RequestCtx(), param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateDept(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateDept(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.DeptParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.depts.Update(c.RequestCtx(), id, param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) DeleteDept(c fiber.Ctx) error {
+func (h Handler) DeleteDept(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	if err := h.depts.Delete(c.RequestCtx(), id); err != nil {
+		return err
+	}
 	return c.JSON(response.Success[any](nil))
 }
 

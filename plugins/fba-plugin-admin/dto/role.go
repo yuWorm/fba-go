@@ -44,6 +44,16 @@ type MenuParam struct {
 	Remark    *string `json:"remark"`
 }
 
+type DeptParam struct {
+	Name     string  `json:"name"`
+	ParentID *int    `json:"parent_id"`
+	Sort     int     `json:"sort"`
+	Leader   *string `json:"leader"`
+	Phone    *string `json:"phone"`
+	Email    *string `json:"email"`
+	Status   int     `json:"status"`
+}
+
 type RoleDetail struct {
 	Name           string  `json:"name"`
 	Status         int     `json:"status"`
@@ -103,6 +113,22 @@ type SidebarMeta struct {
 	KeepAlive                bool   `json:"keepAlive"`
 	HideInMenu               bool   `json:"hideInMenu"`
 	MenuVisibleWithForbidden bool   `json:"menuVisibleWithForbidden"`
+}
+
+type DeptDetail struct {
+	Name        string       `json:"name"`
+	ParentID    *int         `json:"parent_id"`
+	Sort        int          `json:"sort"`
+	Leader      *string      `json:"leader"`
+	Phone       *string      `json:"phone"`
+	Email       *string      `json:"email"`
+	Status      int          `json:"status"`
+	ID          int          `json:"id"`
+	Deleted     int          `json:"deleted"`
+	CreatedTime string       `json:"created_time"`
+	UpdatedTime *string      `json:"updated_time"`
+	DeletedTime *string      `json:"deleted_time"`
+	Children    []DeptDetail `json:"children,omitempty"`
 }
 
 type DataScopeDetail struct {
@@ -201,6 +227,23 @@ func SidebarMenuFromModel(item model.Menu) SidebarMenu {
 			HideInMenu:               item.Display == 0,
 			MenuVisibleWithForbidden: false,
 		},
+	}
+}
+
+func DeptFromModel(item model.Dept) DeptDetail {
+	return DeptDetail{
+		ID:          item.ID,
+		Name:        item.Name,
+		ParentID:    item.ParentID,
+		Sort:        item.Sort,
+		Leader:      item.Leader,
+		Phone:       item.Phone,
+		Email:       item.Email,
+		Status:      item.Status,
+		Deleted:     item.Deleted,
+		CreatedTime: formatTime(item.CreatedTime),
+		UpdatedTime: formatTimePtr(item.UpdatedTime),
+		DeletedTime: formatTimePtr(item.DeletedTime),
 	}
 }
 

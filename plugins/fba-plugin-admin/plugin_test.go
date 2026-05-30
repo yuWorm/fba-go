@@ -473,7 +473,7 @@ func TestMenuTreeAndSidebarReflectCreatedChildren(t *testing.T) {
 	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus", "")
 	assertStatusOK(t, resp)
 	tree := assertEnvelopeSlice(t, body)
-	child := findMenuInTree(t, tree, "Reports Child")
+	child := findNodeInTree(t, tree, "Reports Child")
 	if child["parent_id"] != float64(1) {
 		t.Fatalf("created child parent_id = %v, want 1", child["parent_id"])
 	}
@@ -481,10 +481,78 @@ func TestMenuTreeAndSidebarReflectCreatedChildren(t *testing.T) {
 	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus/sidebar", "")
 	assertStatusOK(t, resp)
 	sidebar := assertEnvelopeSlice(t, body)
-	sidebarChild := findMenuInTree(t, sidebar, "ReportsChild")
+	sidebarChild := findNodeInTree(t, sidebar, "ReportsChild")
 	meta := assertMap(t, sidebarChild["meta"])
 	if meta["title"] != "Reports Child" {
 		t.Fatalf("sidebar child title = %v, want Reports Child", meta["title"])
+	}
+}
+
+func TestDeptEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/depts", `{"name":"Engineering","parent_id":null,"sort":9,"leader":"Jane","phone":"13800000000","email":"eng@example.com","status":0}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/depts?name=Engineer&leader=Jane&phone=138&status=0", "")
+	assertStatusOK(t, resp)
+	items := assertEnvelopeSlice(t, body)
+	if len(items) != 1 {
+		t.Fatalf("filtered dept count = %d, want 1", len(items))
+	}
+	dept := assertMap(t, items[0])
+	if dept["name"] != "Engineering" {
+		t.Fatalf("filtered dept name = %v, want Engineering", dept["name"])
+	}
+	if dept["status"] != float64(0) {
+		t.Fatalf("filtered dept status = %v, want 0", dept["status"])
+	}
+	id := int(dept["id"].(float64))
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/depts/"+itoa(id), `{"name":"Engineering Updated","parent_id":null,"sort":10,"leader":"Jane","phone":"13800000000","email":"eng@example.com","status":1}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/depts/"+itoa(id), "")
+	assertStatusOK(t, resp)
+	detail := assertEnvelopeMap(t, body)
+	if detail["name"] != "Engineering Updated" {
+		t.Fatalf("updated dept name = %v, want Engineering Updated", detail["name"])
+	}
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/depts/"+itoa(id), "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/depts?name=Engineering", "")
+	assertStatusOK(t, resp)
+	items = assertEnvelopeSlice(t, body)
+	if len(items) != 0 {
+		t.Fatalf("deleted dept count = %d, want 0", len(items))
+	}
+}
+
+func TestDeptTreeReflectsCreatedChildren(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/depts", `{"name":"Platform","parent_id":1,"sort":1,"leader":"Alex","phone":"13900000000","email":"platform@example.com","status":1}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/depts/2", "")
+	assertStatusOK(t, resp)
+	created := assertEnvelopeMap(t, body)
+	if created["name"] != "Platform" {
+		t.Fatalf("created dept name = %v, want Platform", created["name"])
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/depts", "")
+	assertStatusOK(t, resp)
+	tree := assertEnvelopeSlice(t, body)
+	child := findNodeInTree(t, tree, "Platform")
+	if child["parent_id"] != float64(1) {
+		t.Fatalf("created child parent_id = %v, want 1", child["parent_id"])
 	}
 }
 
@@ -680,7 +748,7 @@ func assertUserInfoDetail(t *testing.T, user map[string]any) {
 	)
 }
 
-func findMenuInTree(t *testing.T, items []any, name string) map[string]any {
+func findNodeInTree(t *testing.T, items []any, name string) map[string]any {
 	t.Helper()
 	for _, raw := range items {
 		item := assertMap(t, raw)
@@ -691,7 +759,7 @@ func findMenuInTree(t *testing.T, items []any, name string) map[string]any {
 		if len(children) == 0 {
 			continue
 		}
-		if found := findMenuInTree(t, children, name); found != nil {
+		if found := findNodeInTree(t, children, name); found != nil {
 			return found
 		}
 	}
