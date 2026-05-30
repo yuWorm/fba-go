@@ -1,0 +1,374 @@
+version: 1
+base_path: /api/v1
+
+priority_routes:
+  - method: GET
+    path: /api/v1/auth/captcha
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/auth/login
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/auth/refresh
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/auth/logout
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/auth/codes
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/users/me
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/menus/sidebar
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/dict-datas/type-codes/{code}
+    owner: plugin:dict
+
+routes:
+  - method: POST
+    path: /api/v1/auth/login/swagger
+    owner: plugin:admin
+    response_envelope: false
+  - method: POST
+    path: /api/v1/auth/login
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/auth/codes
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/auth/refresh
+    owner: plugin:admin
+    cookie: fba_refresh_token
+  - method: POST
+    path: /api/v1/auth/logout
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/auth/captcha
+    owner: plugin:admin
+
+  - method: GET
+    path: /api/v1/sys/users/me
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/users/{pk}
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/users/{pk}/roles
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/users
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/users
+    owner: plugin:admin
+    permission: sys:user:add
+  - method: PUT
+    path: /api/v1/sys/users/{pk}
+    owner: plugin:admin
+    permission: sys:user:edit
+  - method: PUT
+    path: /api/v1/sys/users/{pk}/permissions
+    owner: plugin:admin
+  - method: PUT
+    path: /api/v1/sys/users/me/password
+    owner: plugin:admin
+  - method: PUT
+    path: /api/v1/sys/users/{pk}/password
+    owner: plugin:admin
+  - method: PUT
+    path: /api/v1/sys/users/me/nickname
+    owner: plugin:admin
+  - method: PUT
+    path: /api/v1/sys/users/me/avatar
+    owner: plugin:admin
+  - method: PUT
+    path: /api/v1/sys/users/me/email
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/sys/users/{pk}
+    owner: plugin:admin
+    permission: sys:user:del
+
+  - method: GET
+    path: /api/v1/sys/roles/all
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/roles/{pk}/menus
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/roles/{pk}/scopes
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/roles/{pk}
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/roles
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/roles
+    owner: plugin:admin
+    permission: sys:role:add
+  - method: PUT
+    path: /api/v1/sys/roles/{pk}
+    owner: plugin:admin
+    permission: sys:role:edit
+  - method: PUT
+    path: /api/v1/sys/roles/{pk}/menus
+    owner: plugin:admin
+    permission: sys:role:menu:edit
+  - method: PUT
+    path: /api/v1/sys/roles/{pk}/scopes
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/sys/roles
+    owner: plugin:admin
+    permission: sys:role:del
+
+  - method: GET
+    path: /api/v1/sys/menus/sidebar
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/menus/{pk}
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/menus
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/menus
+    owner: plugin:admin
+    permission: sys:menu:add
+  - method: PUT
+    path: /api/v1/sys/menus/{pk}
+    owner: plugin:admin
+    permission: sys:menu:edit
+  - method: DELETE
+    path: /api/v1/sys/menus/{pk}
+    owner: plugin:admin
+    permission: sys:menu:del
+
+  - method: GET
+    path: /api/v1/sys/depts/{pk}
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/depts
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/depts
+    owner: plugin:admin
+  - method: PUT
+    path: /api/v1/sys/depts/{pk}
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/sys/depts/{pk}
+    owner: plugin:admin
+
+  - method: GET
+    path: /api/v1/sys/data-rules/models
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-rules/models/{model}/columns
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-rules/value-template-variables
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-rules/all
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-rules/{pk}
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-rules
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/data-rules
+    owner: plugin:admin
+    permission: data:scope:rule:add
+  - method: PUT
+    path: /api/v1/sys/data-rules/{pk}
+    owner: plugin:admin
+    permission: data:scope:rule:edit
+  - method: DELETE
+    path: /api/v1/sys/data-rules
+    owner: plugin:admin
+    permission: data:scope:rule:del
+
+  - method: GET
+    path: /api/v1/sys/data-scopes/all
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-scopes/{pk}
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-scopes/{pk}/rules
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/data-scopes
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/data-scopes
+    owner: plugin:admin
+  - method: PUT
+    path: /api/v1/sys/data-scopes/{pk}
+    owner: plugin:admin
+  - method: PUT
+    path: /api/v1/sys/data-scopes/{pk}/rules
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/sys/data-scopes
+    owner: plugin:admin
+
+  - method: POST
+    path: /api/v1/sys/files/upload
+    owner: plugin:admin
+
+  - method: GET
+    path: /api/v1/sys/plugins
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/plugins/changed
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/plugins
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/sys/plugins/{plugin}
+    owner: plugin:admin
+  - method: PUT
+    path: /api/v1/sys/plugins/{plugin}/status
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/sys/plugins/{plugin}
+    owner: plugin:admin
+
+  - method: GET
+    path: /api/v1/logs/login
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/logs/login
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/logs/login/all
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/logs/opera
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/logs/opera
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/logs/opera/all
+    owner: plugin:admin
+
+  - method: GET
+    path: /api/v1/monitors/server
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/monitors/redis
+    owner: plugin:admin
+  - method: GET
+    path: /api/v1/monitors/sessions
+    owner: plugin:admin
+  - method: DELETE
+    path: /api/v1/monitors/sessions/{pk}
+    owner: plugin:admin
+
+  - method: GET
+    path: /api/v1/tasks/registered
+    owner: plugin:task
+  - method: DELETE
+    path: /api/v1/tasks/{task_id}/cancel
+    owner: plugin:task
+  - method: GET
+    path: /api/v1/task-results/{pk}
+    owner: plugin:task
+  - method: GET
+    path: /api/v1/task-results
+    owner: plugin:task
+  - method: DELETE
+    path: /api/v1/task-results
+    owner: plugin:task
+  - method: GET
+    path: /api/v1/schedulers/all
+    owner: plugin:task
+  - method: GET
+    path: /api/v1/schedulers/{pk}
+    owner: plugin:task
+  - method: GET
+    path: /api/v1/schedulers
+    owner: plugin:task
+  - method: POST
+    path: /api/v1/schedulers
+    owner: plugin:task
+  - method: PUT
+    path: /api/v1/schedulers/{pk}
+    owner: plugin:task
+  - method: PUT
+    path: /api/v1/schedulers/{pk}/status
+    owner: plugin:task
+  - method: DELETE
+    path: /api/v1/schedulers/{pk}
+    owner: plugin:task
+  - method: POST
+    path: /api/v1/schedulers/{pk}/execute
+    owner: plugin:task
+
+  - method: GET
+    path: /api/v1/dict-types/all
+    owner: plugin:dict
+  - method: GET
+    path: /api/v1/dict-types/{pk}
+    owner: plugin:dict
+  - method: GET
+    path: /api/v1/dict-types
+    owner: plugin:dict
+  - method: POST
+    path: /api/v1/dict-types
+    owner: plugin:dict
+    permission: dict:type:add
+  - method: PUT
+    path: /api/v1/dict-types/{pk}
+    owner: plugin:dict
+    permission: dict:type:edit
+  - method: DELETE
+    path: /api/v1/dict-types
+    owner: plugin:dict
+    permission: dict:type:del
+
+  - method: GET
+    path: /api/v1/dict-datas/all
+    owner: plugin:dict
+  - method: GET
+    path: /api/v1/dict-datas/{pk}
+    owner: plugin:dict
+  - method: GET
+    path: /api/v1/dict-datas/type-codes/{code}
+    owner: plugin:dict
+  - method: GET
+    path: /api/v1/dict-datas
+    owner: plugin:dict
+  - method: POST
+    path: /api/v1/dict-datas
+    owner: plugin:dict
+    permission: dict:data:add
+  - method: PUT
+    path: /api/v1/dict-datas/{pk}
+    owner: plugin:dict
+    permission: dict:data:edit
+  - method: DELETE
+    path: /api/v1/dict-datas
+    owner: plugin:dict
+    permission: dict:data:del
+
+headers:
+  access_token:
+    name: Authorization
+    format: "Bearer {token}"
+
+cookies:
+  refresh_token:
+    name: fba_refresh_token
+    http_only: true

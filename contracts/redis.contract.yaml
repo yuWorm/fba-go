@@ -1,0 +1,49 @@
+version: 1
+default_prefix: fba
+
+keys:
+  access_token:
+    pattern: "fba:token:{user_id}:{session_uuid}"
+    ttl: TOKEN_EXPIRE_SECONDS
+  token_extra:
+    pattern: "fba:token_extra_info:{user_id}:{session_uuid}"
+    ttl: TOKEN_EXPIRE_SECONDS
+  online_set:
+    pattern: fba:token_online
+  refresh_token:
+    pattern: "fba:refresh_token:{user_id}:{session_uuid}"
+    ttl: TOKEN_REFRESH_EXPIRE_SECONDS
+  user_cache:
+    pattern: "fba:user:{user_id}"
+    ttl: TOKEN_EXPIRE_SECONDS
+  login_captcha:
+    pattern: "fba:login:captcha:{uuid}"
+  login_failure:
+    pattern: "fba:login:failure:{user_id}"
+  user_lock:
+    pattern: "fba:user:lock:{user_id}"
+  request_limiter:
+    pattern: "fba:limiter:*"
+  plugin_state:
+    pattern: "fba:plugin:{plugin}"
+  plugin_changed:
+    pattern: fba:plugin:changed
+  cache_invalidate:
+    pattern: fba:cache:invalidate
+    type: pubsub
+  snowflake_node:
+    pattern: "fba:snowflake:nodes:{datacenter}:{worker}"
+  migration_lock:
+    pattern: fba:migration:lock
+  scheduler_leader:
+    pattern: fba:task:scheduler:leader
+  asynq:
+    pattern: "fba:asynq:*"
+    note: "Prefer isolated Redis DB for Asynq when default Asynq keys are used."
+
+operations:
+  delete_prefix:
+    must_use: SCAN
+    forbidden:
+      - KEYS
+    batch_required: true

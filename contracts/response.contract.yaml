@@ -1,0 +1,55 @@
+version: 1
+
+success:
+  envelope: true
+  required_fields:
+    - code
+    - msg
+    - data
+  code: 200
+  msg: 成功
+  data_when_empty: null
+
+error:
+  envelope: true
+  required_fields:
+    - code
+    - msg
+    - data
+    - trace_id
+  data_when_empty: null
+  trace_id:
+    required: true
+    success_response: false
+
+pagination:
+  path: data
+  required_fields:
+    - items
+    - total
+    - page
+    - size
+    - total_pages
+    - links
+  links_required_fields:
+    - first
+    - last
+    - self
+    - next
+    - prev
+
+datetime:
+  layout: "2006-01-02 15:04:05"
+  timezone_default: Asia/Shanghai
+
+json_naming:
+  style: snake_case
+
+special_routes:
+  - method: POST
+    path: /api/v1/auth/login/swagger
+    envelope: false
+    required_fields:
+      - access_token
+      - token_type
+      - user
