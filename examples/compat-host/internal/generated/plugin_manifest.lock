@@ -1,0 +1,9 @@
+{
+  "plugins": [
+    {
+      "id": "order",
+      "module": "github.com/yuWorm/fba-go/internal/testplugin/order",
+      "mode": "auto"
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	fbcontract "github.com/yuWorm/fba-go/cmd/fbagen/internal/contract"
@@ -43,7 +44,7 @@ func runPluginScan(args []string) error {
 	pluginsDir := fs.String("plugins-dir", "", "local plugins directory")
 	manifest := fs.String("manifest", "", "plugins manifest")
 	out := fs.String("out", "internal/generated/fba_plugins.gen.go", "generated registration output")
-	lockOut := fs.String("lock-out", "internal/generated/plugin_manifest.lock", "plugin lock output")
+	lockOut := fs.String("lock-out", "", "plugin lock output")
 	packageName := fs.String("package", "generated", "generated package name")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -58,7 +59,11 @@ func runPluginScan(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := fbplugin.WriteLock(*lockOut, result); err != nil {
+	lockPath := *lockOut
+	if lockPath == "" {
+		lockPath = filepath.Join(filepath.Dir(*out), "plugin_manifest.lock")
+	}
+	if err := fbplugin.WriteLock(lockPath, result); err != nil {
 		return err
 	}
 	return fbplugin.GenerateRegistration(*out, *packageName, result)
