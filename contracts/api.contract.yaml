@@ -5,6 +5,7 @@ priority_routes:
   - method: POST
     path: /api/v1/auth/login/swagger
     owner: plugin:admin
+    response_envelope: false
   - method: GET
     path: /api/v1/auth/captcha
     owner: plugin:admin
@@ -27,8 +28,33 @@ priority_routes:
     path: /api/v1/sys/menus/sidebar
     owner: plugin:admin
   - method: GET
-    path: /api/v1/dict-datas/type-codes/{code}
+    path: /api/v1/dict-types/all
     owner: plugin:dict
+  - method: GET
+    path: /api/v1/dict-types
+    owner: plugin:dict
+  - method: GET
+    path: /api/v1/dict-datas/all
+    owner: plugin:dict
+  - method: GET
+    path: /api/v1/dict-datas/type-codes/{code}
+    sample_path: /api/v1/dict-datas/type-codes/sys_status
+    owner: plugin:dict
+  - method: GET
+    path: /api/v1/dict-datas
+    owner: plugin:dict
+  - method: GET
+    path: /api/v1/tasks/registered
+    owner: plugin:task
+  - method: GET
+    path: /api/v1/task-results
+    owner: plugin:task
+  - method: GET
+    path: /api/v1/schedulers/all
+    owner: plugin:task
+  - method: GET
+    path: /api/v1/schedulers
+    owner: plugin:task
 
 routes:
   - method: POST

@@ -23,6 +23,7 @@ type APIContract struct {
 type Route struct {
 	Method           string `yaml:"method" json:"method"`
 	Path             string `yaml:"path" json:"path"`
+	SamplePath       string `yaml:"sample_path,omitempty" json:"sample_path,omitempty"`
 	Owner            string `yaml:"owner,omitempty" json:"owner,omitempty"`
 	Permission       string `yaml:"permission,omitempty" json:"permission,omitempty"`
 	ResponseEnvelope *bool  `yaml:"response_envelope,omitempty" json:"response_envelope,omitempty"`
