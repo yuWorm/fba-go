@@ -19,6 +19,7 @@ type Handler struct {
 	depts      *service.DeptService
 	dataRules  *service.DataRuleService
 	dataScopes *service.DataScopeService
+	plugins    *service.PluginService
 }
 
 func NewHandler() Handler {
@@ -30,6 +31,7 @@ func NewHandler() Handler {
 		depts:      service.NewDeptService(repository),
 		dataRules:  service.NewDataRuleService(repository),
 		dataScopes: service.NewDataScopeService(repository),
+		plugins:    service.NewPluginService(repository),
 	}
 }
 

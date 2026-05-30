@@ -74,6 +74,7 @@ type Seed struct {
 	Depts      []Dept
 	DataRules  []DataRule
 	DataScopes []DataScope
+	Plugins    []Plugin
 	UserRoles  map[int][]int
 	RoleMenus  map[int][]int
 	RoleScopes map[int][]int
@@ -153,6 +154,44 @@ func SeedData() Seed {
 				Name:        "本人数据范围",
 				Status:      1,
 				CreatedTime: created,
+			},
+		},
+		Plugins: []Plugin{
+			{
+				ID:          "dict",
+				Summary:     "数据字典",
+				Version:     "0.0.8",
+				Description: "Dictionary data plugin",
+				Author:      "wu-clan",
+				Tags:        []string{"other"},
+				Database:    []string{"mysql", "postgresql"},
+				DependsOn:   []string{"admin"},
+				Enabled:     true,
+				BuiltIn:     true,
+			},
+			{
+				ID:          "notice",
+				Summary:     "通知公告",
+				Version:     "0.0.2",
+				Description: "System notice and announcement plugin",
+				Author:      "wu-clan",
+				Tags:        []string{"other"},
+				Database:    []string{"mysql", "postgresql"},
+				DependsOn:   []string{"admin"},
+				Enabled:     true,
+				BuiltIn:     true,
+			},
+			{
+				ID:          "task",
+				Summary:     "任务调度",
+				Version:     "0.1.0",
+				Description: "Task scheduler compatibility plugin",
+				Author:      "wu-clan",
+				Tags:        []string{"task"},
+				Database:    []string{"mysql", "postgresql"},
+				DependsOn:   []string{"admin"},
+				Enabled:     true,
+				BuiltIn:     true,
 			},
 		},
 		UserRoles:  map[int][]int{1: {1}},

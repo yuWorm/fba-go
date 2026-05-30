@@ -22,6 +22,8 @@ type MemoryRepository struct {
 	depts           []model.Dept
 	dataRules       []model.DataRule
 	scopes          []model.DataScope
+	plugins         []model.Plugin
+	pluginsChanged  bool
 	userRoles       map[int][]int
 	scopeRules      map[int][]int
 	roleMenus       map[int][]int
@@ -78,6 +80,7 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 		depts:           append([]model.Dept(nil), seed.Depts...),
 		dataRules:       append([]model.DataRule(nil), seed.DataRules...),
 		scopes:          append([]model.DataScope(nil), seed.DataScopes...),
+		plugins:         clonePlugins(seed.Plugins),
 		userRoles:       cloneIDMap(seed.UserRoles),
 		scopeRules:      cloneIDMap(seed.ScopeRules),
 		roleMenus:       cloneIDMap(seed.RoleMenus),
@@ -774,6 +777,91 @@ func (r *MemoryRepository) DeleteDataScopes(_ context.Context, ids []int) error 
 	return nil
 }
 
+func (r *MemoryRepository) AllPlugins(context.Context) ([]model.Plugin, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	items := clonePlugins(r.plugins)
+	sortPlugins(items)
+	return items, nil
+}
+
+func (r *MemoryRepository) GetPlugin(_ context.Context, id string) (model.Plugin, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.plugins {
+		if item.ID == id {
+			return clonePlugin(item), nil
+		}
+	}
+	return model.Plugin{}, ErrNotFound
+}
+
+func (r *MemoryRepository) InstallPlugin(_ context.Context, param dto.PluginInstallParam) (model.Plugin, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	name := param.Name
+	if name == "" {
+		name = "plugin"
+	}
+	for i := range r.plugins {
+		if r.plugins[i].ID == name {
+			r.plugins[i].Enabled = true
+			r.pluginsChanged = true
+			return clonePlugin(r.plugins[i]), nil
+		}
+	}
+	item := model.Plugin{
+		ID:          name,
+		Summary:     name,
+		Version:     "0.0.1",
+		Description: "Installed plugin from " + param.Type,
+		Author:      "external",
+		Tags:        []string{"other"},
+		Database:    []string{"mysql", "postgresql"},
+		DependsOn:   []string{"admin"},
+		Enabled:     true,
+	}
+	r.plugins = append(r.plugins, item)
+	r.pluginsChanged = true
+	return clonePlugin(item), nil
+}
+
+func (r *MemoryRepository) UninstallPlugin(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.plugins {
+		if r.plugins[i].ID == id {
+			r.pluginsChanged = true
+			// Built-in Go module plugins are part of the host binary in this fixture; keep them installed.
+			if r.plugins[i].BuiltIn {
+				return nil
+			}
+			r.plugins = append(r.plugins[:i], r.plugins[i+1:]...)
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) TogglePluginStatus(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.plugins {
+		if r.plugins[i].ID == id {
+			r.plugins[i].Enabled = !r.plugins[i].Enabled
+			r.pluginsChanged = true
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) PluginsChanged(context.Context) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.pluginsChanged, nil
+}
+
 func (r *MemoryRepository) nextRole() int {
 	id := r.nextRoleID
 	r.nextRoleID++
@@ -825,6 +913,21 @@ func cloneIDMap(source map[int][]int) map[int][]int {
 		result[id] = append([]int(nil), values...)
 	}
 	return result
+}
+
+func clonePlugins(source []model.Plugin) []model.Plugin {
+	result := make([]model.Plugin, 0, len(source))
+	for _, item := range source {
+		result = append(result, clonePlugin(item))
+	}
+	return result
+}
+
+func clonePlugin(item model.Plugin) model.Plugin {
+	item.Tags = append([]string(nil), item.Tags...)
+	item.Database = append([]string(nil), item.Database...)
+	item.DependsOn = append([]string(nil), item.DependsOn...)
+	return item
 }
 
 func pageSlice[T any](items []T, page int, size int) []T {
@@ -1009,6 +1112,12 @@ func sortDataRules(items []model.DataRule) {
 }
 
 func sortDataScopes(items []model.DataScope) {
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].ID < items[j].ID
+	})
+}
+
+func sortPlugins(items []model.Plugin) {
 	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].ID < items[j].ID
 	})

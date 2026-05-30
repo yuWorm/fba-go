@@ -89,6 +89,12 @@ type Repository interface {
 	UpdateDataScope(ctx context.Context, id int, param dto.DataScopeParam) error
 	UpdateDataScopeRules(ctx context.Context, id int, ruleIDs []int) error
 	DeleteDataScopes(ctx context.Context, ids []int) error
+	AllPlugins(ctx context.Context) ([]model.Plugin, error)
+	GetPlugin(ctx context.Context, id string) (model.Plugin, error)
+	InstallPlugin(ctx context.Context, param dto.PluginInstallParam) (model.Plugin, error)
+	UninstallPlugin(ctx context.Context, id string) error
+	TogglePluginStatus(ctx context.Context, id string) error
+	PluginsChanged(ctx context.Context) (bool, error)
 }
 
 func SeedData() model.Seed {

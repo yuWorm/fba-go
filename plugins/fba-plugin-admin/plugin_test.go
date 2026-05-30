@@ -506,6 +506,77 @@ func TestCurrentUserProfileEndpointsAreStateful(t *testing.T) {
 	}
 }
 
+func TestPluginEndpointsAreStatefulAndPythonCompatible(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/plugins", "")
+	assertStatusOK(t, resp)
+	plugins := assertEnvelopeSlice(t, body)
+	dictPlugin := assertMap(t, findPluginByName(t, plugins, "dict"))
+	dictInfo := assertMap(t, dictPlugin["plugin"])
+	if dictInfo["enable"] != "1" {
+		t.Fatalf("dict plugin enable = %v, want 1", dictInfo["enable"])
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/plugins/changed", "")
+	assertStatusOK(t, resp)
+	if body["data"] != false {
+		t.Fatalf("plugin changed = %v, want false", body["data"])
+	}
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/plugins/dict/status", "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/plugins", "")
+	assertStatusOK(t, resp)
+	plugins = assertEnvelopeSlice(t, body)
+	dictPlugin = assertMap(t, findPluginByName(t, plugins, "dict"))
+	dictInfo = assertMap(t, dictPlugin["plugin"])
+	if dictInfo["enable"] != "0" {
+		t.Fatalf("dict plugin enable after toggle = %v, want 0", dictInfo["enable"])
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/plugins/changed", "")
+	assertStatusOK(t, resp)
+	if body["data"] != true {
+		t.Fatalf("plugin changed after status toggle = %v, want true", body["data"])
+	}
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/plugins?type=git&repo_url=https://example.invalid/analytics.git", "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/plugins", "")
+	assertStatusOK(t, resp)
+	plugins = assertEnvelopeSlice(t, body)
+	analytics := assertMap(t, findPluginByName(t, plugins, "analytics"))
+	analyticsInfo := assertMap(t, analytics["plugin"])
+	if analyticsInfo["enable"] != "1" {
+		t.Fatalf("installed plugin enable = %v, want 1", analyticsInfo["enable"])
+	}
+
+	resp, raw := requestRaw(t, app, "GET", "/api/v1/sys/plugins/analytics", "")
+	assertStatusOK(t, resp)
+	if strings.Contains(raw, `"code"`) {
+		t.Fatalf("download plugin response is enveloped JSON: %s", raw)
+	}
+	if !strings.Contains(raw, "analytics") {
+		t.Fatalf("download plugin body = %q, want plugin name", raw)
+	}
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/plugins/analytics", "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/plugins", "")
+	assertStatusOK(t, resp)
+	plugins = assertEnvelopeSlice(t, body)
+	if hasPluginByName(plugins, "analytics") {
+		t.Fatal("analytics plugin still present after uninstall")
+	}
+}
+
 func TestSidebarMenusMatchesPythonVben5Schema(t *testing.T) {
 	app := newAdminApp(t)
 	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/menus/sidebar", "")
@@ -887,6 +958,28 @@ func requestJSON(t *testing.T, app *fiber.App, method string, path string, body 
 	return resp, decoded
 }
 
+func requestRaw(t *testing.T, app *fiber.App, method string, path string, body string) (*http.Response, string) {
+	t.Helper()
+	var reqBody io.Reader
+	if body != "" {
+		reqBody = strings.NewReader(body)
+	}
+	req := httptest.NewRequest(method, path, reqBody)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("%s %s error = %v", method, path, err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read %s %s response: %v", method, path, err)
+	}
+	return resp, string(raw)
+}
+
 func assertStatusOK(t *testing.T, resp *http.Response) {
 	t.Helper()
 	if resp.StatusCode != fiber.StatusOK {
@@ -988,6 +1081,33 @@ func findNodeInTree(t *testing.T, items []any, name string) map[string]any {
 	}
 	t.Fatalf("menu %q not found in tree %v", name, items)
 	return nil
+}
+
+func findPluginByName(t *testing.T, items []any, name string) any {
+	t.Helper()
+	for _, raw := range items {
+		item := assertMap(t, raw)
+		pluginInfo := assertMap(t, item["plugin"])
+		if pluginInfo["name"] == name {
+			return raw
+		}
+	}
+	t.Fatalf("plugin %q not found in %v", name, items)
+	return nil
+}
+
+func hasPluginByName(items []any, name string) bool {
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		pluginInfo, ok := item["plugin"].(map[string]any)
+		if ok && pluginInfo["name"] == name {
+			return true
+		}
+	}
+	return false
 }
 
 func assertRefreshCookie(t *testing.T, cookie string) {

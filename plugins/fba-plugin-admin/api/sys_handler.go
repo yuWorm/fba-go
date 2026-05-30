@@ -589,28 +589,49 @@ func (Handler) UploadFile(c fiber.Ctx) error {
 	return c.JSON(response.Success(fiber.Map{"url": "/static/upload/contract.txt"}))
 }
 
-func (Handler) ListPlugins(c fiber.Ctx) error {
-	return c.JSON(response.Success([]fiber.Map{fixturePlugin()}))
+func (h Handler) ListPlugins(c fiber.Ctx) error {
+	plugins, err := h.plugins.All(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(plugins))
 }
 
-func (Handler) PluginChanged(c fiber.Ctx) error {
-	return c.JSON(response.Success(false))
+func (h Handler) PluginChanged(c fiber.Ctx) error {
+	changed, err := h.plugins.Changed(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(changed))
 }
 
-func (Handler) InstallPlugin(c fiber.Ctx) error {
+func (h Handler) InstallPlugin(c fiber.Ctx) error {
+	if err := h.plugins.Install(c.RequestCtx(), c.Query("type"), c.Query("repo_url")); err != nil {
+		return err
+	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UninstallPlugin(c fiber.Ctx) error {
+func (h Handler) UninstallPlugin(c fiber.Ctx) error {
+	if err := h.plugins.Uninstall(c.RequestCtx(), c.Params("plugin")); err != nil {
+		return err
+	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdatePluginStatus(c fiber.Ctx) error {
+func (h Handler) UpdatePluginStatus(c fiber.Ctx) error {
+	if err := h.plugins.ToggleStatus(c.RequestCtx(), c.Params("plugin")); err != nil {
+		return err
+	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) DownloadPlugin(c fiber.Ctx) error {
-	return c.SendString("plugin fixture")
+func (h Handler) DownloadPlugin(c fiber.Ctx) error {
+	body, err := h.plugins.Download(c.RequestCtx(), c.Params("plugin"))
+	if err != nil {
+		return err
+	}
+	return c.SendString(body)
 }
 
 func (Handler) ListLoginLogs(c fiber.Ctx) error {
