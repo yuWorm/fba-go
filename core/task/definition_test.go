@@ -38,3 +38,19 @@ func TestRegistryKeepsDefinitionsInRegistrationOrder(t *testing.T) {
 		t.Fatalf("definition order = %+v", definitions)
 	}
 }
+
+func TestMapAsynqStateReturnsPythonCompatibleStatus(t *testing.T) {
+	cases := map[string]task.CompatibleStatus{
+		"active":    task.StatusStarted,
+		"completed": task.StatusSuccess,
+		"retry":     task.StatusRetry,
+		"archived":  task.StatusFailure,
+		"pending":   task.StatusPending,
+	}
+
+	for state, want := range cases {
+		if got := task.MapAsynqState(state); got != want {
+			t.Fatalf("MapAsynqState(%q) = %q, want %q", state, got, want)
+		}
+	}
+}
