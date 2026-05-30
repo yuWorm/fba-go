@@ -15,6 +15,7 @@ func TestKeysUseCompatibleDefaultPrefix(t *testing.T) {
 		"refresh":          keys.RefreshToken(10001, "session-1"),
 		"user":             keys.User(10001),
 		"captcha":          keys.LoginCaptcha("uuid-1"),
+		"dict_cache":       keys.DictCache(),
 		"scheduler_leader": keys.SchedulerLeader(),
 		"migration_lock":   keys.MigrationLock(),
 	}
@@ -24,6 +25,7 @@ func TestKeysUseCompatibleDefaultPrefix(t *testing.T) {
 		"refresh":          "fba:refresh_token:10001:session-1",
 		"user":             "fba:user:10001",
 		"captcha":          "fba:login:captcha:uuid-1",
+		"dict_cache":       "fba:cache:dict",
 		"scheduler_leader": "fba:task:scheduler:leader",
 		"migration_lock":   "fba:migration:lock",
 	}

@@ -72,6 +72,27 @@ func (c *Container) Invoke(function any) error {
 	return nil
 }
 
+func (c *Container) Resolve(target any) bool {
+	targetValue := reflect.ValueOf(target)
+	if targetValue.Kind() != reflect.Ptr || targetValue.IsNil() {
+		return false
+	}
+
+	elem := targetValue.Elem()
+	elemType := elem.Type()
+	if value, ok := c.values[elemType]; ok {
+		elem.Set(value)
+		return true
+	}
+	for _, value := range c.values {
+		if value.Type().AssignableTo(elemType) {
+			elem.Set(value)
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Container) resolveArgs(functionType reflect.Type) ([]reflect.Value, error) {
 	args := make([]reflect.Value, 0, functionType.NumIn())
 	for i := 0; i < functionType.NumIn(); i++ {

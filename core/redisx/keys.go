@@ -59,6 +59,10 @@ func (k Keys) CacheInvalidateChannel() string {
 	return k.format("cache:invalidate")
 }
 
+func (k Keys) DictCache() string {
+	return k.format("cache:dict")
+}
+
 func (k Keys) SnowflakeNode(datacenter string, worker string) string {
 	return k.format("snowflake:nodes:%s:%s", datacenter, worker)
 }

@@ -1,8 +1,13 @@
 package dict
 
 import (
+	"github.com/yuWorm/fba-go/core/db"
 	"github.com/yuWorm/fba-go/core/plugin"
+	"github.com/yuWorm/fba-go/core/redisx"
 	dictapi "github.com/yuWorm/fba-plugin-dict/api"
+	dictmigration "github.com/yuWorm/fba-plugin-dict/migration"
+	"github.com/yuWorm/fba-plugin-dict/repo"
+	"github.com/yuWorm/fba-plugin-dict/service"
 )
 
 func FBAPlugin() plugin.Module {
@@ -25,7 +30,23 @@ func (Module) Meta() plugin.Meta {
 }
 
 func (Module) Register(ctx plugin.Context) error {
-	handler := dictapi.NewHandler()
+	repository := repo.Repository(repo.NewMemoryRepository(repo.SeedData()))
+	var provider db.Provider
+	if ctx.Container().Resolve(&provider) && provider != nil && provider.Write() != nil {
+		repository = repo.NewGORMRepository(provider)
+		if err := ctx.Migration(dictmigration.AutoMigrate(provider)); err != nil {
+			return err
+		}
+	}
+
+	invalidator := service.CacheInvalidator(service.NoopInvalidator{})
+	var redisClient redisx.RedisClient
+	if ctx.Container().Resolve(&redisClient) && redisClient != nil {
+		keys := redisx.NewKeys(ctx.Config().Redis.KeyPrefix)
+		invalidator = service.NewRedisInvalidator(redisClient, keys.CacheInvalidateChannel(), keys.DictCache())
+	}
+
+	handler := dictapi.NewHandler(service.New(repository, invalidator))
 
 	for _, route := range []plugin.Route{
 		{Method: "GET", Path: "/dict-types/all", Summary: "Get all dict types", AuthRequired: true, Handler: handler.GetAllDictTypes},

@@ -31,6 +31,8 @@ keys:
   cache_invalidate:
     pattern: fba:cache:invalidate
     type: pubsub
+  dict_cache:
+    pattern: "fba:cache:dict:*"
   snowflake_node:
     pattern: "fba:snowflake:nodes:{datacenter}:{worker}"
   migration_lock:

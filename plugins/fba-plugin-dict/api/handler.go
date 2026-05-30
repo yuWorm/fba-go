@@ -1,188 +1,203 @@
 package api
 
 import (
+	"strconv"
+
 	"github.com/gofiber/fiber/v3"
-	"github.com/yuWorm/fba-go/core/pagination"
 	"github.com/yuWorm/fba-go/core/response"
+	"github.com/yuWorm/fba-plugin-dict/dto"
+	"github.com/yuWorm/fba-plugin-dict/repo"
+	"github.com/yuWorm/fba-plugin-dict/service"
 )
 
-type Handler struct{}
-
-func NewHandler() Handler {
-	return Handler{}
+type Handler struct {
+	service *service.Service
 }
 
-type dictTypeDetail struct {
-	Name        string  `json:"name"`
-	Code        string  `json:"code"`
-	Remark      *string `json:"remark"`
-	ID          int     `json:"id"`
-	CreatedTime string  `json:"created_time"`
-	UpdatedTime *string `json:"updated_time"`
-}
-
-type dictDataDetail struct {
-	TypeID      int     `json:"type_id"`
-	Label       string  `json:"label"`
-	Value       string  `json:"value"`
-	Color       *string `json:"color"`
-	Sort        int     `json:"sort"`
-	Status      int     `json:"status"`
-	Remark      *string `json:"remark"`
-	ID          int     `json:"id"`
-	TypeCode    string  `json:"type_code"`
-	CreatedTime string  `json:"created_time"`
-	UpdatedTime *string `json:"updated_time"`
-}
-
-func (Handler) GetAllDictTypes(c fiber.Ctx) error {
-	return c.JSON(response.Success(fixtureDictTypes()))
-}
-
-func (Handler) GetDictType(c fiber.Ctx) error {
-	return c.JSON(response.Success(fixtureDictTypes()[0]))
-}
-
-func (Handler) ListDictTypes(c fiber.Ctx) error {
-	items := fixtureDictTypes()
-	return c.JSON(response.Success(pagination.NewPageData(items, int64(len(items)), 1, 20, "/api/v1/dict-types")))
-}
-
-func (Handler) CreateDictType(c fiber.Ctx) error {
-	return c.JSON(response.Success[any](nil))
-}
-
-func (Handler) UpdateDictType(c fiber.Ctx) error {
-	return c.JSON(response.Success[any](nil))
-}
-
-func (Handler) DeleteDictTypes(c fiber.Ctx) error {
-	return c.JSON(response.Success[any](nil))
-}
-
-func (Handler) GetAllDictData(c fiber.Ctx) error {
-	return c.JSON(response.Success(fixtureDictData()))
-}
-
-func (Handler) GetDictData(c fiber.Ctx) error {
-	return c.JSON(response.Success(fixtureDictData()[0]))
-}
-
-func (Handler) GetDictDataByTypeCode(c fiber.Ctx) error {
-	code := c.Params("code")
-	var items []dictDataDetail
-	for _, item := range fixtureDictData() {
-		if item.TypeCode == code {
-			items = append(items, item)
-		}
+func NewHandler(svc *service.Service) Handler {
+	if svc == nil {
+		svc = service.New(repo.NewMemoryRepository(repo.SeedData()), service.NoopInvalidator{})
 	}
-	if items == nil {
-		items = []dictDataDetail{}
+	return Handler{service: svc}
+}
+
+func (h Handler) GetAllDictTypes(c fiber.Ctx) error {
+	items, err := h.service.AllTypes(c.RequestCtx())
+	if err != nil {
+		return err
 	}
 	return c.JSON(response.Success(items))
 }
 
-func (Handler) ListDictData(c fiber.Ctx) error {
-	items := fixtureDictData()
-	return c.JSON(response.Success(pagination.NewPageData(items, int64(len(items)), 1, 20, "/api/v1/dict-datas")))
-}
-
-func (Handler) CreateDictData(c fiber.Ctx) error {
-	return c.JSON(response.Success[any](nil))
-}
-
-func (Handler) UpdateDictData(c fiber.Ctx) error {
-	return c.JSON(response.Success[any](nil))
-}
-
-func (Handler) DeleteDictData(c fiber.Ctx) error {
-	return c.JSON(response.Success[any](nil))
-}
-
-func fixtureDictTypes() []dictTypeDetail {
-	sysStatusRemark := "系统通用状态：1/0"
-	sysChooseRemark := "系统通用开关：true/false"
-	return []dictTypeDetail{
-		{
-			ID:          1,
-			Name:        "通用状态",
-			Code:        "sys_status",
-			Remark:      &sysStatusRemark,
-			CreatedTime: "2026-05-30 00:00:00",
-			UpdatedTime: nil,
-		},
-		{
-			ID:          2,
-			Name:        "通用开关",
-			Code:        "sys_choose",
-			Remark:      &sysChooseRemark,
-			CreatedTime: "2026-05-30 00:00:00",
-			UpdatedTime: nil,
-		},
+func (h Handler) GetDictType(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
 	}
+	item, err := h.service.GetType(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(item))
 }
 
-func fixtureDictData() []dictDataDetail {
-	disabledColor := "red"
-	disabledRemark := "停用状态"
-	enabledColor := "green"
-	enabledRemark := "正常状态"
-	closedColor := "error"
-	closedRemark := "关闭状态"
-	openColor := "success"
-	openRemark := "开启状态"
-	return []dictDataDetail{
-		{
-			ID:          1,
-			TypeID:      1,
-			TypeCode:    "sys_status",
-			Label:       "停用",
-			Value:       "0",
-			Color:       &disabledColor,
-			Sort:        1,
-			Status:      1,
-			Remark:      &disabledRemark,
-			CreatedTime: "2026-05-30 00:00:00",
-			UpdatedTime: nil,
-		},
-		{
-			ID:          2,
-			TypeID:      1,
-			TypeCode:    "sys_status",
-			Label:       "正常",
-			Value:       "1",
-			Color:       &enabledColor,
-			Sort:        2,
-			Status:      1,
-			Remark:      &enabledRemark,
-			CreatedTime: "2026-05-30 00:00:00",
-			UpdatedTime: nil,
-		},
-		{
-			ID:          3,
-			TypeID:      2,
-			TypeCode:    "sys_choose",
-			Label:       "关闭",
-			Value:       "false",
-			Color:       &closedColor,
-			Sort:        1,
-			Status:      1,
-			Remark:      &closedRemark,
-			CreatedTime: "2026-05-30 00:00:00",
-			UpdatedTime: nil,
-		},
-		{
-			ID:          4,
-			TypeID:      2,
-			TypeCode:    "sys_choose",
-			Label:       "开启",
-			Value:       "true",
-			Color:       &openColor,
-			Sort:        2,
-			Status:      1,
-			Remark:      &openRemark,
-			CreatedTime: "2026-05-30 00:00:00",
-			UpdatedTime: nil,
-		},
+func (h Handler) ListDictTypes(c fiber.Ctx) error {
+	page, size := pageParams(c)
+	data, err := h.service.ListTypes(c.RequestCtx(), repo.DictTypeFilter{
+		Name: c.Query("name"),
+		Code: c.Query("code"),
+	}, page, size, "/api/v1/dict-types")
+	if err != nil {
+		return err
 	}
+	return c.JSON(response.Success(data))
+}
+
+func (h Handler) CreateDictType(c fiber.Ctx) error {
+	var param dto.DictTypeParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.service.CreateType(c.RequestCtx(), param); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (h Handler) UpdateDictType(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.DictTypeParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.service.UpdateType(c.RequestCtx(), id, param); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (h Handler) DeleteDictTypes(c fiber.Ctx) error {
+	var param dto.DeleteParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.service.DeleteTypes(c.RequestCtx(), param.PKs); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (h Handler) GetAllDictData(c fiber.Ctx) error {
+	items, err := h.service.AllData(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(items))
+}
+
+func (h Handler) GetDictData(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	item, err := h.service.GetData(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(item))
+}
+
+func (h Handler) GetDictDataByTypeCode(c fiber.Ctx) error {
+	items, err := h.service.GetDataByTypeCode(c.RequestCtx(), c.Params("code"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(items))
+}
+
+func (h Handler) ListDictData(c fiber.Ctx) error {
+	page, size := pageParams(c)
+	data, err := h.service.ListData(c.RequestCtx(), repo.DictDataFilter{
+		TypeCode: c.Query("type_code"),
+		Label:    c.Query("label"),
+		Value:    c.Query("value"),
+		Status:   intPtrQuery(c, "status"),
+		TypeID:   intPtrQuery(c, "type_id"),
+	}, page, size, "/api/v1/dict-datas")
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(data))
+}
+
+func (h Handler) CreateDictData(c fiber.Ctx) error {
+	var param dto.DictDataParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.service.CreateData(c.RequestCtx(), param); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (h Handler) UpdateDictData(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.DictDataParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.service.UpdateData(c.RequestCtx(), id, param); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (h Handler) DeleteDictData(c fiber.Ctx) error {
+	var param dto.DeleteParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.service.DeleteData(c.RequestCtx(), param.PKs); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func parseID(raw string) (int, error) {
+	id, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fiber.NewError(fiber.StatusBadRequest, "invalid id")
+	}
+	return id, nil
+}
+
+func pageParams(c fiber.Ctx) (int, int) {
+	page, err := strconv.Atoi(c.Query("page", "1"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	size, err := strconv.Atoi(c.Query("size", "20"))
+	if err != nil || size < 1 {
+		size = 20
+	}
+	return page, size
+}
+
+func intPtrQuery(c fiber.Ctx, name string) *int {
+	raw := c.Query(name)
+	if raw == "" {
+		return nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return nil
+	}
+	return &value
 }

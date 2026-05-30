@@ -11,6 +11,14 @@ type sampleService struct {
 	Name string
 }
 
+type namedService interface {
+	ServiceName() string
+}
+
+func (s *sampleService) ServiceName() string {
+	return s.Name
+}
+
 func TestContainerProvideAndInvoke(t *testing.T) {
 	container := di.New()
 
@@ -26,6 +34,23 @@ func TestContainerProvideAndInvoke(t *testing.T) {
 		}
 	}); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
+	}
+}
+
+func TestContainerResolveAssignableDependency(t *testing.T) {
+	container := di.New()
+	if err := container.Provide(func() *sampleService {
+		return &sampleService{Name: "service"}
+	}); err != nil {
+		t.Fatalf("Provide() error = %v", err)
+	}
+
+	var resolved namedService
+	if !container.Resolve(&resolved) {
+		t.Fatal("Resolve() = false, want true")
+	}
+	if resolved.ServiceName() != "service" {
+		t.Fatalf("resolved.ServiceName() = %q, want service", resolved.ServiceName())
 	}
 }
 

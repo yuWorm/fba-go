@@ -9,8 +9,11 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/db"
+	"github.com/yuWorm/fba-go/core/di"
 	"github.com/yuWorm/fba-go/core/plugin"
 	dict "github.com/yuWorm/fba-plugin-dict"
+	"gorm.io/gorm"
 )
 
 func TestDictPluginRegistersPythonCompatibleRoutes(t *testing.T) {
@@ -58,6 +61,28 @@ func TestDictPluginRegistersPythonCompatibleRoutes(t *testing.T) {
 		if route.Permission != expected.permission {
 			t.Fatalf("%s Permission = %q, want %q", key, route.Permission, expected.permission)
 		}
+	}
+}
+
+func TestDictPluginRegistersMigrationWhenDBProviderExists(t *testing.T) {
+	container := di.New()
+	if err := container.Provide(func() db.Provider {
+		return db.NewGORMProvider(&gorm.DB{}, nil)
+	}); err != nil {
+		t.Fatalf("Provide() error = %v", err)
+	}
+	ctx := plugin.NewContext(plugin.ContextOptions{Container: container})
+
+	if err := dict.FBAPlugin().Register(ctx); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	migrations := ctx.Migrations()
+	if len(migrations) != 1 {
+		t.Fatalf("migrations = %d, want 1", len(migrations))
+	}
+	if migrations[0].Scope != "plugin:dict" {
+		t.Fatalf("migration scope = %q, want plugin:dict", migrations[0].Scope)
 	}
 }
 
@@ -117,7 +142,6 @@ func TestDictPaginatedEndpointsMatchPythonPageSchema(t *testing.T) {
 }
 
 func TestDictWriteEndpointsReturnPythonEnvelope(t *testing.T) {
-	app := newDictApp(t)
 	for _, tc := range []struct {
 		method string
 		path   string
@@ -130,6 +154,7 @@ func TestDictWriteEndpointsReturnPythonEnvelope(t *testing.T) {
 		{"PUT", "/api/v1/dict-datas/1", `{"type_id":1,"label":"Fixture","value":"fixture","color":null,"sort":0,"status":1,"remark":null}`},
 		{"DELETE", "/api/v1/dict-datas", `{"pks":[1]}`},
 	} {
+		app := newDictApp(t)
 		resp, body := requestJSON(t, app, tc.method, tc.path, tc.body)
 		assertStatusOK(t, resp)
 		assertEnvelopeNull(t, body)
