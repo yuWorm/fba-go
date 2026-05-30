@@ -1,9 +1,13 @@
 package api
 
 import (
+	"strconv"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/yuWorm/fba-go/core/pagination"
 	"github.com/yuWorm/fba-go/core/response"
+	"github.com/yuWorm/fba-plugin-admin/dto"
+	"github.com/yuWorm/fba-plugin-admin/repo"
 )
 
 const fixtureTime = "2026-05-30 00:00:00"
@@ -77,59 +81,124 @@ func (Handler) DeleteUser(c fiber.Ctx) error {
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) GetAllRoles(c fiber.Ctx) error {
-	return c.JSON(response.Success([]fiber.Map{fixtureRole()}))
+func (h Handler) GetAllRoles(c fiber.Ctx) error {
+	roles, err := h.roles.All(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(roles))
 }
 
-func (Handler) GetRoleMenus(c fiber.Ctx) error {
-	return c.JSON(response.Success([]fiber.Map{fixtureMenu()}))
+func (h Handler) GetRoleMenus(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	menus, err := h.roles.MenuTree(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(menus))
 }
 
-func (Handler) GetRoleScopes(c fiber.Ctx) error {
-	return c.JSON(response.Success([]int{}))
+func (h Handler) GetRoleScopes(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	scopes, err := h.roles.Scopes(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(scopes))
 }
 
-func (Handler) GetRole(c fiber.Ctx) error {
-	role := fixtureRole()
-	role["menus"] = []fiber.Map{fixtureMenu()}
-	role["scopes"] = []fiber.Map{}
+func (h Handler) GetRole(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	role, err := h.roles.Get(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
 	return c.JSON(response.Success(role))
 }
 
-func (Handler) ListRoles(c fiber.Ctx) error {
-	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{fixtureRole()}, 1, 1, 20, "/api/v1/sys/roles")))
+func (h Handler) ListRoles(c fiber.Ctx) error {
+	page, size := pageParams(c)
+	roles, err := h.roles.List(c.RequestCtx(), repo.RoleFilter{
+		Name:   c.Query("name"),
+		Status: intPtrQuery(c, "status"),
+	}, page, size, "/api/v1/sys/roles")
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(roles))
 }
 
-func (Handler) CreateRole(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) CreateRole(c fiber.Ctx) error {
+	var param dto.RoleParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.roles.Create(c.RequestCtx(), param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateRole(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateRole(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.RoleParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.roles.Update(c.RequestCtx(), id, param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateRoleMenus(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateRoleMenus(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.RoleMenuParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.roles.UpdateMenus(c.RequestCtx(), id, param.Menus); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateRoleScopes(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateRoleScopes(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.RoleScopeParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.roles.UpdateScopes(c.RequestCtx(), id, param.Scopes); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) DeleteRoles(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) DeleteRoles(c fiber.Ctx) error {
+	var param dto.DeleteParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.roles.Delete(c.RequestCtx(), param.PKs); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
@@ -413,6 +482,38 @@ func (Handler) DeleteSession(c fiber.Ctx) error {
 func bindBody(c fiber.Ctx) error {
 	var body map[string]any
 	return c.Bind().Body(&body)
+}
+
+func parseID(raw string) (int, error) {
+	id, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fiber.NewError(fiber.StatusBadRequest, "invalid id")
+	}
+	return id, nil
+}
+
+func pageParams(c fiber.Ctx) (int, int) {
+	page, err := strconv.Atoi(c.Query("page", "1"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	size, err := strconv.Atoi(c.Query("size", "20"))
+	if err != nil || size < 1 {
+		size = 20
+	}
+	return page, size
+}
+
+func intPtrQuery(c fiber.Ctx, name string) *int {
+	raw := c.Query(name)
+	if raw == "" {
+		return nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return nil
+	}
+	return &value
 }
 
 func fixtureUser() fiber.Map {

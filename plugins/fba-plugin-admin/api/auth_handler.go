@@ -5,15 +5,21 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/yuWorm/fba-go/core/response"
+	"github.com/yuWorm/fba-plugin-admin/repo"
+	"github.com/yuWorm/fba-plugin-admin/service"
 )
 
 const refreshCookieName = "fba_refresh_token"
 const refreshCookieMaxAgeSeconds = 60 * 60 * 24 * 7
 
-type Handler struct{}
+type Handler struct {
+	roles *service.RoleService
+}
 
 func NewHandler() Handler {
-	return Handler{}
+	return Handler{
+		roles: service.NewRoleService(repo.NewMemoryRepository(repo.SeedData())),
+	}
 }
 
 type captchaDetail struct {

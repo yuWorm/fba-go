@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -410,6 +411,81 @@ func TestSidebarMenusMatchesPythonVben5Schema(t *testing.T) {
 	assertKeys(t, meta, "title", "icon", "iframeSrc", "link", "keepAlive", "hideInMenu", "menuVisibleWithForbidden")
 }
 
+func TestRoleEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/roles", `{"name":"Auditor","status":0,"is_filter_scopes":false,"remark":"read only"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/roles?name=Audit&status=0", "")
+	assertStatusOK(t, resp)
+	page := assertEnvelopeMap(t, body)
+	items, ok := page["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("filtered role items = %T len %d, want one item", page["items"], len(items))
+	}
+	auditor := assertMap(t, items[0])
+	if auditor["name"] != "Auditor" {
+		t.Fatalf("filtered role name = %v, want Auditor", auditor["name"])
+	}
+	if auditor["status"] != float64(0) {
+		t.Fatalf("filtered role status = %v, want 0", auditor["status"])
+	}
+	id := int(auditor["id"].(float64))
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/roles/"+itoa(id), `{"name":"Auditor Updated","status":1,"is_filter_scopes":true,"remark":null}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/roles/"+itoa(id), "")
+	assertStatusOK(t, resp)
+	detail := assertEnvelopeMap(t, body)
+	if detail["name"] != "Auditor Updated" {
+		t.Fatalf("updated role name = %v, want Auditor Updated", detail["name"])
+	}
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/roles", `{"pks":[`+itoa(id)+`]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/roles?name=Auditor", "")
+	assertStatusOK(t, resp)
+	page = assertEnvelopeMap(t, body)
+	items, ok = page["items"].([]any)
+	if !ok || len(items) != 0 {
+		t.Fatalf("deleted role items = %T len %d, want empty list", page["items"], len(items))
+	}
+}
+
+func TestRoleRelationEndpointsAreStateful(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "PUT", "/api/v1/sys/roles/1/menus", `{"menus":[1]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/roles/1/menus", "")
+	assertStatusOK(t, resp)
+	menus := assertEnvelopeSlice(t, body)
+	if len(menus) != 1 {
+		t.Fatalf("role menu count = %d, want 1", len(menus))
+	}
+	menu := assertMap(t, menus[0])
+	if menu["id"] != float64(1) {
+		t.Fatalf("role menu id = %v, want 1", menu["id"])
+	}
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/roles/1/scopes", `{"scopes":[1]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/roles/1/scopes", "")
+	assertStatusOK(t, resp)
+	scopes := assertEnvelopeSlice(t, body)
+	if len(scopes) != 1 || scopes[0] != float64(1) {
+		t.Fatalf("role scopes = %v, want [1]", scopes)
+	}
+}
+
 func newAdminApp(t *testing.T) *fiber.App {
 	t.Helper()
 	app := fiber.New()
@@ -476,6 +552,19 @@ func assertEnvelopeSlice(t *testing.T, body map[string]any) []any {
 	return data
 }
 
+func assertEnvelopeNil(t *testing.T, body map[string]any) {
+	t.Helper()
+	if body["code"] != float64(200) {
+		t.Fatalf("code = %v, want 200; body = %v", body["code"], body)
+	}
+	if body["msg"] != "请求成功" {
+		t.Fatalf("msg = %v, want 请求成功", body["msg"])
+	}
+	if body["data"] != nil {
+		t.Fatalf("data = %v, want nil", body["data"])
+	}
+}
+
 func assertMap(t *testing.T, value any) map[string]any {
 	t.Helper()
 	got, ok := value.(map[string]any)
@@ -532,4 +621,8 @@ func registerRoutes(router fiber.Router, routes []plugin.Route) {
 	for _, route := range routes {
 		router.Add([]string{route.Method}, route.Path, route.Handler)
 	}
+}
+
+func itoa(value int) string {
+	return strconv.Itoa(value)
 }
