@@ -79,6 +79,41 @@ func (Handler) ListRoles(c fiber.Ctx) error {
 	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{fixtureRole()}, 1, 1, 20, "/api/v1/sys/roles")))
 }
 
+func (Handler) CreateRole(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateRole(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateRoleMenus(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateRoleScopes(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) DeleteRoles(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
 func (Handler) GetMenu(c fiber.Ctx) error {
 	return c.JSON(response.Success(fixtureMenu()))
 }
@@ -87,12 +122,48 @@ func (Handler) ListMenus(c fiber.Ctx) error {
 	return c.JSON(response.Success([]fiber.Map{fixtureMenu()}))
 }
 
+func (Handler) CreateMenu(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateMenu(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) DeleteMenu(c fiber.Ctx) error {
+	return c.JSON(response.Success[any](nil))
+}
+
 func (Handler) GetDept(c fiber.Ctx) error {
 	return c.JSON(response.Success(fixtureDept()))
 }
 
 func (Handler) ListDepts(c fiber.Ctx) error {
 	return c.JSON(response.Success([]fiber.Map{fixtureDept()}))
+}
+
+func (Handler) CreateDept(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) UpdateDept(c fiber.Ctx) error {
+	if err := bindBody(c); err != nil {
+		return err
+	}
+	return c.JSON(response.Success[any](nil))
+}
+
+func (Handler) DeleteDept(c fiber.Ctx) error {
+	return c.JSON(response.Success[any](nil))
 }
 
 func (Handler) DataRuleModels(c fiber.Ctx) error {
@@ -225,6 +296,11 @@ func (Handler) RedisMonitor(c fiber.Ctx) error {
 
 func (Handler) ListSessions(c fiber.Ctx) error {
 	return c.JSON(response.Success([]fiber.Map{}))
+}
+
+func bindBody(c fiber.Ctx) error {
+	var body map[string]any
+	return c.Bind().Body(&body)
 }
 
 func fixtureRole() fiber.Map {

@@ -82,6 +82,42 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 			t.Fatalf("%s %s status = %d body = %s", tc.method, tc.path, resp.StatusCode, body)
 		}
 	}
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{"POST", "/api/v1/sys/roles", `{"name":"Contract Role","status":1,"is_filter_scopes":true,"remark":null}`},
+		{"PUT", "/api/v1/sys/roles/1", `{"name":"admin","status":1,"is_filter_scopes":true,"remark":null}`},
+		{"PUT", "/api/v1/sys/roles/1/menus", `{"menus":[1]}`},
+		{"PUT", "/api/v1/sys/roles/1/scopes", `{"scopes":[1]}`},
+		{"DELETE", "/api/v1/sys/roles", `{"pks":[999999]}`},
+		{"POST", "/api/v1/sys/menus", `{"title":"Contract Menu","name":"ContractMenu","path":"/contract","parent_id":null,"sort":0,"icon":null,"type":1,"component":"Layout","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`},
+		{"PUT", "/api/v1/sys/menus/1", `{"title":"仪表盘","name":"Dashboard","path":"/dashboard","parent_id":null,"sort":0,"icon":"lucide:layout-dashboard","type":1,"component":"Layout","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`},
+		{"DELETE", "/api/v1/sys/menus/1", ""},
+		{"POST", "/api/v1/sys/depts", `{"name":"Contract Dept","parent_id":null,"sort":0,"leader":null,"phone":null,"email":null,"status":1}`},
+		{"PUT", "/api/v1/sys/depts/1", `{"name":"总部","parent_id":null,"sort":0,"leader":null,"phone":null,"email":null,"status":1}`},
+		{"DELETE", "/api/v1/sys/depts/1", ""},
+	} {
+		var reqBody io.Reader
+		if tc.body != "" {
+			reqBody = strings.NewReader(tc.body)
+		}
+		req := httptest.NewRequest(tc.method, tc.path, reqBody)
+		if tc.body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("%s %s error = %v", tc.method, tc.path, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != fiber.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("%s %s status = %d body = %s", tc.method, tc.path, resp.StatusCode, body)
+		}
+	}
 }
 
 func TestAdminPluginRegistersPythonCompatibleRouteMetadata(t *testing.T) {
@@ -112,11 +148,22 @@ func TestAdminPluginRegistersPythonCompatibleRouteMetadata(t *testing.T) {
 		"GET /sys/roles/:pk/scopes":                    true,
 		"GET /sys/roles/:pk":                           true,
 		"GET /sys/roles":                               true,
+		"POST /sys/roles":                              true,
+		"PUT /sys/roles/:pk":                           true,
+		"PUT /sys/roles/:pk/menus":                     true,
+		"PUT /sys/roles/:pk/scopes":                    true,
+		"DELETE /sys/roles":                            true,
 		"GET /sys/menus/sidebar":                       true,
 		"GET /sys/menus/:pk":                           true,
 		"GET /sys/menus":                               true,
+		"POST /sys/menus":                              true,
+		"PUT /sys/menus/:pk":                           true,
+		"DELETE /sys/menus/:pk":                        true,
 		"GET /sys/depts/:pk":                           true,
 		"GET /sys/depts":                               true,
+		"POST /sys/depts":                              true,
+		"PUT /sys/depts/:pk":                           true,
+		"DELETE /sys/depts/:pk":                        true,
 		"GET /sys/data-rules/models":                   true,
 		"GET /sys/data-rules/models/:model/columns":    true,
 		"GET /sys/data-rules/value-template-variables": true,
@@ -143,6 +190,25 @@ func TestAdminPluginRegistersPythonCompatibleRouteMetadata(t *testing.T) {
 		}
 		if route.AuthRequired != authRequired {
 			t.Fatalf("%s AuthRequired = %v, want %v", key, route.AuthRequired, authRequired)
+		}
+	}
+
+	wantPermissions := map[string]string{
+		"POST /sys/roles":          "sys:role:add",
+		"PUT /sys/roles/:pk":       "sys:role:edit",
+		"PUT /sys/roles/:pk/menus": "sys:role:menu:edit",
+		"DELETE /sys/roles":        "sys:role:del",
+		"POST /sys/menus":          "sys:menu:add",
+		"PUT /sys/menus/:pk":       "sys:menu:edit",
+		"DELETE /sys/menus/:pk":    "sys:menu:del",
+	}
+	for key, permission := range wantPermissions {
+		route, ok := got[key]
+		if !ok {
+			t.Fatalf("route %s not registered; registered routes: %v", key, maps.Keys(got))
+		}
+		if route.Permission != permission {
+			t.Fatalf("%s Permission = %q, want %q", key, route.Permission, permission)
 		}
 	}
 }

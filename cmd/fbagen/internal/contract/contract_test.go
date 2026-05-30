@@ -182,6 +182,43 @@ func TestLoadIncludesWriteMethodParityPriorityRoutes(t *testing.T) {
 	}
 }
 
+func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
+	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		method       string
+		path         string
+		samplePath   string
+		bodyRequired bool
+	}{
+		{"POST", "/api/v1/sys/roles", "", true},
+		{"PUT", "/api/v1/sys/roles/{pk}", "/api/v1/sys/roles/1", true},
+		{"PUT", "/api/v1/sys/roles/{pk}/menus", "/api/v1/sys/roles/1/menus", true},
+		{"PUT", "/api/v1/sys/roles/{pk}/scopes", "/api/v1/sys/roles/1/scopes", true},
+		{"DELETE", "/api/v1/sys/roles", "", true},
+		{"POST", "/api/v1/sys/menus", "", true},
+		{"PUT", "/api/v1/sys/menus/{pk}", "/api/v1/sys/menus/1", true},
+		{"DELETE", "/api/v1/sys/menus/{pk}", "/api/v1/sys/menus/1", false},
+		{"POST", "/api/v1/sys/depts", "", true},
+		{"PUT", "/api/v1/sys/depts/{pk}", "/api/v1/sys/depts/1", true},
+		{"DELETE", "/api/v1/sys/depts/{pk}", "/api/v1/sys/depts/1", false},
+	} {
+		route := findPriorityRoute(loaded.API.PriorityRoutes, tc.method, tc.path)
+		if route == nil {
+			t.Fatalf("missing priority route %s %s", tc.method, tc.path)
+		}
+		if route.SamplePath != tc.samplePath {
+			t.Fatalf("%s %s sample_path = %q, want %q", tc.method, tc.path, route.SamplePath, tc.samplePath)
+		}
+		if tc.bodyRequired && (route.Request == nil || route.Request.Body == "") {
+			t.Fatalf("%s %s missing request body sample", tc.method, tc.path)
+		}
+	}
+}
+
 func TestSnapshotWritesAPIContractSummary(t *testing.T) {
 	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
 	if err != nil {

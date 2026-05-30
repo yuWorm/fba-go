@@ -53,6 +53,38 @@ priority_routes:
   - method: GET
     path: /api/v1/sys/roles
     owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/roles
+    owner: plugin:admin
+    permission: sys:role:add
+    request:
+      body: '{"name":"Contract Role","status":1,"is_filter_scopes":true,"remark":null}'
+  - method: PUT
+    path: /api/v1/sys/roles/{pk}
+    sample_path: /api/v1/sys/roles/1
+    owner: plugin:admin
+    permission: sys:role:edit
+    request:
+      body: '{"name":"admin","status":1,"is_filter_scopes":true,"remark":null}'
+  - method: PUT
+    path: /api/v1/sys/roles/{pk}/menus
+    sample_path: /api/v1/sys/roles/1/menus
+    owner: plugin:admin
+    permission: sys:role:menu:edit
+    request:
+      body: '{"menus":[1]}'
+  - method: PUT
+    path: /api/v1/sys/roles/{pk}/scopes
+    sample_path: /api/v1/sys/roles/1/scopes
+    owner: plugin:admin
+    request:
+      body: '{"scopes":[1]}'
+  - method: DELETE
+    path: /api/v1/sys/roles
+    owner: plugin:admin
+    permission: sys:role:del
+    request:
+      body: '{"pks":[999999]}'
   - method: GET
     path: /api/v1/sys/menus/sidebar
     owner: plugin:admin
@@ -63,12 +95,45 @@ priority_routes:
   - method: GET
     path: /api/v1/sys/menus
     owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/menus
+    owner: plugin:admin
+    permission: sys:menu:add
+    request:
+      body: '{"title":"Contract Menu","name":"ContractMenu","path":"/contract","parent_id":null,"sort":0,"icon":null,"type":1,"component":"Layout","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}'
+  - method: PUT
+    path: /api/v1/sys/menus/{pk}
+    sample_path: /api/v1/sys/menus/1
+    owner: plugin:admin
+    permission: sys:menu:edit
+    request:
+      body: '{"title":"Dashboard","name":"Dashboard","path":"/dashboard","parent_id":null,"sort":0,"icon":"lucide:layout-dashboard","type":1,"component":"Layout","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}'
+  - method: DELETE
+    path: /api/v1/sys/menus/{pk}
+    sample_path: /api/v1/sys/menus/1
+    owner: plugin:admin
+    permission: sys:menu:del
   - method: GET
     path: /api/v1/sys/depts/{pk}
     sample_path: /api/v1/sys/depts/1
     owner: plugin:admin
   - method: GET
     path: /api/v1/sys/depts
+    owner: plugin:admin
+  - method: POST
+    path: /api/v1/sys/depts
+    owner: plugin:admin
+    request:
+      body: '{"name":"Contract Dept","parent_id":null,"sort":0,"leader":null,"phone":null,"email":null,"status":1}'
+  - method: PUT
+    path: /api/v1/sys/depts/{pk}
+    sample_path: /api/v1/sys/depts/1
+    owner: plugin:admin
+    request:
+      body: '{"name":"Headquarters","parent_id":null,"sort":0,"leader":null,"phone":null,"email":null,"status":1}'
+  - method: DELETE
+    path: /api/v1/sys/depts/{pk}
+    sample_path: /api/v1/sys/depts/1
     owner: plugin:admin
   - method: GET
     path: /api/v1/sys/data-rules/models
