@@ -47,6 +47,18 @@ type Dept struct {
 	DeletedTime *time.Time
 }
 
+type DataRule struct {
+	ID          int
+	Name        string
+	Model       string
+	Column      string
+	Operator    int
+	Expression  int
+	Value       string
+	CreatedTime time.Time
+	UpdatedTime *time.Time
+}
+
 type DataScope struct {
 	ID          int
 	Name        string
@@ -59,6 +71,7 @@ type Seed struct {
 	Roles      []Role
 	Menus      []Menu
 	Depts      []Dept
+	DataRules  []DataRule
 	DataScopes []DataScope
 	RoleMenus  map[int][]int
 	RoleScopes map[int][]int
@@ -103,6 +116,18 @@ func SeedData() Seed {
 				Sort:        0,
 				Status:      1,
 				Deleted:     0,
+				CreatedTime: created,
+			},
+		},
+		DataRules: []DataRule{
+			{
+				ID:          1,
+				Name:        "本人数据",
+				Model:       "user",
+				Column:      "id",
+				Operator:    0,
+				Expression:  0,
+				Value:       "{{ user_id }}",
 				CreatedTime: created,
 			},
 		},

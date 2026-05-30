@@ -556,6 +556,56 @@ func TestDeptTreeReflectsCreatedChildren(t *testing.T) {
 	}
 }
 
+func TestDataRuleEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/data-rules", `{"name":"Engineering Rule","model":"user","column":"dept_id","operator":0,"expression":0,"value":"{{ dept_id }}"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-rules?name=Engineering", "")
+	assertStatusOK(t, resp)
+	page := assertEnvelopeMap(t, body)
+	items, ok := page["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("filtered data-rule items = %T len %d, want one item", page["items"], len(items))
+	}
+	rule := assertMap(t, items[0])
+	if rule["name"] != "Engineering Rule" {
+		t.Fatalf("filtered data-rule name = %v, want Engineering Rule", rule["name"])
+	}
+	if rule["column"] != "dept_id" {
+		t.Fatalf("filtered data-rule column = %v, want dept_id", rule["column"])
+	}
+	id := int(rule["id"].(float64))
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/data-rules/"+itoa(id), `{"name":"Engineering Rule Updated","model":"user","column":"id","operator":1,"expression":1,"value":"{{ user_id }}"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-rules/"+itoa(id), "")
+	assertStatusOK(t, resp)
+	detail := assertEnvelopeMap(t, body)
+	if detail["name"] != "Engineering Rule Updated" {
+		t.Fatalf("updated data-rule name = %v, want Engineering Rule Updated", detail["name"])
+	}
+	if detail["operator"] != float64(1) {
+		t.Fatalf("updated data-rule operator = %v, want 1", detail["operator"])
+	}
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/data-rules", `{"pks":[`+itoa(id)+`]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-rules?name=Engineering", "")
+	assertStatusOK(t, resp)
+	page = assertEnvelopeMap(t, body)
+	items, ok = page["items"].([]any)
+	if !ok || len(items) != 0 {
+		t.Fatalf("deleted data-rule items = %T len %d, want empty list", page["items"], len(items))
+	}
+}
+
 func TestRoleEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	app := newAdminApp(t)
 

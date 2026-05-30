@@ -14,16 +14,18 @@ import (
 var ErrNotFound = errors.New("not found")
 
 type MemoryRepository struct {
-	mu         sync.RWMutex
-	roles      []model.Role
-	menus      []model.Menu
-	depts      []model.Dept
-	scopes     []model.DataScope
-	roleMenus  map[int][]int
-	roleScopes map[int][]int
-	nextRoleID int
-	nextMenuID int
-	nextDeptID int
+	mu             sync.RWMutex
+	roles          []model.Role
+	menus          []model.Menu
+	depts          []model.Dept
+	dataRules      []model.DataRule
+	scopes         []model.DataScope
+	roleMenus      map[int][]int
+	roleScopes     map[int][]int
+	nextRoleID     int
+	nextMenuID     int
+	nextDeptID     int
+	nextDataRuleID int
 }
 
 func NewMemoryRepository(seed model.Seed) *MemoryRepository {
@@ -45,16 +47,24 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 			nextDeptID = item.ID + 1
 		}
 	}
+	nextDataRuleID := 1
+	for _, item := range seed.DataRules {
+		if item.ID >= nextDataRuleID {
+			nextDataRuleID = item.ID + 1
+		}
+	}
 	return &MemoryRepository{
-		roles:      append([]model.Role(nil), seed.Roles...),
-		menus:      append([]model.Menu(nil), seed.Menus...),
-		depts:      append([]model.Dept(nil), seed.Depts...),
-		scopes:     append([]model.DataScope(nil), seed.DataScopes...),
-		roleMenus:  cloneIDMap(seed.RoleMenus),
-		roleScopes: cloneIDMap(seed.RoleScopes),
-		nextRoleID: nextRoleID,
-		nextMenuID: nextMenuID,
-		nextDeptID: nextDeptID,
+		roles:          append([]model.Role(nil), seed.Roles...),
+		menus:          append([]model.Menu(nil), seed.Menus...),
+		depts:          append([]model.Dept(nil), seed.Depts...),
+		dataRules:      append([]model.DataRule(nil), seed.DataRules...),
+		scopes:         append([]model.DataScope(nil), seed.DataScopes...),
+		roleMenus:      cloneIDMap(seed.RoleMenus),
+		roleScopes:     cloneIDMap(seed.RoleScopes),
+		nextRoleID:     nextRoleID,
+		nextMenuID:     nextMenuID,
+		nextDeptID:     nextDeptID,
+		nextDataRuleID: nextDataRuleID,
 	}
 }
 
@@ -364,6 +374,78 @@ func (r *MemoryRepository) DeleteDept(_ context.Context, id int) error {
 	return nil
 }
 
+func (r *MemoryRepository) AllDataRules(context.Context) ([]model.DataRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]model.DataRule(nil), r.dataRules...), nil
+}
+
+func (r *MemoryRepository) GetDataRule(_ context.Context, id int) (model.DataRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.dataRules {
+		if item.ID == id {
+			return item, nil
+		}
+	}
+	return model.DataRule{}, ErrNotFound
+}
+
+func (r *MemoryRepository) ListDataRules(_ context.Context, filter DataRuleFilter, page int, size int) ([]model.DataRule, int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]model.DataRule, 0, len(r.dataRules))
+	for _, item := range r.dataRules {
+		if filter.Name != "" && !strings.Contains(item.Name, filter.Name) {
+			continue
+		}
+		items = append(items, item)
+	}
+	sortDataRules(items)
+	return pageSlice(items, page, size), int64(len(items)), nil
+}
+
+func (r *MemoryRepository) CreateDataRule(_ context.Context, param dto.DataRuleParam) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.dataRules = append(r.dataRules, model.DataRule{
+		ID:          r.nextDataRule(),
+		Name:        param.Name,
+		Model:       param.Model,
+		Column:      param.Column,
+		Operator:    param.Operator,
+		Expression:  param.Expression,
+		Value:       param.Value,
+		CreatedTime: model.SeedData().DataRules[0].CreatedTime,
+	})
+	return nil
+}
+
+func (r *MemoryRepository) UpdateDataRule(_ context.Context, id int, param dto.DataRuleParam) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.dataRules {
+		if r.dataRules[i].ID == id {
+			r.dataRules[i].Name = param.Name
+			r.dataRules[i].Model = param.Model
+			r.dataRules[i].Column = param.Column
+			r.dataRules[i].Operator = param.Operator
+			r.dataRules[i].Expression = param.Expression
+			r.dataRules[i].Value = param.Value
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) DeleteDataRules(_ context.Context, ids []int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.dataRules = deleteByIDs(r.dataRules, ids, func(item model.DataRule) int { return item.ID })
+	return nil
+}
+
 func (r *MemoryRepository) nextRole() int {
 	id := r.nextRoleID
 	r.nextRoleID++
@@ -379,6 +461,12 @@ func (r *MemoryRepository) nextMenu() int {
 func (r *MemoryRepository) nextDept() int {
 	id := r.nextDeptID
 	r.nextDeptID++
+	return id
+}
+
+func (r *MemoryRepository) nextDataRule() int {
+	id := r.nextDataRuleID
+	r.nextDataRuleID++
 	return id
 }
 
@@ -502,6 +590,12 @@ func sortDepts(items []model.Dept) {
 		if items[i].Sort != items[j].Sort {
 			return items[i].Sort < items[j].Sort
 		}
+		return items[i].ID < items[j].ID
+	})
+}
+
+func sortDataRules(items []model.DataRule) {
+	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].ID < items[j].ID
 	})
 }

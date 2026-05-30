@@ -1,0 +1,56 @@
+package service
+
+import (
+	"context"
+
+	"github.com/yuWorm/fba-go/core/pagination"
+	"github.com/yuWorm/fba-plugin-admin/dto"
+	"github.com/yuWorm/fba-plugin-admin/repo"
+)
+
+type DataRuleService struct {
+	repo repo.Repository
+}
+
+func NewDataRuleService(repository repo.Repository) *DataRuleService {
+	if repository == nil {
+		repository = repo.NewMemoryRepository(repo.SeedData())
+	}
+	return &DataRuleService{repo: repository}
+}
+
+func (s *DataRuleService) All(ctx context.Context) ([]dto.DataRuleDetail, error) {
+	items, err := s.repo.AllDataRules(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return dto.DataRulesFromModel(items), nil
+}
+
+func (s *DataRuleService) Get(ctx context.Context, id int) (dto.DataRuleDetail, error) {
+	item, err := s.repo.GetDataRule(ctx, id)
+	if err != nil {
+		return dto.DataRuleDetail{}, err
+	}
+	return dto.DataRuleFromModel(item), nil
+}
+
+func (s *DataRuleService) List(ctx context.Context, filter repo.DataRuleFilter, page int, size int, basePath string) (pagination.PageData[dto.DataRuleDetail], error) {
+	items, total, err := s.repo.ListDataRules(ctx, filter, page, size)
+	if err != nil {
+		return pagination.PageData[dto.DataRuleDetail]{}, err
+	}
+	return pagination.NewPageData(dto.DataRulesFromModel(items), total, page, size, basePath), nil
+}
+
+func (s *DataRuleService) Create(ctx context.Context, param dto.DataRuleParam) error {
+	return s.repo.CreateDataRule(ctx, param)
+}
+
+func (s *DataRuleService) Update(ctx context.Context, id int, param dto.DataRuleParam) error {
+	return s.repo.UpdateDataRule(ctx, id, param)
+}
+
+func (s *DataRuleService) Delete(ctx context.Context, ids []int) error {
+	return s.repo.DeleteDataRules(ctx, ids)
+}

@@ -24,6 +24,10 @@ type DeptFilter struct {
 	Status *int
 }
 
+type DataRuleFilter struct {
+	Name string
+}
+
 type Repository interface {
 	AllRoles(ctx context.Context) ([]model.Role, error)
 	GetRole(ctx context.Context, id int) (model.Role, error)
@@ -47,6 +51,12 @@ type Repository interface {
 	CreateDept(ctx context.Context, param dto.DeptParam) error
 	UpdateDept(ctx context.Context, id int, param dto.DeptParam) error
 	DeleteDept(ctx context.Context, id int) error
+	AllDataRules(ctx context.Context) ([]model.DataRule, error)
+	GetDataRule(ctx context.Context, id int) (model.DataRule, error)
+	ListDataRules(ctx context.Context, filter DataRuleFilter, page int, size int) ([]model.DataRule, int64, error)
+	CreateDataRule(ctx context.Context, param dto.DataRuleParam) error
+	UpdateDataRule(ctx context.Context, id int, param dto.DataRuleParam) error
+	DeleteDataRules(ctx context.Context, ids []int) error
 }
 
 func SeedData() model.Seed {

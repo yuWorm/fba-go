@@ -344,34 +344,69 @@ func (Handler) DataRuleValueTemplateVariables(c fiber.Ctx) error {
 	}))
 }
 
-func (Handler) GetAllDataRules(c fiber.Ctx) error {
-	return c.JSON(response.Success([]fiber.Map{fixtureDataRule()}))
+func (h Handler) GetAllDataRules(c fiber.Ctx) error {
+	rules, err := h.dataRules.All(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(rules))
 }
 
-func (Handler) GetDataRule(c fiber.Ctx) error {
-	return c.JSON(response.Success(fixtureDataRule()))
+func (h Handler) GetDataRule(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	rule, err := h.dataRules.Get(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(rule))
 }
 
-func (Handler) ListDataRules(c fiber.Ctx) error {
-	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{fixtureDataRule()}, 1, 1, 20, "/api/v1/sys/data-rules")))
+func (h Handler) ListDataRules(c fiber.Ctx) error {
+	page, size := pageParams(c)
+	rules, err := h.dataRules.List(c.RequestCtx(), repo.DataRuleFilter{
+		Name: c.Query("name"),
+	}, page, size, "/api/v1/sys/data-rules")
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(rules))
 }
 
-func (Handler) CreateDataRule(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) CreateDataRule(c fiber.Ctx) error {
+	var param dto.DataRuleParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.dataRules.Create(c.RequestCtx(), param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateDataRule(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateDataRule(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.DataRuleParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.dataRules.Update(c.RequestCtx(), id, param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) DeleteDataRules(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) DeleteDataRules(c fiber.Ctx) error {
+	var param dto.DeleteParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.dataRules.Delete(c.RequestCtx(), param.PKs); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))

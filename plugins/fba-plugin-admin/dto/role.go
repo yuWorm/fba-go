@@ -54,6 +54,15 @@ type DeptParam struct {
 	Status   int     `json:"status"`
 }
 
+type DataRuleParam struct {
+	Name       string `json:"name"`
+	Model      string `json:"model"`
+	Column     string `json:"column"`
+	Operator   int    `json:"operator"`
+	Expression int    `json:"expression"`
+	Value      string `json:"value"`
+}
+
 type RoleDetail struct {
 	Name           string  `json:"name"`
 	Status         int     `json:"status"`
@@ -129,6 +138,18 @@ type DeptDetail struct {
 	UpdatedTime *string      `json:"updated_time"`
 	DeletedTime *string      `json:"deleted_time"`
 	Children    []DeptDetail `json:"children,omitempty"`
+}
+
+type DataRuleDetail struct {
+	Name        string  `json:"name"`
+	Model       string  `json:"model"`
+	Column      string  `json:"column"`
+	Operator    int     `json:"operator"`
+	Expression  int     `json:"expression"`
+	Value       string  `json:"value"`
+	ID          int     `json:"id"`
+	CreatedTime string  `json:"created_time"`
+	UpdatedTime *string `json:"updated_time"`
 }
 
 type DataScopeDetail struct {
@@ -245,6 +266,28 @@ func DeptFromModel(item model.Dept) DeptDetail {
 		UpdatedTime: formatTimePtr(item.UpdatedTime),
 		DeletedTime: formatTimePtr(item.DeletedTime),
 	}
+}
+
+func DataRuleFromModel(item model.DataRule) DataRuleDetail {
+	return DataRuleDetail{
+		ID:          item.ID,
+		Name:        item.Name,
+		Model:       item.Model,
+		Column:      item.Column,
+		Operator:    item.Operator,
+		Expression:  item.Expression,
+		Value:       item.Value,
+		CreatedTime: formatTime(item.CreatedTime),
+		UpdatedTime: formatTimePtr(item.UpdatedTime),
+	}
+}
+
+func DataRulesFromModel(items []model.DataRule) []DataRuleDetail {
+	result := make([]DataRuleDetail, 0, len(items))
+	for _, item := range items {
+		result = append(result, DataRuleFromModel(item))
+	}
+	return result
 }
 
 func DataScopeFromModel(item model.DataScope) DataScopeDetail {
