@@ -14,18 +14,20 @@ import (
 var ErrNotFound = errors.New("not found")
 
 type MemoryRepository struct {
-	mu             sync.RWMutex
-	roles          []model.Role
-	menus          []model.Menu
-	depts          []model.Dept
-	dataRules      []model.DataRule
-	scopes         []model.DataScope
-	roleMenus      map[int][]int
-	roleScopes     map[int][]int
-	nextRoleID     int
-	nextMenuID     int
-	nextDeptID     int
-	nextDataRuleID int
+	mu              sync.RWMutex
+	roles           []model.Role
+	menus           []model.Menu
+	depts           []model.Dept
+	dataRules       []model.DataRule
+	scopes          []model.DataScope
+	scopeRules      map[int][]int
+	roleMenus       map[int][]int
+	roleScopes      map[int][]int
+	nextRoleID      int
+	nextMenuID      int
+	nextDeptID      int
+	nextDataRuleID  int
+	nextDataScopeID int
 }
 
 func NewMemoryRepository(seed model.Seed) *MemoryRepository {
@@ -53,18 +55,26 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 			nextDataRuleID = item.ID + 1
 		}
 	}
+	nextDataScopeID := 1
+	for _, item := range seed.DataScopes {
+		if item.ID >= nextDataScopeID {
+			nextDataScopeID = item.ID + 1
+		}
+	}
 	return &MemoryRepository{
-		roles:          append([]model.Role(nil), seed.Roles...),
-		menus:          append([]model.Menu(nil), seed.Menus...),
-		depts:          append([]model.Dept(nil), seed.Depts...),
-		dataRules:      append([]model.DataRule(nil), seed.DataRules...),
-		scopes:         append([]model.DataScope(nil), seed.DataScopes...),
-		roleMenus:      cloneIDMap(seed.RoleMenus),
-		roleScopes:     cloneIDMap(seed.RoleScopes),
-		nextRoleID:     nextRoleID,
-		nextMenuID:     nextMenuID,
-		nextDeptID:     nextDeptID,
-		nextDataRuleID: nextDataRuleID,
+		roles:           append([]model.Role(nil), seed.Roles...),
+		menus:           append([]model.Menu(nil), seed.Menus...),
+		depts:           append([]model.Dept(nil), seed.Depts...),
+		dataRules:       append([]model.DataRule(nil), seed.DataRules...),
+		scopes:          append([]model.DataScope(nil), seed.DataScopes...),
+		scopeRules:      cloneIDMap(seed.ScopeRules),
+		roleMenus:       cloneIDMap(seed.RoleMenus),
+		roleScopes:      cloneIDMap(seed.RoleScopes),
+		nextRoleID:      nextRoleID,
+		nextMenuID:      nextMenuID,
+		nextDeptID:      nextDeptID,
+		nextDataRuleID:  nextDataRuleID,
+		nextDataScopeID: nextDataScopeID,
 	}
 }
 
@@ -446,6 +456,107 @@ func (r *MemoryRepository) DeleteDataRules(_ context.Context, ids []int) error {
 	return nil
 }
 
+func (r *MemoryRepository) AllDataScopes(context.Context) ([]model.DataScope, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	items := append([]model.DataScope(nil), r.scopes...)
+	sortDataScopes(items)
+	return items, nil
+}
+
+func (r *MemoryRepository) GetDataScope(_ context.Context, id int) (model.DataScope, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.scopes {
+		if item.ID == id {
+			return item, nil
+		}
+	}
+	return model.DataScope{}, ErrNotFound
+}
+
+func (r *MemoryRepository) DataScopeRules(_ context.Context, id int) (model.DataScope, []model.DataRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.scopes {
+		if item.ID == id {
+			return item, dataRulesByIDs(r.dataRules, r.scopeRules[id]), nil
+		}
+	}
+	return model.DataScope{}, nil, ErrNotFound
+}
+
+func (r *MemoryRepository) ListDataScopes(_ context.Context, filter DataScopeFilter, page int, size int) ([]model.DataScope, int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]model.DataScope, 0, len(r.scopes))
+	for _, item := range r.scopes {
+		if filter.Name != "" && !strings.Contains(item.Name, filter.Name) {
+			continue
+		}
+		if filter.Status != nil && item.Status != *filter.Status {
+			continue
+		}
+		items = append(items, item)
+	}
+	sortDataScopes(items)
+	return pageSlice(items, page, size), int64(len(items)), nil
+}
+
+func (r *MemoryRepository) CreateDataScope(_ context.Context, param dto.DataScopeParam) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.scopes = append(r.scopes, model.DataScope{
+		ID:          r.nextDataScope(),
+		Name:        param.Name,
+		Status:      param.Status,
+		CreatedTime: model.SeedData().DataScopes[0].CreatedTime,
+	})
+	return nil
+}
+
+func (r *MemoryRepository) UpdateDataScope(_ context.Context, id int, param dto.DataScopeParam) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.scopes {
+		if r.scopes[i].ID == id {
+			r.scopes[i].Name = param.Name
+			r.scopes[i].Status = param.Status
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) UpdateDataScopeRules(_ context.Context, id int, ruleIDs []int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !hasScope(r.scopes, id) {
+		return ErrNotFound
+	}
+	for _, ruleID := range ruleIDs {
+		if !hasDataRule(r.dataRules, ruleID) {
+			return ErrNotFound
+		}
+	}
+	r.scopeRules[id] = append([]int(nil), ruleIDs...)
+	return nil
+}
+
+func (r *MemoryRepository) DeleteDataScopes(_ context.Context, ids []int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.scopes = deleteByIDs(r.scopes, ids, func(item model.DataScope) int { return item.ID })
+	for _, id := range ids {
+		delete(r.scopeRules, id)
+		for roleID, scopeIDs := range r.roleScopes {
+			r.roleScopes[roleID] = deleteInt(scopeIDs, id)
+		}
+	}
+	return nil
+}
+
 func (r *MemoryRepository) nextRole() int {
 	id := r.nextRoleID
 	r.nextRoleID++
@@ -467,6 +578,12 @@ func (r *MemoryRepository) nextDept() int {
 func (r *MemoryRepository) nextDataRule() int {
 	id := r.nextDataRuleID
 	r.nextDataRuleID++
+	return id
+}
+
+func (r *MemoryRepository) nextDataScope() int {
+	id := r.nextDataScopeID
+	r.nextDataScopeID++
 	return id
 }
 
@@ -545,6 +662,19 @@ func scopesByIDs(items []model.DataScope, ids []int) []model.DataScope {
 	return result
 }
 
+func dataRulesByIDs(items []model.DataRule, ids []int) []model.DataRule {
+	result := make([]model.DataRule, 0, len(ids))
+	for _, id := range ids {
+		for _, item := range items {
+			if item.ID == id {
+				result = append(result, item)
+				break
+			}
+		}
+	}
+	return result
+}
+
 func filterKnownIDs(ids []int, exists func(int) bool) []int {
 	result := make([]int, 0, len(ids))
 	seen := make(map[int]struct{}, len(ids))
@@ -576,6 +706,15 @@ func hasScope(items []model.DataScope, id int) bool {
 	return false
 }
 
+func hasDataRule(items []model.DataRule, id int) bool {
+	for _, item := range items {
+		if item.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func sortMenus(items []model.Menu) {
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].Sort != items[j].Sort {
@@ -595,6 +734,12 @@ func sortDepts(items []model.Dept) {
 }
 
 func sortDataRules(items []model.DataRule) {
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].ID < items[j].ID
+	})
+}
+
+func sortDataScopes(items []model.DataScope) {
 	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].ID < items[j].ID
 	})

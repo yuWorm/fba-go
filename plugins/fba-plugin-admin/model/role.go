@@ -75,6 +75,7 @@ type Seed struct {
 	DataScopes []DataScope
 	RoleMenus  map[int][]int
 	RoleScopes map[int][]int
+	ScopeRules map[int][]int
 }
 
 func SeedData() Seed {
@@ -141,6 +142,7 @@ func SeedData() Seed {
 		},
 		RoleMenus:  map[int][]int{1: {1}},
 		RoleScopes: map[int][]int{},
+		ScopeRules: map[int][]int{1: {1}},
 	}
 }
 

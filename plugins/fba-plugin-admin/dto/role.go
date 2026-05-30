@@ -63,6 +63,15 @@ type DataRuleParam struct {
 	Value      string `json:"value"`
 }
 
+type DataScopeParam struct {
+	Name   string `json:"name"`
+	Status int    `json:"status"`
+}
+
+type DataScopeRuleParam struct {
+	Rules []int `json:"rules"`
+}
+
 type RoleDetail struct {
 	Name           string  `json:"name"`
 	Status         int     `json:"status"`
@@ -158,7 +167,11 @@ type DataScopeDetail struct {
 	ID          int     `json:"id"`
 	CreatedTime string  `json:"created_time"`
 	UpdatedTime *string `json:"updated_time"`
-	Rules       []any   `json:"rules,omitempty"`
+}
+
+type DataScopeWithRelationDetail struct {
+	DataScopeDetail
+	Rules []DataRuleDetail `json:"rules"`
 }
 
 func RoleFromModel(item model.Role) RoleDetail {
@@ -306,6 +319,13 @@ func DataScopesFromModel(items []model.DataScope) []DataScopeDetail {
 		result = append(result, DataScopeFromModel(item))
 	}
 	return result
+}
+
+func DataScopeWithRules(item model.DataScope, rules []model.DataRule) DataScopeWithRelationDetail {
+	return DataScopeWithRelationDetail{
+		DataScopeDetail: DataScopeFromModel(item),
+		Rules:           DataRulesFromModel(rules),
+	}
 }
 
 func formatTime(value time.Time) string {

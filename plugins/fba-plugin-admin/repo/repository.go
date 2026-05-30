@@ -28,6 +28,11 @@ type DataRuleFilter struct {
 	Name string
 }
 
+type DataScopeFilter struct {
+	Name   string
+	Status *int
+}
+
 type Repository interface {
 	AllRoles(ctx context.Context) ([]model.Role, error)
 	GetRole(ctx context.Context, id int) (model.Role, error)
@@ -57,6 +62,14 @@ type Repository interface {
 	CreateDataRule(ctx context.Context, param dto.DataRuleParam) error
 	UpdateDataRule(ctx context.Context, id int, param dto.DataRuleParam) error
 	DeleteDataRules(ctx context.Context, ids []int) error
+	AllDataScopes(ctx context.Context) ([]model.DataScope, error)
+	GetDataScope(ctx context.Context, id int) (model.DataScope, error)
+	DataScopeRules(ctx context.Context, id int) (model.DataScope, []model.DataRule, error)
+	ListDataScopes(ctx context.Context, filter DataScopeFilter, page int, size int) ([]model.DataScope, int64, error)
+	CreateDataScope(ctx context.Context, param dto.DataScopeParam) error
+	UpdateDataScope(ctx context.Context, id int, param dto.DataScopeParam) error
+	UpdateDataScopeRules(ctx context.Context, id int, ruleIDs []int) error
+	DeleteDataScopes(ctx context.Context, ids []int) error
 }
 
 func SeedData() model.Seed {

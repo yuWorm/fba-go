@@ -606,6 +606,69 @@ func TestDataRuleEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	}
 }
 
+func TestDataScopeEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/data-scopes", `{"name":"Platform Scope","status":0}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-scopes?name=Platform&status=0", "")
+	assertStatusOK(t, resp)
+	page := assertEnvelopeMap(t, body)
+	items, ok := page["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("filtered data-scope items = %T len %d, want one item", page["items"], len(items))
+	}
+	scope := assertMap(t, items[0])
+	if scope["name"] != "Platform Scope" {
+		t.Fatalf("filtered data-scope name = %v, want Platform Scope", scope["name"])
+	}
+	if scope["status"] != float64(0) {
+		t.Fatalf("filtered data-scope status = %v, want 0", scope["status"])
+	}
+	id := int(scope["id"].(float64))
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/data-scopes/"+itoa(id), `{"name":"Platform Scope Updated","status":1}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-scopes/"+itoa(id), "")
+	assertStatusOK(t, resp)
+	detail := assertEnvelopeMap(t, body)
+	if detail["name"] != "Platform Scope Updated" {
+		t.Fatalf("updated data-scope name = %v, want Platform Scope Updated", detail["name"])
+	}
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/data-scopes/"+itoa(id)+"/rules", `{"rules":[1]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-scopes/"+itoa(id)+"/rules", "")
+	assertStatusOK(t, resp)
+	withRules := assertEnvelopeMap(t, body)
+	rules, ok := withRules["rules"].([]any)
+	if !ok || len(rules) != 1 {
+		t.Fatalf("data-scope rules = %T len %d, want one rule", withRules["rules"], len(rules))
+	}
+	rule := assertMap(t, rules[0])
+	if rule["id"] != float64(1) {
+		t.Fatalf("data-scope rule id = %v, want 1", rule["id"])
+	}
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/data-scopes", `{"pks":[`+itoa(id)+`]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-scopes?name=Platform", "")
+	assertStatusOK(t, resp)
+	page = assertEnvelopeMap(t, body)
+	items, ok = page["items"].([]any)
+	if !ok || len(items) != 0 {
+		t.Fatalf("deleted data-scope items = %T len %d, want empty list", page["items"], len(items))
+	}
+}
+
 func TestRoleEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	app := newAdminApp(t)
 

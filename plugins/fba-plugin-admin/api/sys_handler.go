@@ -412,47 +412,97 @@ func (h Handler) DeleteDataRules(c fiber.Ctx) error {
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) GetAllDataScopes(c fiber.Ctx) error {
-	return c.JSON(response.Success([]fiber.Map{fixtureDataScope()}))
+func (h Handler) GetAllDataScopes(c fiber.Ctx) error {
+	scopes, err := h.dataScopes.All(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(scopes))
 }
 
-func (Handler) GetDataScope(c fiber.Ctx) error {
-	return c.JSON(response.Success(fixtureDataScope()))
-}
-
-func (Handler) GetDataScopeRules(c fiber.Ctx) error {
-	scope := fixtureDataScope()
-	scope["rules"] = []fiber.Map{fixtureDataRule()}
+func (h Handler) GetDataScope(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	scope, err := h.dataScopes.Get(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
 	return c.JSON(response.Success(scope))
 }
 
-func (Handler) ListDataScopes(c fiber.Ctx) error {
-	return c.JSON(response.Success(pagination.NewPageData([]fiber.Map{fixtureDataScope()}, 1, 1, 20, "/api/v1/sys/data-scopes")))
+func (h Handler) GetDataScopeRules(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	scope, err := h.dataScopes.Rules(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(scope))
 }
 
-func (Handler) CreateDataScope(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) ListDataScopes(c fiber.Ctx) error {
+	page, size := pageParams(c)
+	scopes, err := h.dataScopes.List(c.RequestCtx(), repo.DataScopeFilter{
+		Name:   c.Query("name"),
+		Status: intPtrQuery(c, "status"),
+	}, page, size, "/api/v1/sys/data-scopes")
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(scopes))
+}
+
+func (h Handler) CreateDataScope(c fiber.Ctx) error {
+	var param dto.DataScopeParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.dataScopes.Create(c.RequestCtx(), param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateDataScope(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateDataScope(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.DataScopeParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.dataScopes.Update(c.RequestCtx(), id, param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateDataScopeRules(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateDataScopeRules(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.DataScopeRuleParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.dataScopes.UpdateRules(c.RequestCtx(), id, param.Rules); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) DeleteDataScopes(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) DeleteDataScopes(c fiber.Ctx) error {
+	var param dto.DeleteParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.dataScopes.Delete(c.RequestCtx(), param.PKs); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
