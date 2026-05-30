@@ -200,6 +200,54 @@ func (r *MemoryRepository) UpdateUser(_ context.Context, id int, param dto.UserU
 	return ErrNotFound
 }
 
+func (r *MemoryRepository) UpdateUserNickname(_ context.Context, id int, nickname string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.users {
+		if r.users[i].ID == id {
+			r.users[i].Nickname = nickname
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) UpdateUserAvatar(_ context.Context, id int, avatar *string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.users {
+		if r.users[i].ID == id {
+			r.users[i].Avatar = avatar
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) UpdateUserEmail(_ context.Context, id int, email *string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.users {
+		if r.users[i].ID == id {
+			r.users[i].Email = email
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) ResetUserPassword(_ context.Context, id int, password string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.users {
+		if r.users[i].ID == id {
+			r.users[i].Password = password
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
 func (r *MemoryRepository) UpdateUserPermission(_ context.Context, id int, permissionType string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

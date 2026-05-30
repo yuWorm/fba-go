@@ -22,6 +22,29 @@ type UserUpdateParam struct {
 	Roles    []int   `json:"roles"`
 }
 
+type UserPasswordParam struct {
+	OldPassword     string `json:"old_password"`
+	NewPassword     string `json:"new_password"`
+	ConfirmPassword string `json:"confirm_password"`
+}
+
+type UserResetPasswordParam struct {
+	Password string `json:"password"`
+}
+
+type UserNicknameParam struct {
+	Nickname string `json:"nickname"`
+}
+
+type UserAvatarParam struct {
+	Avatar *string `json:"avatar"`
+}
+
+type UserEmailParam struct {
+	Captcha string  `json:"captcha"`
+	Email   *string `json:"email"`
+}
+
 type UserDetail struct {
 	DeptID        *int    `json:"dept_id"`
 	Username      string  `json:"username"`
@@ -43,6 +66,12 @@ type UserWithRelationDetail struct {
 	UserDetail
 	Dept  *DeptDetail              `json:"dept"`
 	Roles []RoleWithRelationDetail `json:"roles"`
+}
+
+type CurrentUserWithRelationDetail struct {
+	UserDetail
+	Dept  *string  `json:"dept"`
+	Roles []string `json:"roles"`
 }
 
 func UserFromModel(item model.User) UserDetail {
@@ -74,5 +103,21 @@ func UserWithRelations(item model.User, dept *model.Dept, roles []RoleWithRelati
 		UserDetail: UserFromModel(item),
 		Dept:       deptDetail,
 		Roles:      roles,
+	}
+}
+
+func CurrentUserWithRelations(item model.User, dept *model.Dept, roles []model.Role) CurrentUserWithRelationDetail {
+	var deptName *string
+	if dept != nil {
+		deptName = &dept.Name
+	}
+	roleNames := make([]string, 0, len(roles))
+	for _, role := range roles {
+		roleNames = append(roleNames, role.Name)
+	}
+	return CurrentUserWithRelationDetail{
+		UserDetail: UserFromModel(item),
+		Dept:       deptName,
+		Roles:      roleNames,
 	}
 }

@@ -5,10 +5,13 @@ import (
 	"github.com/yuWorm/fba-go/core/response"
 )
 
-func (Handler) CurrentUser(c fiber.Ctx) error {
-	return c.JSON(response.Success(currentUserInfo{
-		userInfoDetail: fixtureUserInfo(),
-		Dept:           nil,
-		Roles:          []string{},
-	}))
+// Until real JWT user context is wired into the plugin host, the seeded admin user is the current user.
+const currentUserID = 1
+
+func (h Handler) CurrentUser(c fiber.Ctx) error {
+	user, err := h.users.Current(c.RequestCtx(), currentUserID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(user))
 }

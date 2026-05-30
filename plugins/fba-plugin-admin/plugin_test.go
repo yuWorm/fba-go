@@ -465,6 +465,47 @@ func TestUserEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	}
 }
 
+func TestCurrentUserProfileEndpointsAreStateful(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "PUT", "/api/v1/sys/users/me/nickname", `{"nickname":"Admin Updated"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/avatar", `{"avatar":"https://example.invalid/avatar.png"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/email", `{"captcha":"123456","email":"admin-updated@example.com"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/1/password", `{"password":"reset-password"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"reset-password","new_password":"new-password","confirm_password":"new-password"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/users/me", "")
+	assertStatusOK(t, resp)
+	current := assertEnvelopeMap(t, body)
+	if current["nickname"] != "Admin Updated" {
+		t.Fatalf("current user nickname = %v, want Admin Updated", current["nickname"])
+	}
+	if current["avatar"] != "https://example.invalid/avatar.png" {
+		t.Fatalf("current user avatar = %v, want updated avatar", current["avatar"])
+	}
+	if current["email"] != "admin-updated@example.com" {
+		t.Fatalf("current user email = %v, want admin-updated@example.com", current["email"])
+	}
+	roles, ok := current["roles"].([]any)
+	if !ok || len(roles) != 1 || roles[0] != "admin" {
+		t.Fatalf("current user roles = %v, want [admin]", current["roles"])
+	}
+}
+
 func TestSidebarMenusMatchesPythonVben5Schema(t *testing.T) {
 	app := newAdminApp(t)
 	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/menus/sidebar", "")

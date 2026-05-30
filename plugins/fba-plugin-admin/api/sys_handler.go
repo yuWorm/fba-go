@@ -88,36 +88,60 @@ func (h Handler) UpdateUserPermission(c fiber.Ctx) error {
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateCurrentUserPassword(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateCurrentUserPassword(c fiber.Ctx) error {
+	var param dto.UserPasswordParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.users.UpdatePassword(c.RequestCtx(), currentUserID, param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) ResetUserPassword(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) ResetUserPassword(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.UserResetPasswordParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.users.ResetPassword(c.RequestCtx(), id, param.Password); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateCurrentUserNickname(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateCurrentUserNickname(c fiber.Ctx) error {
+	var param dto.UserNicknameParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.users.UpdateNickname(c.RequestCtx(), currentUserID, param.Nickname); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateCurrentUserAvatar(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateCurrentUserAvatar(c fiber.Ctx) error {
+	var param dto.UserAvatarParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.users.UpdateAvatar(c.RequestCtx(), currentUserID, param.Avatar); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateCurrentUserEmail(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateCurrentUserEmail(c fiber.Ctx) error {
+	var param dto.UserEmailParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.users.UpdateEmail(c.RequestCtx(), currentUserID, param.Email); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))

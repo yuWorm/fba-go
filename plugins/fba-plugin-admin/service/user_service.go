@@ -28,6 +28,26 @@ func (s *UserService) Get(ctx context.Context, id int) (dto.UserWithRelationDeta
 	return s.withRelations(ctx, user)
 }
 
+func (s *UserService) Current(ctx context.Context, id int) (dto.CurrentUserWithRelationDetail, error) {
+	user, err := s.repo.GetUser(ctx, id)
+	if err != nil {
+		return dto.CurrentUserWithRelationDetail{}, err
+	}
+	var dept *model.Dept
+	if user.DeptID != nil {
+		item, err := s.repo.GetDept(ctx, *user.DeptID)
+		if err != nil {
+			return dto.CurrentUserWithRelationDetail{}, err
+		}
+		dept = &item
+	}
+	roles, err := s.repo.UserRoles(ctx, id)
+	if err != nil {
+		return dto.CurrentUserWithRelationDetail{}, err
+	}
+	return dto.CurrentUserWithRelations(user, dept, roles), nil
+}
+
 func (s *UserService) List(ctx context.Context, filter repo.UserFilter, page int, size int, basePath string) (pagination.PageData[dto.UserWithRelationDetail], error) {
 	users, total, err := s.repo.ListUsers(ctx, filter, page, size)
 	if err != nil {
@@ -54,6 +74,36 @@ func (s *UserService) Create(ctx context.Context, param dto.UserCreateParam) (dt
 
 func (s *UserService) Update(ctx context.Context, id int, param dto.UserUpdateParam) error {
 	return s.repo.UpdateUser(ctx, id, param)
+}
+
+func (s *UserService) UpdatePassword(ctx context.Context, id int, param dto.UserPasswordParam) error {
+	user, err := s.repo.GetUser(ctx, id)
+	if err != nil {
+		return err
+	}
+	if user.Password != "" && user.Password != param.OldPassword {
+		return repo.ErrNotFound
+	}
+	if param.NewPassword != param.ConfirmPassword {
+		return repo.ErrNotFound
+	}
+	return s.repo.ResetUserPassword(ctx, id, param.NewPassword)
+}
+
+func (s *UserService) ResetPassword(ctx context.Context, id int, password string) error {
+	return s.repo.ResetUserPassword(ctx, id, password)
+}
+
+func (s *UserService) UpdateNickname(ctx context.Context, id int, nickname string) error {
+	return s.repo.UpdateUserNickname(ctx, id, nickname)
+}
+
+func (s *UserService) UpdateAvatar(ctx context.Context, id int, avatar *string) error {
+	return s.repo.UpdateUserAvatar(ctx, id, avatar)
+}
+
+func (s *UserService) UpdateEmail(ctx context.Context, id int, email *string) error {
+	return s.repo.UpdateUserEmail(ctx, id, email)
 }
 
 func (s *UserService) UpdatePermission(ctx context.Context, id int, permissionType string) error {

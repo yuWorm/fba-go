@@ -46,6 +46,10 @@ type Repository interface {
 	ListUsers(ctx context.Context, filter UserFilter, page int, size int) ([]model.User, int64, error)
 	CreateUser(ctx context.Context, param dto.UserCreateParam) (model.User, error)
 	UpdateUser(ctx context.Context, id int, param dto.UserUpdateParam) error
+	UpdateUserNickname(ctx context.Context, id int, nickname string) error
+	UpdateUserAvatar(ctx context.Context, id int, avatar *string) error
+	UpdateUserEmail(ctx context.Context, id int, email *string) error
+	ResetUserPassword(ctx context.Context, id int, password string) error
 	UpdateUserPermission(ctx context.Context, id int, permissionType string) error
 	DeleteUser(ctx context.Context, id int) error
 	UserRoles(ctx context.Context, userID int) ([]model.Role, error)
