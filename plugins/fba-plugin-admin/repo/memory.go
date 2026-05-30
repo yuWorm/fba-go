@@ -25,6 +25,7 @@ type MemoryRepository struct {
 	plugins         []model.Plugin
 	loginLogs       []model.LoginLog
 	operaLogs       []model.OperaLog
+	sessions        []model.Session
 	pluginsChanged  bool
 	userRoles       map[int][]int
 	scopeRules      map[int][]int
@@ -85,6 +86,7 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 		plugins:         clonePlugins(seed.Plugins),
 		loginLogs:       cloneLoginLogs(seed.LoginLogs),
 		operaLogs:       cloneOperaLogs(seed.OperaLogs),
+		sessions:        append([]model.Session(nil), seed.Sessions...),
 		userRoles:       cloneIDMap(seed.UserRoles),
 		scopeRules:      cloneIDMap(seed.ScopeRules),
 		roleMenus:       cloneIDMap(seed.RoleMenus),
@@ -928,6 +930,37 @@ func (r *MemoryRepository) DeleteAllOperaLogs(context.Context) error {
 	return nil
 }
 
+func (r *MemoryRepository) ListSessions(_ context.Context, filter SessionFilter) ([]model.Session, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]model.Session, 0, len(r.sessions))
+	for _, item := range r.sessions {
+		if filter.Username != "" && item.Username != filter.Username {
+			continue
+		}
+		items = append(items, item)
+	}
+	sortSessions(items)
+	return items, nil
+}
+
+func (r *MemoryRepository) DeleteSession(_ context.Context, userID int, sessionUUID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Python revoke_token removes token-related Redis keys idempotently; keep the
+	// in-memory compatibility store idempotent so contract probes can repeat.
+	result := r.sessions[:0]
+	for _, item := range r.sessions {
+		if item.ID == userID && item.SessionUUID == sessionUUID {
+			continue
+		}
+		result = append(result, item)
+	}
+	r.sessions = result
+	return nil
+}
+
 func (r *MemoryRepository) nextRole() int {
 	id := r.nextRoleID
 	r.nextRoleID++
@@ -1240,6 +1273,15 @@ func sortOperaLogs(items []model.OperaLog) {
 			return items[i].ID > items[j].ID
 		}
 		return items[i].CreatedTime.After(items[j].CreatedTime)
+	})
+}
+
+func sortSessions(items []model.Session) {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].ExpireTime.Equal(items[j].ExpireTime) {
+			return items[i].ID < items[j].ID
+		}
+		return items[i].ExpireTime.After(items[j].ExpireTime)
 	})
 }
 

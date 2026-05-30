@@ -655,6 +655,69 @@ func TestUploadFileUsesMultipartFilenameLikePython(t *testing.T) {
 	}
 }
 
+func TestMonitorEndpointsUseServiceData(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/monitors/server", "")
+	assertStatusOK(t, resp)
+	server := assertEnvelopeMap(t, body)
+	cpu := assertMap(t, server["cpu"])
+	if cpu["logical_num"].(float64) <= 0 {
+		t.Fatalf("server cpu logical_num = %v, want > 0", cpu["logical_num"])
+	}
+	mem := assertMap(t, server["mem"])
+	if mem["total"].(float64) <= 0 {
+		t.Fatalf("server mem total = %v, want > 0", mem["total"])
+	}
+	service := assertMap(t, server["service"])
+	if service["name"] != "fba-go" {
+		t.Fatalf("server service name = %v, want fba-go", service["name"])
+	}
+	if service["home"] == "" {
+		t.Fatal("server service home is empty")
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/monitors/redis", "")
+	assertStatusOK(t, resp)
+	redis := assertEnvelopeMap(t, body)
+	info := assertMap(t, redis["info"])
+	assertKeys(t, info, "redis_version", "redis_mode", "role", "tcp_port", "uptime", "connected_clients", "blocked_clients", "used_memory_human", "used_memory_rss_human", "maxmemory_human", "mem_fragmentation_ratio", "instantaneous_ops_per_sec", "total_commands_processed", "rejected_connections", "keys_num")
+	if info["redis_mode"] == "" {
+		t.Fatal("redis monitor redis_mode is empty")
+	}
+	stats, ok := redis["stats"].([]any)
+	if !ok || len(stats) == 0 {
+		t.Fatalf("redis monitor stats = %T len %d, want non-empty list", redis["stats"], len(stats))
+	}
+}
+
+func TestSessionEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/monitors/sessions?username=admin", "")
+	assertStatusOK(t, resp)
+	sessions := assertEnvelopeSlice(t, body)
+	if len(sessions) != 1 {
+		t.Fatalf("filtered sessions count = %d, want 1", len(sessions))
+	}
+	session := assertMap(t, sessions[0])
+	assertKeys(t, session, "id", "session_uuid", "username", "nickname", "ip", "os", "browser", "device", "status", "last_login_time", "expire_time")
+	if session["session_uuid"] != "fixture-session" {
+		t.Fatalf("session uuid = %v, want fixture-session", session["session_uuid"])
+	}
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/monitors/sessions/1?session_uuid=fixture-session", "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/monitors/sessions?username=admin", "")
+	assertStatusOK(t, resp)
+	sessions = assertEnvelopeSlice(t, body)
+	if len(sessions) != 0 {
+		t.Fatalf("sessions after delete = %d, want 0", len(sessions))
+	}
+}
+
 func TestSidebarMenusMatchesPythonVben5Schema(t *testing.T) {
 	app := newAdminApp(t)
 	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/menus/sidebar", "")

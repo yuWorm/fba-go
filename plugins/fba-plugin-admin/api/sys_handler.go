@@ -703,71 +703,38 @@ func (h Handler) DeleteAllOperaLogs(c fiber.Ctx) error {
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) ServerMonitor(c fiber.Ctx) error {
-	return c.JSON(response.Success(fiber.Map{
-		"cpu": fiber.Map{
-			"physical_num": 1,
-			"logical_num":  1,
-			"max_freq":     0,
-			"min_freq":     0,
-			"current_freq": 0,
-			"usage":        0,
-		},
-		"mem": fiber.Map{
-			"total": 0,
-			"used":  0,
-			"free":  0,
-			"usage": 0,
-		},
-		"sys": fiber.Map{
-			"name": "fba-go",
-			"os":   "go",
-			"ip":   "127.0.0.1",
-			"arch": "unknown",
-		},
-		"disk": []fiber.Map{},
-		"service": fiber.Map{
-			"name":      "fba-go",
-			"version":   "0.1.0",
-			"home":      "",
-			"startup":   fixtureTime,
-			"elapsed":   "0s",
-			"cpu_usage": "0%",
-			"mem_vms":   "0B",
-			"mem_rss":   "0B",
-			"mem_free":  "0B",
-		},
-	}))
+func (h Handler) ServerMonitor(c fiber.Ctx) error {
+	monitor, err := h.monitors.Server(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(monitor))
 }
 
-func (Handler) RedisMonitor(c fiber.Ctx) error {
-	return c.JSON(response.Success(fiber.Map{
-		"info": fiber.Map{
-			"redis_version":             "",
-			"redis_mode":                "",
-			"role":                      "",
-			"tcp_port":                  "",
-			"uptime":                    "0s",
-			"connected_clients":         "0",
-			"blocked_clients":           "0",
-			"used_memory_human":         "0B",
-			"used_memory_rss_human":     "0B",
-			"maxmemory_human":           "0B",
-			"mem_fragmentation_ratio":   "0",
-			"instantaneous_ops_per_sec": "0",
-			"total_commands_processed":  "0",
-			"rejected_connections":      "0",
-			"keys_num":                  "0",
-		},
-		"stats": []fiber.Map{},
-	}))
+func (h Handler) RedisMonitor(c fiber.Ctx) error {
+	monitor, err := h.monitors.Redis(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(monitor))
 }
 
-func (Handler) ListSessions(c fiber.Ctx) error {
-	return c.JSON(response.Success([]fiber.Map{}))
+func (h Handler) ListSessions(c fiber.Ctx) error {
+	sessions, err := h.monitors.Sessions(c.RequestCtx(), c.Query("username"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(sessions))
 }
 
-func (Handler) DeleteSession(c fiber.Ctx) error {
+func (h Handler) DeleteSession(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	if err := h.monitors.DeleteSession(c.RequestCtx(), id, c.Query("session_uuid")); err != nil {
+		return err
+	}
 	return c.JSON(response.Success[any](nil))
 }
 

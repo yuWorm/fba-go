@@ -46,6 +46,10 @@ type LogFilter struct {
 	IP       string
 }
 
+type SessionFilter struct {
+	Username string
+}
+
 type Repository interface {
 	GetUser(ctx context.Context, id int) (model.User, error)
 	GetUserByUsername(ctx context.Context, username string) (model.User, error)
@@ -107,6 +111,8 @@ type Repository interface {
 	ListOperaLogs(ctx context.Context, filter LogFilter, page int, size int) ([]model.OperaLog, int64, error)
 	DeleteOperaLogs(ctx context.Context, ids []int) error
 	DeleteAllOperaLogs(ctx context.Context) error
+	ListSessions(ctx context.Context, filter SessionFilter) ([]model.Session, error)
+	DeleteSession(ctx context.Context, userID int, sessionUUID string) error
 }
 
 func SeedData() model.Seed {

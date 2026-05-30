@@ -77,6 +77,7 @@ type Seed struct {
 	Plugins    []Plugin
 	LoginLogs  []LoginLog
 	OperaLogs  []OperaLog
+	Sessions   []Session
 	UserRoles  map[int][]int
 	RoleMenus  map[int][]int
 	RoleScopes map[int][]int
@@ -247,6 +248,21 @@ func SeedData() Seed {
 				CostTime:    1.2,
 				OperaTime:   created,
 				CreatedTime: created,
+			},
+		},
+		Sessions: []Session{
+			{
+				ID:            1,
+				SessionUUID:   "fixture-session",
+				Username:      "admin",
+				Nickname:      "Admin",
+				IP:            "127.0.0.1",
+				OS:            "macOS",
+				Browser:       "Chrome",
+				Device:        "Desktop",
+				Status:        1,
+				LastLoginTime: created.Format("2006-01-02 15:04:05"),
+				ExpireTime:    created.Add(2 * time.Hour),
 			},
 		},
 		UserRoles:  map[int][]int{1: {1}},

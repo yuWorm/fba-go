@@ -22,6 +22,7 @@ type Handler struct {
 	plugins    *service.PluginService
 	logs       *service.LogService
 	files      *service.FileService
+	monitors   *service.MonitorService
 }
 
 func NewHandler() Handler {
@@ -36,6 +37,7 @@ func NewHandler() Handler {
 		plugins:    service.NewPluginService(repository),
 		logs:       service.NewLogService(repository),
 		files:      service.NewFileService(),
+		monitors:   service.NewMonitorService(repository),
 	}
 }
 
