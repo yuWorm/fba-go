@@ -357,6 +357,93 @@ func TestLoginMatchesPythonSchemaAndSetsRefreshCookie(t *testing.T) {
 	assertRefreshCookie(t, resp.Header.Get("Set-Cookie"))
 }
 
+func TestAuthEndpointsAreStatefulAndValidateUsers(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/auth/captcha", "")
+	assertStatusOK(t, resp)
+	captcha := assertEnvelopeMap(t, body)
+	if captcha["uuid"] == "fixture-captcha" {
+		t.Fatalf("captcha uuid = %v, want dynamic uuid", captcha["uuid"])
+	}
+	if captcha["image"] == "" {
+		t.Fatal("captcha image is empty")
+	}
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"auth_user","password":"secret","nickname":"Auth User","email":null,"phone":null,"dept_id":1,"roles":[1]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+
+	loginBody := `{"username":"auth_user","password":"secret","uuid":"` + captcha["uuid"].(string) + `","captcha":"1234"}`
+	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", loginBody)
+	assertStatusOK(t, resp)
+	data := assertEnvelopeMap(t, body)
+	if data["access_token"] == "fixture-access-token" {
+		t.Fatal("login returned fixture access token")
+	}
+	if data["session_uuid"] == "fixture-session" {
+		t.Fatal("login returned fixture session uuid")
+	}
+	user := assertMap(t, data["user"])
+	if user["username"] != "auth_user" {
+		t.Fatalf("login user = %v, want auth_user", user["username"])
+	}
+	sessionUUID := data["session_uuid"].(string)
+	refreshCookie := requireCookie(t, resp.Header.Get("Set-Cookie"), "fba_refresh_token")
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/monitors/sessions?username=auth_user", "")
+	assertStatusOK(t, resp)
+	sessions := assertEnvelopeSlice(t, body)
+	if len(sessions) != 1 {
+		t.Fatalf("auth_user sessions = %d, want 1", len(sessions))
+	}
+	session := assertMap(t, sessions[0])
+	if session["session_uuid"] != sessionUUID {
+		t.Fatalf("session uuid = %v, want %s", session["session_uuid"], sessionUUID)
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/auth/refresh", nil)
+	req.AddCookie(refreshCookie)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("POST /auth/refresh error = %v", err)
+	}
+	defer resp.Body.Close()
+	assertStatusOK(t, resp)
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode refresh response: %v", err)
+	}
+	refreshed := assertEnvelopeMap(t, body)
+	if refreshed["session_uuid"] != sessionUUID {
+		t.Fatalf("refreshed session uuid = %v, want %s", refreshed["session_uuid"], sessionUUID)
+	}
+	if refreshed["access_token"] == data["access_token"] {
+		t.Fatal("refresh returned the same access token")
+	}
+
+	req = httptest.NewRequest("POST", "/api/v1/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+refreshed["access_token"].(string))
+	req.AddCookie(refreshCookie)
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("POST /auth/logout error = %v", err)
+	}
+	defer resp.Body.Close()
+	assertStatusOK(t, resp)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/monitors/sessions?username=auth_user", "")
+	assertStatusOK(t, resp)
+	sessions = assertEnvelopeSlice(t, body)
+	if len(sessions) != 0 {
+		t.Fatalf("auth_user sessions after logout = %d, want 0", len(sessions))
+	}
+
+	resp, _ = requestRaw(t, app, "POST", "/api/v1/auth/login", `{"username":"auth_user","password":"wrong","uuid":"fixture-captcha","captcha":"1234"}`)
+	if resp.StatusCode == fiber.StatusOK {
+		t.Fatal("login with wrong password returned 200")
+	}
+}
+
 func TestRefreshMatchesPythonSchemaAndSetsRefreshCookie(t *testing.T) {
 	app := newAdminApp(t)
 	req := httptest.NewRequest("POST", "/api/v1/auth/refresh", nil)
@@ -1263,6 +1350,19 @@ func assertRefreshCookie(t *testing.T, cookie string) {
 	if !strings.Contains(lower, "max-age=604800") {
 		t.Fatalf("Set-Cookie missing Max-Age=604800: %s", cookie)
 	}
+}
+
+func requireCookie(t *testing.T, header string, name string) *http.Cookie {
+	t.Helper()
+	if header == "" {
+		t.Fatalf("missing Set-Cookie header for %s", name)
+	}
+	parts := strings.Split(header, ";")
+	nameValue := strings.SplitN(strings.TrimSpace(parts[0]), "=", 2)
+	if len(nameValue) != 2 || nameValue[0] != name {
+		t.Fatalf("Set-Cookie = %q, want %s cookie", header, name)
+	}
+	return &http.Cookie{Name: nameValue[0], Value: nameValue[1]}
 }
 
 func registerRoutes(router fiber.Router, routes []plugin.Route) {

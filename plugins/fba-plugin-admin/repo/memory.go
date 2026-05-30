@@ -945,6 +945,30 @@ func (r *MemoryRepository) ListSessions(_ context.Context, filter SessionFilter)
 	return items, nil
 }
 
+func (r *MemoryRepository) GetSession(_ context.Context, userID int, sessionUUID string) (model.Session, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.sessions {
+		if item.ID == userID && item.SessionUUID == sessionUUID {
+			return item, nil
+		}
+	}
+	return model.Session{}, ErrNotFound
+}
+
+func (r *MemoryRepository) UpsertSession(_ context.Context, session model.Session) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.sessions {
+		if r.sessions[i].ID == session.ID && r.sessions[i].SessionUUID == session.SessionUUID {
+			r.sessions[i] = session
+			return nil
+		}
+	}
+	r.sessions = append(r.sessions, session)
+	return nil
+}
+
 func (r *MemoryRepository) DeleteSession(_ context.Context, userID int, sessionUUID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

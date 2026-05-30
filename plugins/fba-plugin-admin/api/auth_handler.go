@@ -1,10 +1,13 @@
 package api
 
 import (
+	"encoding/base64"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/yuWorm/fba-go/core/response"
+	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/repo"
 	"github.com/yuWorm/fba-plugin-admin/service"
 )
@@ -13,6 +16,7 @@ const refreshCookieName = "fba_refresh_token"
 const refreshCookieMaxAgeSeconds = 60 * 60 * 24 * 7
 
 type Handler struct {
+	auth       *service.AuthService
 	users      *service.UserService
 	roles      *service.RoleService
 	menus      *service.MenuService
@@ -28,6 +32,7 @@ type Handler struct {
 func NewHandler() Handler {
 	repository := repo.NewMemoryRepository(repo.SeedData())
 	return Handler{
+		auth:       service.NewAuthService(repository),
 		users:      service.NewUserService(repository),
 		roles:      service.NewRoleService(repository),
 		menus:      service.NewMenuService(repository),
@@ -41,109 +46,70 @@ func NewHandler() Handler {
 	}
 }
 
-type captchaDetail struct {
-	IsEnabled     bool   `json:"is_enabled"`
-	ExpireSeconds int    `json:"expire_seconds"`
-	UUID          string `json:"uuid"`
-	Image         string `json:"image"`
+func (h Handler) Captcha(c fiber.Ctx) error {
+	captcha, err := h.auth.Captcha(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(captcha))
 }
 
-type userInfoDetail struct {
-	DeptID        *int    `json:"dept_id"`
-	Username      string  `json:"username"`
-	Nickname      string  `json:"nickname"`
-	Avatar        *string `json:"avatar"`
-	Email         *string `json:"email"`
-	Phone         *string `json:"phone"`
-	ID            int     `json:"id"`
-	UUID          string  `json:"uuid"`
-	Status        int     `json:"status"`
-	IsSuperuser   bool    `json:"is_superuser"`
-	IsStaff       bool    `json:"is_staff"`
-	IsMultiLogin  bool    `json:"is_multi_login"`
-	JoinTime      string  `json:"join_time"`
-	LastLoginTime *string `json:"last_login_time"`
+func (h Handler) LoginSwagger(c fiber.Ctx) error {
+	username, password := basicCredentials(c.Get("Authorization"))
+	token, err := h.auth.SwaggerLogin(c.RequestCtx(), username, password)
+	if err != nil {
+		return err
+	}
+	return c.JSON(token)
 }
 
-type currentUserInfo struct {
-	userInfoDetail
-	Dept  *string  `json:"dept"`
-	Roles []string `json:"roles"`
+func (h Handler) Login(c fiber.Ctx) error {
+	var param dto.AuthLoginParam
+	if c.HasBody() {
+		if err := c.Bind().Body(&param); err != nil {
+			return err
+		}
+	}
+	token, refresh, err := h.auth.Login(c.RequestCtx(), param)
+	if err != nil {
+		return err
+	}
+	setRefreshCookie(c, refresh)
+	return c.JSON(response.Success(token))
 }
 
-type swaggerToken struct {
-	AccessToken string         `json:"access_token"`
-	TokenType   string         `json:"token_type"`
-	User        userInfoDetail `json:"user"`
+func (h Handler) Refresh(c fiber.Ctx) error {
+	token, refresh, err := h.auth.Refresh(c.RequestCtx(), c.Cookies(refreshCookieName))
+	if err != nil {
+		return err
+	}
+	setRefreshCookie(c, refresh)
+	return c.JSON(response.Success(token))
 }
 
-type accessTokenBase struct {
-	AccessToken           string `json:"access_token"`
-	AccessTokenExpireTime string `json:"access_token_expire_time"`
-	SessionUUID           string `json:"session_uuid"`
-}
-
-type loginToken struct {
-	accessTokenBase
-	PasswordExpireDaysRemaining *int           `json:"password_expire_days_remaining"`
-	User                        userInfoDetail `json:"user"`
-}
-
-func (Handler) Captcha(c fiber.Ctx) error {
-	return c.JSON(response.Success(captchaDetail{
-		IsEnabled:     true,
-		ExpireSeconds: 300,
-		UUID:          "fixture-captcha",
-		Image:         "",
-	}))
-}
-
-func (Handler) LoginSwagger(c fiber.Ctx) error {
-	return c.JSON(swaggerToken{
-		AccessToken: "fixture-access-token",
-		TokenType:   "Bearer",
-		User:        fixtureUserInfo(),
-	})
-}
-
-func (Handler) Login(c fiber.Ctx) error {
-	setRefreshCookie(c)
-	return c.JSON(response.Success(loginToken{
-		accessTokenBase: accessTokenBase{
-			AccessToken:           "fixture-access-token",
-			AccessTokenExpireTime: "2099-01-01 00:00:00",
-			SessionUUID:           "fixture-session",
-		},
-		PasswordExpireDaysRemaining: nil,
-		User:                        fixtureUserInfo(),
-	}))
-}
-
-func (Handler) Refresh(c fiber.Ctx) error {
-	setRefreshCookie(c)
-	return c.JSON(response.Success(accessTokenBase{
-		AccessToken:           "fixture-access-token-refreshed",
-		AccessTokenExpireTime: "2099-01-01 00:00:00",
-		SessionUUID:           "fixture-session",
-	}))
-}
-
-func (Handler) Logout(c fiber.Ctx) error {
+func (h Handler) Logout(c fiber.Ctx) error {
+	if err := h.auth.Logout(c.RequestCtx(), c.Get("Authorization")); err != nil {
+		return err
+	}
 	c.ClearCookie(refreshCookieName)
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) Codes(c fiber.Ctx) error {
-	return c.JSON(response.Success([]string{
-		"sys:user:view",
-		"sys:menu:view",
-	}))
+func (h Handler) Codes(c fiber.Ctx) error {
+	codes, err := h.auth.Codes(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(codes))
 }
 
-func setRefreshCookie(c fiber.Ctx) {
+func setRefreshCookie(c fiber.Ctx, value string) {
+	if value == "" {
+		value = "fixture-refresh-token"
+	}
 	c.Cookie(&fiber.Cookie{
 		Name:     refreshCookieName,
-		Value:    "fixture-refresh-token",
+		Value:    value,
 		Path:     "/",
 		HTTPOnly: true,
 		MaxAge:   refreshCookieMaxAgeSeconds,
@@ -151,21 +117,17 @@ func setRefreshCookie(c fiber.Ctx) {
 	})
 }
 
-func fixtureUserInfo() userInfoDetail {
-	return userInfoDetail{
-		DeptID:        nil,
-		Username:      "admin",
-		Nickname:      "Admin",
-		Avatar:        nil,
-		Email:         nil,
-		Phone:         nil,
-		ID:            1,
-		UUID:          "fixture-user",
-		Status:        1,
-		IsSuperuser:   true,
-		IsStaff:       true,
-		IsMultiLogin:  true,
-		JoinTime:      "2026-05-30 00:00:00",
-		LastLoginTime: nil,
+func basicCredentials(header string) (string, string) {
+	if !strings.HasPrefix(strings.ToLower(header), "basic ") {
+		return "", ""
 	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(header[6:]))
+	if err != nil {
+		return "", ""
+	}
+	username, password, ok := strings.Cut(string(decoded), ":")
+	if !ok {
+		return "", ""
+	}
+	return username, password
 }

@@ -112,6 +112,8 @@ type Repository interface {
 	DeleteOperaLogs(ctx context.Context, ids []int) error
 	DeleteAllOperaLogs(ctx context.Context) error
 	ListSessions(ctx context.Context, filter SessionFilter) ([]model.Session, error)
+	GetSession(ctx context.Context, userID int, sessionUUID string) (model.Session, error)
+	UpsertSession(ctx context.Context, session model.Session) error
 	DeleteSession(ctx context.Context, userID int, sessionUUID string) error
 }
 
