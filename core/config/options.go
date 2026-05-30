@@ -13,6 +13,7 @@ type Options struct {
 	Logger   LoggerOptions
 	Database DatabaseOptions
 	Redis    RedisOptions
+	Auth     AuthOptions
 	Hooks    Hooks
 }
 
@@ -82,6 +83,13 @@ type DatabaseOptions struct {
 
 	AutoMigrate      bool
 	MigrationLockKey string
+}
+
+type AuthOptions struct {
+	JWTSecret       string
+	JWTIssuer       string
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
 }
 
 func (o Options) WithDefaults() Options {
