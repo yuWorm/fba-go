@@ -333,6 +333,10 @@ priority_routes:
     path: /api/v1/dict-types/all
     owner: plugin:dict
   - method: GET
+    path: /api/v1/dict-types/{pk}
+    sample_path: /api/v1/dict-types/1
+    owner: plugin:dict
+  - method: GET
     path: /api/v1/dict-types
     owner: plugin:dict
   - method: POST
@@ -356,6 +360,10 @@ priority_routes:
       body: '{"pks":[999999]}'
   - method: GET
     path: /api/v1/dict-datas/all
+    owner: plugin:dict
+  - method: GET
+    path: /api/v1/dict-datas/{pk}
+    sample_path: /api/v1/dict-datas/1
     owner: plugin:dict
   - method: GET
     path: /api/v1/dict-datas/type-codes/{code}
@@ -391,6 +399,10 @@ priority_routes:
     sample_path: /api/v1/tasks/task-1/cancel
     owner: plugin:task
   - method: GET
+    path: /api/v1/task-results/{pk}
+    sample_path: /api/v1/task-results/1
+    owner: plugin:task
+  - method: GET
     path: /api/v1/task-results
     owner: plugin:task
   - method: DELETE
@@ -400,6 +412,10 @@ priority_routes:
       body: '{"pks":[999999]}'
   - method: GET
     path: /api/v1/schedulers/all
+    owner: plugin:task
+  - method: GET
+    path: /api/v1/schedulers/{pk}
+    sample_path: /api/v1/schedulers/1
     owner: plugin:task
   - method: GET
     path: /api/v1/schedulers

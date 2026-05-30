@@ -256,6 +256,23 @@ func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 	}
 }
 
+func TestPriorityRoutesCoverDeclaredAPIRoutes(t *testing.T) {
+	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	var missing []string
+	for _, route := range loaded.API.Routes {
+		if findPriorityRoute(loaded.API.PriorityRoutes, route.Method, route.Path) == nil {
+			missing = append(missing, route.Method+" "+route.Path)
+		}
+	}
+	if len(missing) > 0 {
+		t.Fatalf("priority_routes missing %d declared routes: %s", len(missing), strings.Join(missing, ", "))
+	}
+}
+
 func TestSnapshotWritesAPIContractSummary(t *testing.T) {
 	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
 	if err != nil {
