@@ -7,9 +7,10 @@ import (
 )
 
 type Options struct {
-	App   AppOptions
-	Fiber fiber.Config
-	Hooks Hooks
+	App    AppOptions
+	Fiber  fiber.Config
+	Logger LoggerOptions
+	Hooks  Hooks
 }
 
 type AppOptions struct {
@@ -25,6 +26,23 @@ type Hook func(context.Context) error
 type Hooks struct {
 	OnStart    []Hook
 	OnShutdown []Hook
+}
+
+type LoggerOptions struct {
+	Level            string
+	Encoding         string
+	OutputPaths      []string
+	ErrorOutputPaths []string
+	AccessLogPath    string
+	ErrorLogPath     string
+	Rotation         RotationOptions
+}
+
+type RotationOptions struct {
+	MaxSize    int
+	MaxAge     int
+	MaxBackups int
+	Compress   bool
 }
 
 func (o Options) WithDefaults() Options {
