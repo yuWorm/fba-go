@@ -14,11 +14,14 @@ const refreshCookieMaxAgeSeconds = 60 * 60 * 24 * 7
 
 type Handler struct {
 	roles *service.RoleService
+	menus *service.MenuService
 }
 
 func NewHandler() Handler {
+	repository := repo.NewMemoryRepository(repo.SeedData())
 	return Handler{
-		roles: service.NewRoleService(repo.NewMemoryRepository(repo.SeedData())),
+		roles: service.NewRoleService(repository),
+		menus: service.NewMenuService(repository),
 	}
 }
 

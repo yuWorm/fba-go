@@ -12,6 +12,11 @@ type RoleFilter struct {
 	Status *int
 }
 
+type MenuFilter struct {
+	Title  string
+	Status *int
+}
+
 type Repository interface {
 	AllRoles(ctx context.Context) ([]model.Role, error)
 	GetRole(ctx context.Context, id int) (model.Role, error)
@@ -24,6 +29,12 @@ type Repository interface {
 	RoleScopes(ctx context.Context, roleID int) ([]model.DataScope, error)
 	RoleScopeIDs(ctx context.Context, roleID int) ([]int, error)
 	UpdateRoleScopes(ctx context.Context, roleID int, scopeIDs []int) error
+	GetMenu(ctx context.Context, id int) (model.Menu, error)
+	ListMenus(ctx context.Context, filter MenuFilter) ([]model.Menu, error)
+	SidebarMenus(ctx context.Context) ([]model.Menu, error)
+	CreateMenu(ctx context.Context, param dto.MenuParam) error
+	UpdateMenu(ctx context.Context, id int, param dto.MenuParam) error
+	DeleteMenu(ctx context.Context, id int) error
 }
 
 func SeedData() model.Seed {

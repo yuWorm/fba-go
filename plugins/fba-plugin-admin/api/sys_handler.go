@@ -204,29 +204,63 @@ func (h Handler) DeleteRoles(c fiber.Ctx) error {
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) GetMenu(c fiber.Ctx) error {
-	return c.JSON(response.Success(fixtureMenu()))
+func (h Handler) GetMenu(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	menu, err := h.menus.Get(c.RequestCtx(), id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(menu))
 }
 
-func (Handler) ListMenus(c fiber.Ctx) error {
-	return c.JSON(response.Success([]fiber.Map{fixtureMenu()}))
+func (h Handler) ListMenus(c fiber.Ctx) error {
+	menus, err := h.menus.Tree(c.RequestCtx(), repo.MenuFilter{
+		Title:  c.Query("title"),
+		Status: intPtrQuery(c, "status"),
+	})
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(menus))
 }
 
-func (Handler) CreateMenu(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) CreateMenu(c fiber.Ctx) error {
+	var param dto.MenuParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.menus.Create(c.RequestCtx(), param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) UpdateMenu(c fiber.Ctx) error {
-	if err := bindBody(c); err != nil {
+func (h Handler) UpdateMenu(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	var param dto.MenuParam
+	if err := c.Bind().Body(&param); err != nil {
+		return err
+	}
+	if err := h.menus.Update(c.RequestCtx(), id, param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) DeleteMenu(c fiber.Ctx) error {
+func (h Handler) DeleteMenu(c fiber.Ctx) error {
+	id, err := parseID(c.Params("pk"))
+	if err != nil {
+		return err
+	}
+	if err := h.menus.Delete(c.RequestCtx(), id); err != nil {
+		return err
+	}
 	return c.JSON(response.Success[any](nil))
 }
 

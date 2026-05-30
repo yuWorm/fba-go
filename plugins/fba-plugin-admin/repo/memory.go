@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 
@@ -20,6 +21,7 @@ type MemoryRepository struct {
 	roleMenus  map[int][]int
 	roleScopes map[int][]int
 	nextRoleID int
+	nextMenuID int
 }
 
 func NewMemoryRepository(seed model.Seed) *MemoryRepository {
@@ -29,6 +31,12 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 			nextRoleID = item.ID + 1
 		}
 	}
+	nextMenuID := 1
+	for _, item := range seed.Menus {
+		if item.ID >= nextMenuID {
+			nextMenuID = item.ID + 1
+		}
+	}
 	return &MemoryRepository{
 		roles:      append([]model.Role(nil), seed.Roles...),
 		menus:      append([]model.Menu(nil), seed.Menus...),
@@ -36,6 +44,7 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 		roleMenus:  cloneIDMap(seed.RoleMenus),
 		roleScopes: cloneIDMap(seed.RoleScopes),
 		nextRoleID: nextRoleID,
+		nextMenuID: nextMenuID,
 	}
 }
 
@@ -164,9 +173,118 @@ func (r *MemoryRepository) UpdateRoleScopes(_ context.Context, roleID int, scope
 	return nil
 }
 
+func (r *MemoryRepository) GetMenu(_ context.Context, id int) (model.Menu, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.menus {
+		if item.ID == id {
+			return item, nil
+		}
+	}
+	return model.Menu{}, ErrNotFound
+}
+
+func (r *MemoryRepository) ListMenus(_ context.Context, filter MenuFilter) ([]model.Menu, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]model.Menu, 0, len(r.menus))
+	for _, item := range r.menus {
+		if filter.Title != "" && !strings.Contains(item.Title, filter.Title) {
+			continue
+		}
+		if filter.Status != nil && item.Status != *filter.Status {
+			continue
+		}
+		items = append(items, item)
+	}
+	sortMenus(items)
+	return items, nil
+}
+
+func (r *MemoryRepository) SidebarMenus(_ context.Context) ([]model.Menu, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]model.Menu, 0, len(r.menus))
+	for _, item := range r.menus {
+		if item.Type == 2 {
+			continue
+		}
+		items = append(items, item)
+	}
+	sortMenus(items)
+	return items, nil
+}
+
+func (r *MemoryRepository) CreateMenu(_ context.Context, param dto.MenuParam) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.menus = append(r.menus, model.Menu{
+		ID:          r.nextMenu(),
+		Title:       param.Title,
+		Name:        param.Name,
+		Path:        param.Path,
+		ParentID:    param.ParentID,
+		Sort:        param.Sort,
+		Icon:        param.Icon,
+		Type:        param.Type,
+		Component:   param.Component,
+		Perms:       param.Perms,
+		Status:      param.Status,
+		Display:     param.Display,
+		Cache:       param.Cache,
+		Link:        param.Link,
+		Remark:      param.Remark,
+		CreatedTime: model.SeedData().Menus[0].CreatedTime,
+	})
+	return nil
+}
+
+func (r *MemoryRepository) UpdateMenu(_ context.Context, id int, param dto.MenuParam) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.menus {
+		if r.menus[i].ID == id {
+			r.menus[i].Title = param.Title
+			r.menus[i].Name = param.Name
+			r.menus[i].Path = param.Path
+			r.menus[i].ParentID = param.ParentID
+			r.menus[i].Sort = param.Sort
+			r.menus[i].Icon = param.Icon
+			r.menus[i].Type = param.Type
+			r.menus[i].Component = param.Component
+			r.menus[i].Perms = param.Perms
+			r.menus[i].Status = param.Status
+			r.menus[i].Display = param.Display
+			r.menus[i].Cache = param.Cache
+			r.menus[i].Link = param.Link
+			r.menus[i].Remark = param.Remark
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) DeleteMenu(_ context.Context, id int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.menus = deleteByIDs(r.menus, []int{id}, func(item model.Menu) int { return item.ID })
+	for roleID, menuIDs := range r.roleMenus {
+		r.roleMenus[roleID] = deleteInt(menuIDs, id)
+	}
+	return nil
+}
+
 func (r *MemoryRepository) nextRole() int {
 	id := r.nextRoleID
 	r.nextRoleID++
+	return id
+}
+
+func (r *MemoryRepository) nextMenu() int {
+	id := r.nextMenuID
+	r.nextMenuID++
 	return id
 }
 
@@ -274,4 +392,23 @@ func hasScope(items []model.DataScope, id int) bool {
 		}
 	}
 	return false
+}
+
+func sortMenus(items []model.Menu) {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Sort != items[j].Sort {
+			return items[i].Sort < items[j].Sort
+		}
+		return items[i].ID < items[j].ID
+	})
+}
+
+func deleteInt(items []int, id int) []int {
+	result := items[:0]
+	for _, item := range items {
+		if item != id {
+			result = append(result, item)
+		}
+	}
+	return result
 }

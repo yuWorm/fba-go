@@ -411,6 +411,83 @@ func TestSidebarMenusMatchesPythonVben5Schema(t *testing.T) {
 	assertKeys(t, meta, "title", "icon", "iframeSrc", "link", "keepAlive", "hideInMenu", "menuVisibleWithForbidden")
 }
 
+func TestMenuEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/menus", `{"title":"Reports","name":"Reports","path":"/reports","parent_id":null,"sort":9,"icon":"lucide:file-bar-chart","type":1,"component":"/reports/index","perms":null,"status":0,"display":1,"cache":1,"link":null,"remark":"report menu"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus?title=Report&status=0", "")
+	assertStatusOK(t, resp)
+	items := assertEnvelopeSlice(t, body)
+	if len(items) != 1 {
+		t.Fatalf("filtered menu count = %d, want 1", len(items))
+	}
+	report := assertMap(t, items[0])
+	if report["title"] != "Reports" {
+		t.Fatalf("filtered menu title = %v, want Reports", report["title"])
+	}
+	if report["status"] != float64(0) {
+		t.Fatalf("filtered menu status = %v, want 0", report["status"])
+	}
+	id := int(report["id"].(float64))
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/menus/"+itoa(id), `{"title":"Reports Updated","name":"Reports","path":"/reports","parent_id":null,"sort":9,"icon":"lucide:file-bar-chart","type":1,"component":"/reports/index","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus/"+itoa(id), "")
+	assertStatusOK(t, resp)
+	detail := assertEnvelopeMap(t, body)
+	if detail["title"] != "Reports Updated" {
+		t.Fatalf("updated menu title = %v, want Reports Updated", detail["title"])
+	}
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/menus/"+itoa(id), "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus?title=Reports", "")
+	assertStatusOK(t, resp)
+	items = assertEnvelopeSlice(t, body)
+	if len(items) != 0 {
+		t.Fatalf("deleted menu count = %d, want 0", len(items))
+	}
+}
+
+func TestMenuTreeAndSidebarReflectCreatedChildren(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/menus", `{"title":"Reports Child","name":"ReportsChild","path":"/dashboard/reports","parent_id":1,"sort":1,"icon":"lucide:file-bar-chart","type":1,"component":"/reports/index","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus/2", "")
+	assertStatusOK(t, resp)
+	created := assertEnvelopeMap(t, body)
+	if created["title"] != "Reports Child" {
+		t.Fatalf("created menu title = %v, want Reports Child", created["title"])
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus", "")
+	assertStatusOK(t, resp)
+	tree := assertEnvelopeSlice(t, body)
+	child := findMenuInTree(t, tree, "Reports Child")
+	if child["parent_id"] != float64(1) {
+		t.Fatalf("created child parent_id = %v, want 1", child["parent_id"])
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus/sidebar", "")
+	assertStatusOK(t, resp)
+	sidebar := assertEnvelopeSlice(t, body)
+	sidebarChild := findMenuInTree(t, sidebar, "ReportsChild")
+	meta := assertMap(t, sidebarChild["meta"])
+	if meta["title"] != "Reports Child" {
+		t.Fatalf("sidebar child title = %v, want Reports Child", meta["title"])
+	}
+}
+
 func TestRoleEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	app := newAdminApp(t)
 
@@ -601,6 +678,25 @@ func assertUserInfoDetail(t *testing.T, user map[string]any) {
 		"join_time",
 		"last_login_time",
 	)
+}
+
+func findMenuInTree(t *testing.T, items []any, name string) map[string]any {
+	t.Helper()
+	for _, raw := range items {
+		item := assertMap(t, raw)
+		if item["name"] == name || item["title"] == name {
+			return item
+		}
+		children, _ := item["children"].([]any)
+		if len(children) == 0 {
+			continue
+		}
+		if found := findMenuInTree(t, children, name); found != nil {
+			return found
+		}
+	}
+	t.Fatalf("menu %q not found in tree %v", name, items)
+	return nil
 }
 
 func assertRefreshCookie(t *testing.T, cookie string) {

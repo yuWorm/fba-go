@@ -27,6 +27,23 @@ type DeleteParam struct {
 	PKs []int `json:"pks"`
 }
 
+type MenuParam struct {
+	Title     string  `json:"title"`
+	Name      string  `json:"name"`
+	Path      *string `json:"path"`
+	ParentID  *int    `json:"parent_id"`
+	Sort      int     `json:"sort"`
+	Icon      *string `json:"icon"`
+	Type      int     `json:"type"`
+	Component *string `json:"component"`
+	Perms     *string `json:"perms"`
+	Status    int     `json:"status"`
+	Display   int     `json:"display"`
+	Cache     int     `json:"cache"`
+	Link      *string `json:"link"`
+	Remark    *string `json:"remark"`
+}
+
 type RoleDetail struct {
 	Name           string  `json:"name"`
 	Status         int     `json:"status"`
@@ -62,6 +79,30 @@ type MenuDetail struct {
 	CreatedTime string       `json:"created_time"`
 	UpdatedTime *string      `json:"updated_time"`
 	Children    []MenuDetail `json:"children,omitempty"`
+}
+
+type SidebarMenu struct {
+	ID        int           `json:"id"`
+	Name      string        `json:"name"`
+	Path      *string       `json:"path"`
+	ParentID  *int          `json:"parent_id"`
+	Sort      int           `json:"sort"`
+	Type      int           `json:"type"`
+	Component *string       `json:"component"`
+	Perms     *string       `json:"perms"`
+	Remark    *string       `json:"remark"`
+	Children  []SidebarMenu `json:"children"`
+	Meta      SidebarMeta   `json:"meta"`
+}
+
+type SidebarMeta struct {
+	Title                    string `json:"title"`
+	Icon                     string `json:"icon"`
+	IframeSrc                string `json:"iframeSrc"`
+	Link                     string `json:"link"`
+	KeepAlive                bool   `json:"keepAlive"`
+	HideInMenu               bool   `json:"hideInMenu"`
+	MenuVisibleWithForbidden bool   `json:"menuVisibleWithForbidden"`
 }
 
 type DataScopeDetail struct {
@@ -129,6 +170,38 @@ func MenusFromModel(items []model.Menu) []MenuDetail {
 		result = append(result, MenuFromModel(item))
 	}
 	return result
+}
+
+func SidebarMenuFromModel(item model.Menu) SidebarMenu {
+	icon := ""
+	if item.Icon != nil {
+		icon = *item.Icon
+	}
+	link := ""
+	if item.Link != nil {
+		link = *item.Link
+	}
+	return SidebarMenu{
+		ID:        item.ID,
+		Name:      item.Name,
+		Path:      item.Path,
+		ParentID:  item.ParentID,
+		Sort:      item.Sort,
+		Type:      item.Type,
+		Component: item.Component,
+		Perms:     item.Perms,
+		Remark:    item.Remark,
+		Children:  []SidebarMenu{},
+		Meta: SidebarMeta{
+			Title:                    item.Title,
+			Icon:                     icon,
+			IframeSrc:                "",
+			Link:                     link,
+			KeepAlive:                item.Cache == 1,
+			HideInMenu:               item.Display == 0,
+			MenuVisibleWithForbidden: false,
+		},
+	}
 }
 
 func DataScopeFromModel(item model.DataScope) DataScopeDetail {
