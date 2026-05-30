@@ -8,11 +8,12 @@ import (
 )
 
 type Options struct {
-	App    AppOptions
-	Fiber  fiber.Config
-	Logger LoggerOptions
-	Redis  RedisOptions
-	Hooks  Hooks
+	App      AppOptions
+	Fiber    fiber.Config
+	Logger   LoggerOptions
+	Database DatabaseOptions
+	Redis    RedisOptions
+	Hooks    Hooks
 }
 
 type AppOptions struct {
@@ -66,6 +67,21 @@ type RedisOptions struct {
 	WriteTimeout time.Duration
 
 	KeyPrefix string
+}
+
+type DatabaseOptions struct {
+	Driver string
+
+	WriteDSN string
+	ReadDSN  string
+
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
+
+	AutoMigrate      bool
+	MigrationLockKey string
 }
 
 func (o Options) WithDefaults() Options {
