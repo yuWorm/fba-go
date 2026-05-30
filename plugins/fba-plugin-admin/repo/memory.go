@@ -15,28 +15,32 @@ import (
 var ErrNotFound = errors.New("not found")
 
 type MemoryRepository struct {
-	mu              sync.RWMutex
-	users           []model.User
-	roles           []model.Role
-	menus           []model.Menu
-	depts           []model.Dept
-	dataRules       []model.DataRule
-	scopes          []model.DataScope
-	plugins         []model.Plugin
-	loginLogs       []model.LoginLog
-	operaLogs       []model.OperaLog
-	sessions        []model.Session
-	pluginsChanged  bool
-	userRoles       map[int][]int
-	scopeRules      map[int][]int
-	roleMenus       map[int][]int
-	roleScopes      map[int][]int
-	nextUserID      int
-	nextRoleID      int
-	nextMenuID      int
-	nextDeptID      int
-	nextDataRuleID  int
-	nextDataScopeID int
+	mu                              sync.RWMutex
+	users                           []model.User
+	roles                           []model.Role
+	menus                           []model.Menu
+	depts                           []model.Dept
+	dataRules                       []model.DataRule
+	scopes                          []model.DataScope
+	dataRuleModelTemplateVariables  []model.DataRuleTemplateVariable
+	dataRuleColumnTemplateVariables []model.DataRuleColumn
+	dataRuleValueTemplateVariables  []model.DataRuleTemplateVariable
+	dataRuleModels                  []model.DataRuleModelMetadata
+	plugins                         []model.Plugin
+	loginLogs                       []model.LoginLog
+	operaLogs                       []model.OperaLog
+	sessions                        []model.Session
+	pluginsChanged                  bool
+	userRoles                       map[int][]int
+	scopeRules                      map[int][]int
+	roleMenus                       map[int][]int
+	roleScopes                      map[int][]int
+	nextUserID                      int
+	nextRoleID                      int
+	nextMenuID                      int
+	nextDeptID                      int
+	nextDataRuleID                  int
+	nextDataScopeID                 int
 }
 
 func NewMemoryRepository(seed model.Seed) *MemoryRepository {
@@ -77,26 +81,30 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 		}
 	}
 	return &MemoryRepository{
-		users:           append([]model.User(nil), seed.Users...),
-		roles:           append([]model.Role(nil), seed.Roles...),
-		menus:           append([]model.Menu(nil), seed.Menus...),
-		depts:           append([]model.Dept(nil), seed.Depts...),
-		dataRules:       append([]model.DataRule(nil), seed.DataRules...),
-		scopes:          append([]model.DataScope(nil), seed.DataScopes...),
-		plugins:         clonePlugins(seed.Plugins),
-		loginLogs:       cloneLoginLogs(seed.LoginLogs),
-		operaLogs:       cloneOperaLogs(seed.OperaLogs),
-		sessions:        append([]model.Session(nil), seed.Sessions...),
-		userRoles:       cloneIDMap(seed.UserRoles),
-		scopeRules:      cloneIDMap(seed.ScopeRules),
-		roleMenus:       cloneIDMap(seed.RoleMenus),
-		roleScopes:      cloneIDMap(seed.RoleScopes),
-		nextUserID:      nextUserID,
-		nextRoleID:      nextRoleID,
-		nextMenuID:      nextMenuID,
-		nextDeptID:      nextDeptID,
-		nextDataRuleID:  nextDataRuleID,
-		nextDataScopeID: nextDataScopeID,
+		users:                           append([]model.User(nil), seed.Users...),
+		roles:                           append([]model.Role(nil), seed.Roles...),
+		menus:                           append([]model.Menu(nil), seed.Menus...),
+		depts:                           append([]model.Dept(nil), seed.Depts...),
+		dataRules:                       append([]model.DataRule(nil), seed.DataRules...),
+		scopes:                          append([]model.DataScope(nil), seed.DataScopes...),
+		dataRuleModelTemplateVariables:  append([]model.DataRuleTemplateVariable(nil), seed.DataRuleModelTemplateVariables...),
+		dataRuleColumnTemplateVariables: append([]model.DataRuleColumn(nil), seed.DataRuleColumnTemplateVariables...),
+		dataRuleValueTemplateVariables:  append([]model.DataRuleTemplateVariable(nil), seed.DataRuleValueTemplateVariables...),
+		dataRuleModels:                  cloneDataRuleModels(seed.DataRuleModels),
+		plugins:                         clonePlugins(seed.Plugins),
+		loginLogs:                       cloneLoginLogs(seed.LoginLogs),
+		operaLogs:                       cloneOperaLogs(seed.OperaLogs),
+		sessions:                        append([]model.Session(nil), seed.Sessions...),
+		userRoles:                       cloneIDMap(seed.UserRoles),
+		scopeRules:                      cloneIDMap(seed.ScopeRules),
+		roleMenus:                       cloneIDMap(seed.RoleMenus),
+		roleScopes:                      cloneIDMap(seed.RoleScopes),
+		nextUserID:                      nextUserID,
+		nextRoleID:                      nextRoleID,
+		nextMenuID:                      nextMenuID,
+		nextDeptID:                      nextDeptID,
+		nextDataRuleID:                  nextDataRuleID,
+		nextDataScopeID:                 nextDataScopeID,
 	}
 }
 
@@ -616,6 +624,43 @@ func (r *MemoryRepository) AllDataRules(context.Context) ([]model.DataRule, erro
 	return append([]model.DataRule(nil), r.dataRules...), nil
 }
 
+func (r *MemoryRepository) DataRuleModels(context.Context) ([]string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]string, 0, len(r.dataRuleModelTemplateVariables)+len(r.dataRuleModels))
+	for _, item := range r.dataRuleModelTemplateVariables {
+		result = append(result, item.Key)
+	}
+	for _, item := range r.dataRuleModels {
+		result = append(result, item.Name)
+	}
+	return result, nil
+}
+
+func (r *MemoryRepository) DataRuleModelColumns(_ context.Context, modelName string) ([]model.DataRuleColumn, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	columns := append([]model.DataRuleColumn(nil), r.dataRuleColumnTemplateVariables...)
+	for _, variable := range r.dataRuleModelTemplateVariables {
+		if variable.Key == modelName {
+			return columns, nil
+		}
+	}
+	for _, item := range r.dataRuleModels {
+		if item.Name == modelName {
+			result := append([]model.DataRuleColumn(nil), item.Columns...)
+			return append(result, columns...), nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (r *MemoryRepository) DataRuleValueTemplateVariables(context.Context) ([]model.DataRuleTemplateVariable, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]model.DataRuleTemplateVariable(nil), r.dataRuleValueTemplateVariables...), nil
+}
+
 func (r *MemoryRepository) GetDataRule(_ context.Context, id int) (model.DataRule, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -1051,6 +1096,15 @@ func clonePlugin(item model.Plugin) model.Plugin {
 	item.Database = append([]string(nil), item.Database...)
 	item.DependsOn = append([]string(nil), item.DependsOn...)
 	return item
+}
+
+func cloneDataRuleModels(source []model.DataRuleModelMetadata) []model.DataRuleModelMetadata {
+	result := make([]model.DataRuleModelMetadata, 0, len(source))
+	for _, item := range source {
+		item.Columns = append([]model.DataRuleColumn(nil), item.Columns...)
+		result = append(result, item)
+	}
+	return result
 }
 
 func cloneLoginLogs(source []model.LoginLog) []model.LoginLog {

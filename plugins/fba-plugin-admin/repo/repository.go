@@ -86,6 +86,9 @@ type Repository interface {
 	UpdateDept(ctx context.Context, id int, param dto.DeptParam) error
 	DeleteDept(ctx context.Context, id int) error
 	AllDataRules(ctx context.Context) ([]model.DataRule, error)
+	DataRuleModels(ctx context.Context) ([]string, error)
+	DataRuleModelColumns(ctx context.Context, modelName string) ([]model.DataRuleColumn, error)
+	DataRuleValueTemplateVariables(ctx context.Context) ([]model.DataRuleTemplateVariable, error)
 	GetDataRule(ctx context.Context, id int) (model.DataRule, error)
 	ListDataRules(ctx context.Context, filter DataRuleFilter, page int, size int) ([]model.DataRule, int64, error)
 	CreateDataRule(ctx context.Context, param dto.DataRuleParam) error

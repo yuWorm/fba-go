@@ -27,6 +27,26 @@ func (s *DataRuleService) All(ctx context.Context) ([]dto.DataRuleDetail, error)
 	return dto.DataRulesFromModel(items), nil
 }
 
+func (s *DataRuleService) Models(ctx context.Context) ([]string, error) {
+	return s.repo.DataRuleModels(ctx)
+}
+
+func (s *DataRuleService) Columns(ctx context.Context, modelName string) ([]dto.DataRuleColumnDetail, error) {
+	items, err := s.repo.DataRuleModelColumns(ctx, modelName)
+	if err != nil {
+		return nil, err
+	}
+	return dto.DataRuleColumnsFromModel(items), nil
+}
+
+func (s *DataRuleService) ValueTemplateVariables(ctx context.Context) ([]dto.DataRuleTemplateVariableDetail, error) {
+	items, err := s.repo.DataRuleValueTemplateVariables(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return dto.DataRuleTemplateVariablesFromModel(items), nil
+}
+
 func (s *DataRuleService) Get(ctx context.Context, id int) (dto.DataRuleDetail, error) {
 	item, err := s.repo.GetDataRule(ctx, id)
 	if err != nil {

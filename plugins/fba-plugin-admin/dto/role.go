@@ -63,6 +63,16 @@ type DataRuleParam struct {
 	Value      string `json:"value"`
 }
 
+type DataRuleColumnDetail struct {
+	Key     string `json:"key"`
+	Comment string `json:"comment"`
+}
+
+type DataRuleTemplateVariableDetail struct {
+	Key     string `json:"key"`
+	Comment string `json:"comment"`
+}
+
 type DataScopeParam struct {
 	Name   string `json:"name"`
 	Status int    `json:"status"`
@@ -293,6 +303,36 @@ func DataRuleFromModel(item model.DataRule) DataRuleDetail {
 		CreatedTime: formatTime(item.CreatedTime),
 		UpdatedTime: formatTimePtr(item.UpdatedTime),
 	}
+}
+
+func DataRuleColumnFromModel(item model.DataRuleColumn) DataRuleColumnDetail {
+	return DataRuleColumnDetail{
+		Key:     item.Key,
+		Comment: item.Comment,
+	}
+}
+
+func DataRuleColumnsFromModel(items []model.DataRuleColumn) []DataRuleColumnDetail {
+	result := make([]DataRuleColumnDetail, 0, len(items))
+	for _, item := range items {
+		result = append(result, DataRuleColumnFromModel(item))
+	}
+	return result
+}
+
+func DataRuleTemplateVariableFromModel(item model.DataRuleTemplateVariable) DataRuleTemplateVariableDetail {
+	return DataRuleTemplateVariableDetail{
+		Key:     item.Key,
+		Comment: item.Comment,
+	}
+}
+
+func DataRuleTemplateVariablesFromModel(items []model.DataRuleTemplateVariable) []DataRuleTemplateVariableDetail {
+	result := make([]DataRuleTemplateVariableDetail, 0, len(items))
+	for _, item := range items {
+		result = append(result, DataRuleTemplateVariableFromModel(item))
+	}
+	return result
 }
 
 func DataRulesFromModel(items []model.DataRule) []DataRuleDetail {

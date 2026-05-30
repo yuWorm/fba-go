@@ -965,6 +965,49 @@ func TestDeptTreeReflectsCreatedChildren(t *testing.T) {
 	}
 }
 
+func TestDataRuleMetadataEndpointsMatchPythonConfig(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/data-rules/models", "")
+	assertStatusOK(t, resp)
+	models := assertEnvelopeSlice(t, body)
+	if len(models) == 0 || models[0] != "__ALL__" {
+		t.Fatalf("data-rule models = %v, want __ALL__ first", models)
+	}
+	if !hasString(models, "user") || !hasString(models, "role") || !hasString(models, "dept") {
+		t.Fatalf("data-rule models = %v, want user/role/dept", models)
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-rules/models/user/columns", "")
+	assertStatusOK(t, resp)
+	columns := assertEnvelopeSlice(t, body)
+	if hasColumn(columns, "id") {
+		t.Fatalf("user columns include excluded id column: %v", columns)
+	}
+	if !hasColumn(columns, "username") || !hasColumn(columns, "dept_id") || !hasColumn(columns, "__dept_id__") || !hasColumn(columns, "__created_by__") {
+		t.Fatalf("user columns = %v, want real columns plus template columns", columns)
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-rules/models/__ALL__/columns", "")
+	assertStatusOK(t, resp)
+	columns = assertEnvelopeSlice(t, body)
+	if len(columns) != 2 || !hasColumn(columns, "__dept_id__") || !hasColumn(columns, "__created_by__") {
+		t.Fatalf("__ALL__ columns = %v, want only template columns", columns)
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-rules/value-template-variables", "")
+	assertStatusOK(t, resp)
+	variables := assertEnvelopeSlice(t, body)
+	if !hasColumn(variables, "${user_id}") || !hasColumn(variables, "${dept_id}") || !hasColumn(variables, "${now}") {
+		t.Fatalf("value template variables = %v, want Python default variables", variables)
+	}
+
+	resp, _ = requestRaw(t, app, "GET", "/api/v1/sys/data-rules/models/missing/columns", "")
+	if resp.StatusCode == fiber.StatusOK {
+		t.Fatal("missing data-rule model columns returned 200")
+	}
+}
+
 func TestDataRuleEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	app := newAdminApp(t)
 
@@ -1332,6 +1375,28 @@ func hasPluginByName(items []any, name string) bool {
 		}
 		pluginInfo, ok := item["plugin"].(map[string]any)
 		if ok && pluginInfo["name"] == name {
+			return true
+		}
+	}
+	return false
+}
+
+func hasString(items []any, want string) bool {
+	for _, raw := range items {
+		if raw == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasColumn(items []any, key string) bool {
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if item["key"] == key {
 			return true
 		}
 	}

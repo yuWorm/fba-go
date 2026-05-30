@@ -400,22 +400,28 @@ func (h Handler) DeleteDept(c fiber.Ctx) error {
 	return c.JSON(response.Success[any](nil))
 }
 
-func (Handler) DataRuleModels(c fiber.Ctx) error {
-	return c.JSON(response.Success([]string{"user", "role", "dept"}))
+func (h Handler) DataRuleModels(c fiber.Ctx) error {
+	models, err := h.dataRules.Models(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(models))
 }
 
-func (Handler) DataRuleModelColumns(c fiber.Ctx) error {
-	return c.JSON(response.Success([]fiber.Map{
-		{"key": "id", "comment": "ID"},
-		{"key": "dept_id", "comment": "部门 ID"},
-	}))
+func (h Handler) DataRuleModelColumns(c fiber.Ctx) error {
+	columns, err := h.dataRules.Columns(c.RequestCtx(), c.Params("model"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(columns))
 }
 
-func (Handler) DataRuleValueTemplateVariables(c fiber.Ctx) error {
-	return c.JSON(response.Success([]fiber.Map{
-		{"key": "user_id", "comment": "当前用户 ID"},
-		{"key": "dept_id", "comment": "当前部门 ID"},
-	}))
+func (h Handler) DataRuleValueTemplateVariables(c fiber.Ctx) error {
+	variables, err := h.dataRules.ValueTemplateVariables(c.RequestCtx())
+	if err != nil {
+		return err
+	}
+	return c.JSON(response.Success(variables))
 }
 
 func (h Handler) GetAllDataRules(c fiber.Ctx) error {
