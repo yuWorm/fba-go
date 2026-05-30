@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/rbac"
 	"github.com/yuWorm/fba-go/core/response"
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/repo"
@@ -101,6 +102,10 @@ func (h Handler) Codes(c fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(response.Success(codes))
+}
+
+func (h Handler) Authenticate(c fiber.Ctx) (*rbac.CurrentUser, error) {
+	return h.auth.Authenticate(c.RequestCtx(), c.Get("Authorization"))
 }
 
 func setRefreshCookie(c fiber.Ctx, value string) {

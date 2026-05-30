@@ -41,6 +41,30 @@ func TestJWTServiceCreatesCompatiblePayload(t *testing.T) {
 	}
 }
 
+func TestJWTServiceCreatesUniqueTokensForSameUserSession(t *testing.T) {
+	service := auth.NewJWTService(config.AuthOptions{
+		JWTSecret:      "secret",
+		AccessTokenTTL: time.Hour,
+	})
+	now := time.Now().UTC().Truncate(time.Second)
+	service.Now = func() time.Time {
+		return now
+	}
+
+	first, err := service.CreateAccessToken(context.Background(), 10001, "session-1", nil)
+	if err != nil {
+		t.Fatalf("CreateAccessToken(first) error = %v", err)
+	}
+	second, err := service.CreateAccessToken(context.Background(), 10001, "session-1", nil)
+	if err != nil {
+		t.Fatalf("CreateAccessToken(second) error = %v", err)
+	}
+
+	if first.Token == second.Token {
+		t.Fatal("tokens are equal, want unique token per issuance")
+	}
+}
+
 func TestSessionKeysUseCompatibleRedisKeys(t *testing.T) {
 	keys := auth.NewSessionKeys(redisx.NewKeys(""))
 	got := keys.ForSession(10001, "session-1")

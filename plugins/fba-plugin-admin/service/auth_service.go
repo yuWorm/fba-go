@@ -11,7 +11,10 @@ import (
 	"sync"
 	"time"
 
+	coreauth "github.com/yuWorm/fba-go/core/auth"
+	"github.com/yuWorm/fba-go/core/config"
 	fbaerrors "github.com/yuWorm/fba-go/core/errors"
+	"github.com/yuWorm/fba-go/core/rbac"
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/model"
 	"github.com/yuWorm/fba-plugin-admin/repo"
@@ -25,9 +28,10 @@ const (
 )
 
 type AuthService struct {
-	repo     repo.Repository
-	mu       sync.Mutex
-	captchas map[string]string
+	repo         repo.Repository
+	tokenService coreauth.TokenService
+	mu           sync.Mutex
+	captchas     map[string]string
 }
 
 func NewAuthService(repository repo.Repository) *AuthService {
@@ -35,8 +39,9 @@ func NewAuthService(repository repo.Repository) *AuthService {
 		repository = repo.NewMemoryRepository(repo.SeedData())
 	}
 	return &AuthService{
-		repo:     repository,
-		captchas: map[string]string{},
+		repo:         repository,
+		tokenService: coreauth.NewJWTService(config.AuthOptions{AccessTokenTTL: accessTokenTTL}),
+		captchas:     map[string]string{},
 	}
 }
 
@@ -77,8 +82,12 @@ func (s *AuthService) SwaggerLogin(ctx context.Context, username string, passwor
 	if err != nil {
 		return dto.SwaggerToken{}, err
 	}
-	access, _, err := issueToken("access", user.ID, "swagger-"+randomID(), accessTokenTTL)
+	sessionUUID := "swagger-" + randomID()
+	access, expiresAt, err := s.issueAccessToken(ctx, user.ID, sessionUUID)
 	if err != nil {
+		return dto.SwaggerToken{}, err
+	}
+	if err := s.upsertSession(ctx, user, sessionUUID, expiresAt); err != nil {
 		return dto.SwaggerToken{}, err
 	}
 	return dto.SwaggerToken{
@@ -98,7 +107,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (dto.Acc
 	if err != nil {
 		return dto.AccessTokenBase{}, "", err
 	}
-	access, expiresAt, err := issueToken("access", session.ID, session.SessionUUID, accessTokenTTL)
+	access, expiresAt, err := s.issueAccessToken(ctx, session.ID, session.SessionUUID)
 	if err != nil {
 		return dto.AccessTokenBase{}, "", err
 	}
@@ -114,11 +123,43 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (dto.Acc
 }
 
 func (s *AuthService) Logout(ctx context.Context, authorization string) error {
-	userID, sessionUUID, ok := parseBearerAccessToken(authorization)
+	userID, sessionUUID, ok := s.parseBearerAccessToken(authorization)
 	if !ok {
 		return nil
 	}
 	return s.repo.DeleteSession(ctx, userID, sessionUUID)
+}
+
+func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*rbac.CurrentUser, error) {
+	userID, sessionUUID, ok := s.parseBearerAccessToken(authorization)
+	if !ok {
+		return nil, authError("未认证")
+	}
+	session, err := s.repo.GetSession(ctx, userID, sessionUUID)
+	if err != nil {
+		return nil, authError("未认证")
+	}
+	if !session.ExpireTime.IsZero() && time.Now().After(session.ExpireTime) {
+		return nil, authError("登录已过期")
+	}
+	user, err := s.repo.GetUser(ctx, userID)
+	if err != nil {
+		return nil, authError("未认证")
+	}
+	if user.Status != 1 {
+		return nil, authError("用户已被锁定, 请联系统管理员")
+	}
+	roles, err := s.currentUserRoles(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &rbac.CurrentUser{
+		ID:           int64(user.ID),
+		Username:     user.Username,
+		IsSuperAdmin: user.IsSuperuser,
+		IsStaff:      user.IsStaff,
+		Roles:        roles,
+	}, nil
 }
 
 func (s *AuthService) Codes(ctx context.Context) ([]string, error) {
@@ -148,7 +189,7 @@ func (s *AuthService) Codes(ctx context.Context) ([]string, error) {
 }
 
 func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sessionUUID string) (dto.LoginToken, string, error) {
-	access, expiresAt, err := issueToken("access", user.ID, sessionUUID, accessTokenTTL)
+	access, expiresAt, err := s.issueAccessToken(ctx, user.ID, sessionUUID)
 	if err != nil {
 		return dto.LoginToken{}, "", err
 	}
@@ -156,20 +197,7 @@ func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sess
 	if err != nil {
 		return dto.LoginToken{}, "", err
 	}
-	session := model.Session{
-		ID:            user.ID,
-		SessionUUID:   sessionUUID,
-		Username:      user.Username,
-		Nickname:      user.Nickname,
-		IP:            "127.0.0.1",
-		OS:            "unknown",
-		Browser:       "unknown",
-		Device:        "unknown",
-		Status:        user.Status,
-		LastLoginTime: time.Now().Format(dto.TimeLayout),
-		ExpireTime:    expiresAt,
-	}
-	if err := s.repo.UpsertSession(ctx, session); err != nil {
+	if err := s.upsertSession(ctx, user, sessionUUID, expiresAt); err != nil {
 		return dto.LoginToken{}, "", err
 	}
 	return dto.LoginToken{
@@ -181,6 +209,30 @@ func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sess
 		PasswordExpireDaysRemaining: nil,
 		User:                        dto.UserFromModel(user),
 	}, refresh, nil
+}
+
+func (s *AuthService) upsertSession(ctx context.Context, user model.User, sessionUUID string, expiresAt time.Time) error {
+	return s.repo.UpsertSession(ctx, model.Session{
+		ID:            user.ID,
+		SessionUUID:   sessionUUID,
+		Username:      user.Username,
+		Nickname:      user.Nickname,
+		IP:            "127.0.0.1",
+		OS:            "unknown",
+		Browser:       "unknown",
+		Device:        "unknown",
+		Status:        user.Status,
+		LastLoginTime: time.Now().Format(dto.TimeLayout),
+		ExpireTime:    expiresAt,
+	})
+}
+
+func (s *AuthService) issueAccessToken(ctx context.Context, userID int, sessionUUID string) (string, time.Time, error) {
+	token, err := s.tokenService.CreateAccessToken(ctx, int64(userID), sessionUUID, nil)
+	if err != nil {
+		return "", time.Time{}, authError("令牌创建失败")
+	}
+	return token.Token, token.ExpiresAt, nil
 }
 
 func (s *AuthService) verifyUser(ctx context.Context, username string, password string) (model.User, error) {
@@ -253,12 +305,62 @@ func issueToken(prefix string, userID int, sessionUUID string, ttl time.Duration
 	}, ":"), expiresAt, nil
 }
 
-func parseBearerAccessToken(header string) (int, string, bool) {
+func (s *AuthService) parseBearerAccessToken(header string) (int, string, bool) {
 	token := strings.TrimSpace(header)
 	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
 		token = strings.TrimSpace(token[7:])
 	}
+	claims, err := s.tokenService.ParseAccessToken(token)
+	if err == nil && claims.Subject != "" && claims.SessionUUID != "" {
+		userID, err := strconv.Atoi(claims.Subject)
+		if err == nil {
+			return userID, claims.SessionUUID, true
+		}
+	}
 	return parseToken(token, "access")
+}
+
+func (s *AuthService) currentUserRoles(ctx context.Context, userID int) ([]rbac.Role, error) {
+	roles, err := s.repo.UserRoles(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]rbac.Role, 0, len(roles))
+	for _, role := range roles {
+		menus, err := s.repo.RoleMenus(ctx, role.ID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rbac.Role{
+			ID:          int64(role.ID),
+			Code:        role.Name,
+			Enabled:     role.Status == 1,
+			Permissions: permissionsFromMenus(menus),
+		})
+	}
+	return out, nil
+}
+
+func permissionsFromMenus(menus []model.Menu) []string {
+	seen := map[string]struct{}{}
+	permissions := make([]string, 0)
+	for _, menu := range menus {
+		if menu.Status != 1 || menu.Perms == nil || *menu.Perms == "" {
+			continue
+		}
+		for _, permission := range strings.Split(*menu.Perms, ",") {
+			permission = strings.TrimSpace(permission)
+			if permission == "" {
+				continue
+			}
+			if _, ok := seen[permission]; ok {
+				continue
+			}
+			seen[permission] = struct{}{}
+			permissions = append(permissions, permission)
+		}
+	}
+	return permissions
 }
 
 func parseToken(token string, wantPrefix string) (int, string, bool) {

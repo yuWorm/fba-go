@@ -48,7 +48,7 @@ priority_routes:
       body: '{"dept_id":null,"username":"admin","nickname":"Admin","avatar":null,"email":null,"phone":null,"roles":[1]}'
   - method: PUT
     path: /api/v1/sys/users/{pk}/permissions
-    sample_path: "/api/v1/sys/users/1/permissions?type=status"
+    sample_path: "/api/v1/sys/users/1/permissions?type=multi_login"
     owner: plugin:admin
   - method: PUT
     path: /api/v1/sys/users/me/password

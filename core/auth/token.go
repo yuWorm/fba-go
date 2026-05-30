@@ -57,12 +57,15 @@ func (s *JWTService) CreateAccessToken(_ context.Context, userID int64, sessionU
 	if sessionUUID == "" {
 		sessionUUID = uuid.NewString()
 	}
-	expiresAt := s.Now().Add(s.ttl)
+	now := s.Now()
+	expiresAt := now.Add(s.ttl)
 	claims := Claims{
 		SessionUUID: sessionUUID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   strconv.FormatInt(userID, 10),
 			Issuer:    s.issuer,
+			ID:        uuid.NewString(),
+			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
 	}

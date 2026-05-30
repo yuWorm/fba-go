@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/gofiber/fiber/v3"
 )
 
 func TestCompatHostRegistersFixturePlugin(t *testing.T) {
@@ -33,6 +36,7 @@ func TestCompatHostRegistersOfficialPlugins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newApplication() error = %v", err)
 	}
+	token := compatAccessToken(t, app.HTTP())
 
 	for _, tc := range []struct {
 		method string
@@ -44,7 +48,9 @@ func TestCompatHostRegistersOfficialPlugins(t *testing.T) {
 		{"GET", "/api/v1/tasks/registered"},
 		{"GET", "/api/v1/schedulers"},
 	} {
-		resp, err := app.HTTP().Test(httptest.NewRequest(tc.method, tc.path, nil))
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := app.HTTP().Test(req)
 		if err != nil {
 			t.Fatalf("%s %s error = %v", tc.method, tc.path, err)
 		}
@@ -61,8 +67,11 @@ func TestCompatHostOfficialPluginPriorityResponses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newApplication() error = %v", err)
 	}
+	token := compatAccessToken(t, app.HTTP())
 
-	resp, err := app.HTTP().Test(httptest.NewRequest("GET", "/api/v1/dict-datas/type-codes/sys_status", nil))
+	req := httptest.NewRequest("GET", "/api/v1/dict-datas/type-codes/sys_status", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := app.HTTP().Test(req)
 	if err != nil {
 		t.Fatalf("GET /dict-datas/type-codes/sys_status error = %v", err)
 	}
@@ -79,4 +88,32 @@ func TestCompatHostOfficialPluginPriorityResponses(t *testing.T) {
 	if !ok || len(data) != 2 {
 		t.Fatalf("data = %T len %d, want 2 dict rows", body["data"], len(data))
 	}
+}
+
+func compatAccessToken(t *testing.T, app *fiber.App) string {
+	t.Helper()
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{"username":"admin","password":"admin","uuid":"fixture-captcha","captcha":"1234"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("POST /auth/login error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /auth/login status = %d body = %s", resp.StatusCode, body)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("Decode(login) error = %v", err)
+	}
+	data, ok := payload["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("login data = %T, want object", payload["data"])
+	}
+	token, ok := data["access_token"].(string)
+	if !ok || token == "" {
+		t.Fatalf("access_token = %v, want non-empty string", data["access_token"])
+	}
+	return token
 }

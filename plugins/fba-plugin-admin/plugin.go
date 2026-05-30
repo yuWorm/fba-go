@@ -22,6 +22,11 @@ func (Module) Meta() plugin.Meta {
 
 func (Module) Register(ctx plugin.Context) error {
 	handler := adminapi.NewHandler()
+	if err := ctx.Provide(func() plugin.Authenticator {
+		return handler
+	}); err != nil {
+		return err
+	}
 
 	return plugin.RegisterRoutes(ctx,
 		adminapi.AuthRoutes(handler),

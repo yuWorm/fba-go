@@ -197,7 +197,7 @@ func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 	}{
 		{"POST", "/api/v1/sys/users", "", true, ""},
 		{"PUT", "/api/v1/sys/users/{pk}", "/api/v1/sys/users/1", true, ""},
-		{"PUT", "/api/v1/sys/users/{pk}/permissions", "/api/v1/sys/users/1/permissions?type=status", false, ""},
+		{"PUT", "/api/v1/sys/users/{pk}/permissions", "/api/v1/sys/users/1/permissions?type=multi_login", false, ""},
 		{"PUT", "/api/v1/sys/users/me/password", "", true, ""},
 		{"PUT", "/api/v1/sys/users/{pk}/password", "/api/v1/sys/users/1/password", true, ""},
 		{"PUT", "/api/v1/sys/users/me/nickname", "", true, ""},
@@ -538,6 +538,39 @@ func TestRunnerSendsRequestSampleBody(t *testing.T) {
 	}
 }
 
+func TestRunnerBootstrapsAuthForProtectedPriorityRoutes(t *testing.T) {
+	loaded := contract.Contracts{
+		API: contract.APIContract{
+			BasePath: "/api/v1",
+			PriorityRoutes: []contract.Route{
+				{Method: "GET", Path: "/api/v1/auth/codes"},
+			},
+		},
+		Response: contract.ResponseContract{
+			Success: contract.ResponseSuccess{
+				Envelope:       true,
+				RequiredFields: []string{"code", "msg", "data"},
+				Code:           200,
+				Msg:            "请求成功",
+			},
+		},
+	}
+
+	result, err := contract.Test(contract.TestOptions{
+		BaseURL:   "http://fba.test",
+		Contracts: loaded,
+		Client: &http.Client{Transport: authBootstrapTransport{
+			t: t,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Test() error = %v", err)
+	}
+	if !result.Passed {
+		t.Fatalf("Passed = false, failures = %+v", result.Failures)
+	}
+}
+
 func TestFormatFailuresIncludesRouteDetails(t *testing.T) {
 	result := contract.TestResult{
 		Failures: []contract.Failure{
@@ -617,6 +650,46 @@ type assertRequestTransport struct {
 	wantBody     string
 	status       int
 	responseBody string
+}
+
+type authBootstrapTransport struct {
+	t *testing.T
+}
+
+func (transport authBootstrapTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	transport.t.Helper()
+	switch req.URL.Path {
+	case "/api/v1/auth/login":
+		if req.Header.Get("Authorization") != "" {
+			transport.t.Fatalf("login Authorization = %q, want empty", req.Header.Get("Authorization"))
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			transport.t.Fatalf("ReadAll(login body) error = %v", err)
+		}
+		if !strings.Contains(string(body), `"username":"admin"`) {
+			transport.t.Fatalf("login body = %q, want admin credentials", body)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code":200,"msg":"请求成功","data":{"access_token":"contract-token"}}`)),
+			Header:     make(http.Header),
+			Request:    req,
+		}, nil
+	case "/api/v1/auth/codes":
+		if req.Header.Get("Authorization") != "Bearer contract-token" {
+			transport.t.Fatalf("Authorization = %q, want Bearer contract-token", req.Header.Get("Authorization"))
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code":200,"msg":"请求成功","data":[]}`)),
+			Header:     make(http.Header),
+			Request:    req,
+		}, nil
+	default:
+		transport.t.Fatalf("unexpected path %s", req.URL.Path)
+		return nil, nil
+	}
 }
 
 func (transport assertRequestTransport) RoundTrip(req *http.Request) (*http.Response, error) {

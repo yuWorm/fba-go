@@ -1,10 +1,12 @@
 package plugin_test
 
 import (
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/yuWorm/fba-go/core/plugin"
+	"github.com/yuWorm/fba-go/core/rbac"
 )
 
 func TestRouteHelpersApplyCommonOptions(t *testing.T) {
@@ -70,4 +72,78 @@ func TestRegisterRoutesRegistersGroupsInOrder(t *testing.T) {
 			t.Fatalf("route[%d] = %s, want %s", index, got, want)
 		}
 	}
+}
+
+func TestMountRoutesRejectsProtectedRouteWithoutAuthenticator(t *testing.T) {
+	app := fiber.New()
+	routes := []plugin.Route{
+		plugin.GET("/secure", "Secure", func(c fiber.Ctx) error {
+			return c.SendString("ok")
+		}, plugin.Auth()),
+	}
+
+	plugin.MountRoutes(app.Group("/api/v1"), routes)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/v1/secure", nil))
+	if err != nil {
+		t.Fatalf("GET /secure error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestMountRoutesAuthorizesWithAuthenticatorAndPermission(t *testing.T) {
+	app := fiber.New()
+	authenticator := fakeAuthenticator{
+		user: &rbac.CurrentUser{
+			ID:      2,
+			IsStaff: true,
+			Roles: []rbac.Role{
+				{ID: 1, Enabled: true, Permissions: []string{"sys:user:add"}},
+			},
+		},
+	}
+	routes := []plugin.Route{
+		plugin.POST("/users", "Create user", func(c fiber.Ctx) error {
+			user, ok := c.Locals(plugin.CurrentUserLocalKey).(*rbac.CurrentUser)
+			if !ok || user.ID != 2 {
+				t.Fatalf("current user local = %#v, want user 2", c.Locals(plugin.CurrentUserLocalKey))
+			}
+			return c.SendString("ok")
+		}, plugin.Auth(), plugin.Perm("sys:user:add")),
+		plugin.DELETE("/users", "Delete user", func(c fiber.Ctx) error {
+			return c.SendString("deleted")
+		}, plugin.Auth(), plugin.Perm("sys:user:del")),
+	}
+
+	plugin.MountRoutes(app.Group("/api/v1"), routes, plugin.WithAuthenticator(authenticator))
+
+	resp, err := app.Test(httptest.NewRequest("POST", "/api/v1/users", nil))
+	if err != nil {
+		t.Fatalf("POST /users error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("POST /users status = %d, want 200", resp.StatusCode)
+	}
+
+	resp, err = app.Test(httptest.NewRequest("DELETE", "/api/v1/users", nil))
+	if err != nil {
+		t.Fatalf("DELETE /users error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("DELETE /users status = %d, want 403", resp.StatusCode)
+	}
+}
+
+type fakeAuthenticator struct {
+	user *rbac.CurrentUser
+	err  error
+}
+
+func (f fakeAuthenticator) Authenticate(fiber.Ctx) (*rbac.CurrentUser, error) {
+	return f.user, f.err
 }

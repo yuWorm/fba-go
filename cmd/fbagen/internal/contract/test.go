@@ -13,6 +13,7 @@ type TestOptions struct {
 	BaseURL   string
 	Contracts Contracts
 	Client    *http.Client
+	AuthToken string
 }
 
 type TestResult struct {
@@ -37,10 +38,18 @@ func Test(opts TestOptions) (TestResult, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
+	authToken := opts.AuthToken
+	if authToken == "" && opts.Contracts.API.BasePath != "" && hasAuthenticatedRoute(opts.Contracts.API.PriorityRoutes) {
+		token, err := bootstrapAuthToken(client, opts.BaseURL, opts.Contracts.API.BasePath)
+		if err != nil {
+			return TestResult{}, err
+		}
+		authToken = token
+	}
 
 	result := TestResult{Passed: true}
 	for _, route := range opts.Contracts.API.PriorityRoutes {
-		if failure := probeRoute(client, opts.BaseURL, route, opts.Contracts.Response); failure != nil {
+		if failure := probeRoute(client, opts.BaseURL, route, opts.Contracts.Response, authToken); failure != nil {
 			result.Passed = false
 			result.Failures = append(result.Failures, *failure)
 		}
@@ -48,7 +57,7 @@ func Test(opts TestOptions) (TestResult, error) {
 	return result, nil
 }
 
-func probeRoute(client *http.Client, baseURL string, route Route, response ResponseContract) *Failure {
+func probeRoute(client *http.Client, baseURL string, route Route, response ResponseContract, authToken string) *Failure {
 	probePath := route.Path
 	if route.SamplePath != "" {
 		probePath = route.SamplePath
@@ -62,6 +71,9 @@ func probeRoute(client *http.Client, baseURL string, route Route, response Respo
 		return routeFailure(route, probePath, 0, err.Error(), "")
 	}
 	applyRequestSample(req, route.Request)
+	if routeNeedsAuth(route) && authToken != "" && req.Header.Get("Authorization") == "" {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return routeFailure(route, probePath, 0, err.Error(), "")
@@ -88,6 +100,65 @@ func probeRoute(client *http.Client, baseURL string, route Route, response Respo
 		return routeFailure(route, probePath, resp.StatusCode, err.Error(), bodyPreview)
 	}
 	return nil
+}
+
+func hasAuthenticatedRoute(routes []Route) bool {
+	for _, route := range routes {
+		if routeNeedsAuth(route) {
+			return true
+		}
+	}
+	return false
+}
+
+func routeNeedsAuth(route Route) bool {
+	path := strings.TrimRight(route.Path, "/")
+	switch {
+	case strings.HasSuffix(path, "/auth/captcha"),
+		strings.HasSuffix(path, "/auth/login"),
+		strings.HasSuffix(path, "/auth/login/swagger"),
+		strings.HasSuffix(path, "/auth/refresh"),
+		strings.HasSuffix(path, "/auth/logout"):
+		return false
+	default:
+		return true
+	}
+}
+
+func bootstrapAuthToken(client *http.Client, baseURL string, basePath string) (string, error) {
+	if basePath == "" {
+		basePath = "/api/v1"
+	}
+	body := strings.NewReader(`{"username":"admin","password":"admin","uuid":"fixture-captcha","captcha":"1234"}`)
+	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(baseURL, "/")+strings.TrimRight(basePath, "/")+"/auth/login", body)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return "", fmt.Errorf("contract auth bootstrap returned %d: %s", resp.StatusCode, previewResponseBody(payload))
+	}
+	var decoded struct {
+		Data struct {
+			AccessToken string `json:"access_token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return "", fmt.Errorf("decode contract auth bootstrap: %w", err)
+	}
+	if decoded.Data.AccessToken == "" {
+		return "", fmt.Errorf("contract auth bootstrap missing access_token")
+	}
+	return decoded.Data.AccessToken, nil
 }
 
 func applyRequestSample(req *http.Request, sample *RequestSample) {

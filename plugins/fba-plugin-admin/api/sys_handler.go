@@ -90,7 +90,7 @@ func (h Handler) UpdateCurrentUserPassword(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.users.UpdatePassword(c.RequestCtx(), currentUserID, param); err != nil {
+	if err := h.users.UpdatePassword(c.RequestCtx(), currentUserID(c), param); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
@@ -116,7 +116,7 @@ func (h Handler) UpdateCurrentUserNickname(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.users.UpdateNickname(c.RequestCtx(), currentUserID, param.Nickname); err != nil {
+	if err := h.users.UpdateNickname(c.RequestCtx(), currentUserID(c), param.Nickname); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
@@ -127,7 +127,7 @@ func (h Handler) UpdateCurrentUserAvatar(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.users.UpdateAvatar(c.RequestCtx(), currentUserID, param.Avatar); err != nil {
+	if err := h.users.UpdateAvatar(c.RequestCtx(), currentUserID(c), param.Avatar); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
@@ -138,7 +138,7 @@ func (h Handler) UpdateCurrentUserEmail(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.users.UpdateEmail(c.RequestCtx(), currentUserID, param.Email); err != nil {
+	if err := h.users.UpdateEmail(c.RequestCtx(), currentUserID(c), param.Email); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))

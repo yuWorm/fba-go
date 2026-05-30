@@ -91,7 +91,7 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 	}{
 		{"POST", "/api/v1/sys/users", `{"username":"contract_user","password":"Passw0rd!","nickname":"Contract User","email":null,"phone":null,"dept_id":1,"roles":[1]}`},
 		{"PUT", "/api/v1/sys/users/1", `{"dept_id":null,"username":"admin","nickname":"Admin","avatar":null,"email":null,"phone":null,"roles":[1]}`},
-		{"PUT", "/api/v1/sys/users/1/permissions?type=status", ""},
+		{"PUT", "/api/v1/sys/users/1/permissions?type=multi_login", ""},
 		{"PUT", "/api/v1/sys/users/me/password", `{"old_password":"old-password","new_password":"new-password","confirm_password":"new-password"}`},
 		{"PUT", "/api/v1/sys/users/1/password", `{"password":"new-password"}`},
 		{"PUT", "/api/v1/sys/users/me/nickname", `{"nickname":"Admin"}`},
@@ -442,6 +442,48 @@ func TestAuthEndpointsAreStatefulAndValidateUsers(t *testing.T) {
 	if resp.StatusCode == fiber.StatusOK {
 		t.Fatal("login with wrong password returned 200")
 	}
+}
+
+func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
+	app := newAdminRuntimeApp(t)
+
+	resp, _ := requestRaw(t, app, "GET", "/api/v1/sys/users/me", "")
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("GET /sys/users/me without token status = %d, want 401", resp.StatusCode)
+	}
+
+	adminToken := loginForAccessToken(t, app, "admin", "admin")
+	resp, body := requestJSONAuth(t, app, "POST", "/api/v1/sys/users", `{"username":"viewer","password":"secret","nickname":"Viewer","email":null,"phone":null,"dept_id":1,"roles":[1]}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+
+	viewerToken := loginForAccessToken(t, app, "viewer", "secret")
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", viewerToken)
+	assertStatusOK(t, resp)
+	current := assertEnvelopeMap(t, body)
+	if current["username"] != "viewer" {
+		t.Fatalf("current username = %v, want viewer", current["username"])
+	}
+
+	resp, _ = requestRawAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"Blocked","status":1,"is_filter_scopes":false,"remark":null}`, viewerToken)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("viewer POST /sys/roles status = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestAdminRuntimeSwaggerTokenAuthorizesRoutes(t *testing.T) {
+	app := newAdminRuntimeApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/auth/login/swagger", "")
+	assertStatusOK(t, resp)
+	token, ok := body["access_token"].(string)
+	if !ok || token == "" {
+		t.Fatalf("swagger access_token = %v, want non-empty string", body["access_token"])
+	}
+
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/auth/codes", "", token)
+	assertStatusOK(t, resp)
+	assertEnvelopeSlice(t, body)
 }
 
 func TestRefreshMatchesPythonSchemaAndSetsRefreshCookie(t *testing.T) {
@@ -1207,6 +1249,20 @@ func newAdminApp(t *testing.T) *fiber.App {
 	return app
 }
 
+func newAdminRuntimeApp(t *testing.T) *fiber.App {
+	t.Helper()
+	app := fiber.New()
+	ctx := plugin.NewContext(plugin.ContextOptions{
+		Container: di.New(),
+		APIGroup:  app.Group("/api/v1"),
+	})
+	if err := admin.FBAPlugin().Register(ctx); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	plugin.MountRoutes(ctx.APIGroup(), ctx.Routes(), plugin.WithContainer(ctx.Container()))
+	return app
+}
+
 func requestJSON(t *testing.T, app *fiber.App, method string, path string, body string) (*http.Response, map[string]any) {
 	t.Helper()
 	var reqBody io.Reader
@@ -1217,6 +1273,29 @@ func requestJSON(t *testing.T, app *fiber.App, method string, path string, body 
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("%s %s error = %v", method, path, err)
+	}
+	defer resp.Body.Close()
+	var decoded map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode %s %s response: %v", method, path, err)
+	}
+	return resp, decoded
+}
+
+func requestJSONAuth(t *testing.T, app *fiber.App, method string, path string, body string, token string) (*http.Response, map[string]any) {
+	t.Helper()
+	var reqBody io.Reader
+	if body != "" {
+		reqBody = strings.NewReader(body)
+	}
+	req := httptest.NewRequest(method, path, reqBody)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("%s %s error = %v", method, path, err)
@@ -1249,6 +1328,41 @@ func requestRaw(t *testing.T, app *fiber.App, method string, path string, body s
 		t.Fatalf("read %s %s response: %v", method, path, err)
 	}
 	return resp, string(raw)
+}
+
+func requestRawAuth(t *testing.T, app *fiber.App, method string, path string, body string, token string) (*http.Response, string) {
+	t.Helper()
+	var reqBody io.Reader
+	if body != "" {
+		reqBody = strings.NewReader(body)
+	}
+	req := httptest.NewRequest(method, path, reqBody)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("%s %s error = %v", method, path, err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read %s %s response: %v", method, path, err)
+	}
+	return resp, string(raw)
+}
+
+func loginForAccessToken(t *testing.T, app *fiber.App, username string, password string) string {
+	t.Helper()
+	resp, body := requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"`+username+`","password":"`+password+`","uuid":"fixture-captcha","captcha":"1234"}`)
+	assertStatusOK(t, resp)
+	data := assertEnvelopeMap(t, body)
+	token, ok := data["access_token"].(string)
+	if !ok || token == "" {
+		t.Fatalf("access_token = %v, want non-empty string", data["access_token"])
+	}
+	return token
 }
 
 func assertStatusOK(t *testing.T, resp *http.Response) {
