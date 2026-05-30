@@ -14,6 +14,8 @@ type Options struct {
 	Database DatabaseOptions
 	Redis    RedisOptions
 	Auth     AuthOptions
+	Task     TaskOptions
+	Pools    map[string]PoolOptions
 	Hooks    Hooks
 }
 
@@ -90,6 +92,29 @@ type AuthOptions struct {
 	JWTIssuer       string
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
+}
+
+type TaskOptions struct {
+	Enabled bool
+
+	RedisMode       string
+	RedisAddr       string
+	RedisAddrs      []string
+	RedisDB         int
+	RedisPassword   string
+	RedisMasterName string
+
+	Concurrency int
+	Queues      map[string]int
+
+	SchedulerEnabled bool
+	SchedulerLockKey string
+	SchedulerLockTTL time.Duration
+}
+
+type PoolOptions struct {
+	MaxWorkers int
+	QueueSize  int
 }
 
 func (o Options) WithDefaults() Options {
