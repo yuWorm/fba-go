@@ -135,7 +135,7 @@ func runContractTest(args []string) error {
 		return err
 	}
 	if !result.Passed {
-		return fmt.Errorf("contract test failed: %d failure(s)", len(result.Failures))
+		return fmt.Errorf("%s", fbcontract.FormatFailures(result))
 	}
 	return nil
 }

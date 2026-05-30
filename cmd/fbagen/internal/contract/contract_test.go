@@ -224,6 +224,22 @@ func TestRunnerReportsMissingPriorityRoute(t *testing.T) {
 	if len(result.Failures) != 1 {
 		t.Fatalf("failures = %d, want 1", len(result.Failures))
 	}
+	failure := result.Failures[0]
+	if failure.Method != "GET" {
+		t.Fatalf("failure method = %q, want GET", failure.Method)
+	}
+	if failure.Path != "/api/v1/missing" {
+		t.Fatalf("failure path = %q, want /api/v1/missing", failure.Path)
+	}
+	if failure.SamplePath != "/api/v1/missing" {
+		t.Fatalf("failure sample_path = %q, want /api/v1/missing", failure.SamplePath)
+	}
+	if failure.StatusCode != http.StatusNotFound {
+		t.Fatalf("failure status = %d, want 404", failure.StatusCode)
+	}
+	if !strings.Contains(failure.ResponseBody, "Not Found") {
+		t.Fatalf("failure response body = %q, want Not Found", failure.ResponseBody)
+	}
 }
 
 func TestRunnerReportsPriorityRouteWithoutResponseEnvelope(t *testing.T) {
@@ -393,6 +409,35 @@ func TestRunnerSendsRequestSampleBody(t *testing.T) {
 	}
 	if !result.Passed {
 		t.Fatalf("Passed = false, failures = %+v", result.Failures)
+	}
+}
+
+func TestFormatFailuresIncludesRouteDetails(t *testing.T) {
+	result := contract.TestResult{
+		Failures: []contract.Failure{
+			{
+				Method:       "GET",
+				Path:         "/api/v1/sys/users/{pk}",
+				SamplePath:   "/api/v1/sys/users/1",
+				StatusCode:   http.StatusInternalServerError,
+				Error:        "unexpected response code 500, want 200",
+				ResponseBody: `{"code":500,"msg":"内部服务器错误","data":null}`,
+			},
+		},
+	}
+
+	formatted := contract.FormatFailures(result)
+	for _, want := range []string{
+		"contract test failed: 1 failure(s)",
+		"GET /api/v1/sys/users/{pk}",
+		"sample: /api/v1/sys/users/1",
+		"status: 500",
+		"unexpected response code 500, want 200",
+		`{"code":500`,
+	} {
+		if !strings.Contains(formatted, want) {
+			t.Fatalf("formatted failure missing %q:\n%s", want, formatted)
+		}
 	}
 }
 

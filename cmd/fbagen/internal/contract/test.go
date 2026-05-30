@@ -21,9 +21,12 @@ type TestResult struct {
 }
 
 type Failure struct {
-	Method string `json:"method"`
-	Path   string `json:"path"`
-	Error  string `json:"error"`
+	Method       string `json:"method"`
+	Path         string `json:"path"`
+	SamplePath   string `json:"sample_path,omitempty"`
+	StatusCode   int    `json:"status_code,omitempty"`
+	Error        string `json:"error"`
+	ResponseBody string `json:"response_body,omitempty"`
 }
 
 func Test(opts TestOptions) (TestResult, error) {
@@ -37,19 +40,15 @@ func Test(opts TestOptions) (TestResult, error) {
 
 	result := TestResult{Passed: true}
 	for _, route := range opts.Contracts.API.PriorityRoutes {
-		if err := probeRoute(client, opts.BaseURL, route, opts.Contracts.Response); err != nil {
+		if failure := probeRoute(client, opts.BaseURL, route, opts.Contracts.Response); failure != nil {
 			result.Passed = false
-			result.Failures = append(result.Failures, Failure{
-				Method: route.Method,
-				Path:   route.Path,
-				Error:  err.Error(),
-			})
+			result.Failures = append(result.Failures, *failure)
 		}
 	}
 	return result, nil
 }
 
-func probeRoute(client *http.Client, baseURL string, route Route, response ResponseContract) error {
+func probeRoute(client *http.Client, baseURL string, route Route, response ResponseContract) *Failure {
 	probePath := route.Path
 	if route.SamplePath != "" {
 		probePath = route.SamplePath
@@ -60,19 +59,35 @@ func probeRoute(client *http.Client, baseURL string, route Route, response Respo
 	}
 	req, err := http.NewRequest(route.Method, strings.TrimRight(baseURL, "/")+probePath, requestBody)
 	if err != nil {
-		return err
+		return routeFailure(route, probePath, 0, err.Error(), "")
 	}
 	applyRequestSample(req, route.Request)
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return routeFailure(route, probePath, 0, err.Error(), "")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
-		return fmt.Errorf("route returned %d", resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return routeFailure(route, probePath, resp.StatusCode, err.Error(), "")
+		}
+		bodyPreview := previewResponseBody(body)
+		return routeFailure(route, probePath, resp.StatusCode, fmt.Sprintf("route returned %d", resp.StatusCode), bodyPreview)
 	}
-	return validateResponseEnvelope(resp, route, response)
+	if !responseEnvelopeEnabled(route, response) {
+		return nil
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return routeFailure(route, probePath, resp.StatusCode, err.Error(), "")
+	}
+	bodyPreview := previewResponseBody(body)
+	if err := validateResponseEnvelope(body, route, response); err != nil {
+		return routeFailure(route, probePath, resp.StatusCode, err.Error(), bodyPreview)
+	}
+	return nil
 }
 
 func applyRequestSample(req *http.Request, sample *RequestSample) {
@@ -92,19 +107,11 @@ func applyRequestSample(req *http.Request, sample *RequestSample) {
 	req.Header.Set("Content-Type", contentType)
 }
 
-func validateResponseEnvelope(resp *http.Response, route Route, response ResponseContract) error {
-	envelope := response.Success.Envelope
-	if route.ResponseEnvelope != nil {
-		envelope = *route.ResponseEnvelope
-	}
-	if !envelope {
+func validateResponseEnvelope(body []byte, route Route, response ResponseContract) error {
+	if !responseEnvelopeEnabled(route, response) {
 		return nil
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return fmt.Errorf("response is not a JSON object envelope: %w", err)
@@ -121,6 +128,32 @@ func validateResponseEnvelope(resp *http.Response, route Route, response Respons
 		return fmt.Errorf("unexpected response msg %v, want %q", payload["msg"], response.Success.Msg)
 	}
 	return nil
+}
+
+func responseEnvelopeEnabled(route Route, response ResponseContract) bool {
+	if route.ResponseEnvelope != nil {
+		return *route.ResponseEnvelope
+	}
+	return response.Success.Envelope
+}
+
+func routeFailure(route Route, samplePath string, statusCode int, message string, responseBody string) *Failure {
+	return &Failure{
+		Method:       route.Method,
+		Path:         route.Path,
+		SamplePath:   samplePath,
+		StatusCode:   statusCode,
+		Error:        message,
+		ResponseBody: responseBody,
+	}
+}
+
+func previewResponseBody(body []byte) string {
+	const limit = 500
+	if len(body) <= limit {
+		return string(body)
+	}
+	return string(body[:limit]) + "..."
 }
 
 func jsonNumberEquals(value any, want int) bool {
