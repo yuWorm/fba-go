@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type Role struct {
 	ID             int
@@ -103,6 +106,42 @@ func SeedData() Seed {
 	device := "Desktop"
 	operaUsername := "admin"
 	operaMsg := "请求成功"
+	adminPerms := strings.Join([]string{
+		"sys:user:del",
+		"sys:role:add",
+		"sys:role:edit",
+		"sys:role:menu:edit",
+		"sys:role:del",
+		"sys:menu:add",
+		"sys:menu:edit",
+		"sys:menu:del",
+		"data:rule:add",
+		"data:rule:edit",
+		"data:rule:del",
+		"data:scope:add",
+		"data:scope:edit",
+		"data:scope:rule:edit",
+		"data:scope:del",
+		"sys:file:upload",
+		"log:login:del",
+		"log:login:clear",
+		"log:opera:del",
+		"log:opera:clear",
+		"dict:type:add",
+		"dict:type:edit",
+		"dict:type:del",
+		"dict:data:add",
+		"dict:data:edit",
+		"dict:data:del",
+		"sys:notice:add",
+		"sys:notice:edit",
+		"sys:notice:del",
+		"sys:task:revoke",
+		"sys:task:del",
+		"sys:task:add",
+		"sys:task:edit",
+		"sys:task:exec",
+	}, ",")
 	return Seed{
 		Users: []User{
 			{
@@ -125,6 +164,13 @@ func SeedData() Seed {
 				IsFilterScopes: true,
 				CreatedTime:    created,
 			},
+			{
+				ID:             2,
+				Name:           "viewer",
+				Status:         1,
+				IsFilterScopes: false,
+				CreatedTime:    created,
+			},
 		},
 		Menus: []Menu{
 			{
@@ -136,6 +182,7 @@ func SeedData() Seed {
 				Icon:        &dashboardIcon,
 				Type:        1,
 				Component:   &dashboardComponent,
+				Perms:       &adminPerms,
 				Status:      1,
 				Display:     1,
 				Cache:       1,

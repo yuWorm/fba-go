@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -90,6 +92,35 @@ func TestCompatHostOfficialPluginPriorityResponses(t *testing.T) {
 	}
 }
 
+func TestCompatHostEnforcesBusinessPluginPermissions(t *testing.T) {
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication() error = %v", err)
+	}
+	adminToken := compatAccessToken(t, app.HTTP())
+
+	resp, _ := compatRequestRaw(t, app.HTTP(), "GET", "/api/v1/dict-datas/type-codes/sys_status", "", "")
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("GET /dict-datas/type-codes/sys_status without token status = %d, want 401", resp.StatusCode)
+	}
+
+	viewerToken := createCompatUserToken(t, app.HTTP(), adminToken, "viewer", 2)
+	resp, _ = compatRequestJSON(t, app.HTTP(), "GET", "/api/v1/dict-types/all", "", viewerToken)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("viewer GET /dict-types/all status = %d, want 200", resp.StatusCode)
+	}
+	resp, _ = compatRequestRaw(t, app.HTTP(), "POST", "/api/v1/dict-types", `{"name":"Viewer Type","code":"viewer_type","remark":null}`, viewerToken)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("viewer POST /dict-types status = %d, want 403", resp.StatusCode)
+	}
+
+	writerToken := createCompatUserToken(t, app.HTTP(), adminToken, "writer", 1)
+	resp, body := compatRequestJSON(t, app.HTTP(), "POST", "/api/v1/dict-types", `{"name":"Writer Type","code":"writer_type","remark":null}`, writerToken)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("writer POST /dict-types status = %d body = %v, want 200", resp.StatusCode, body)
+	}
+}
+
 func compatAccessToken(t *testing.T, app *fiber.App) string {
 	t.Helper()
 	req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{"username":"admin","password":"admin","uuid":"fixture-captcha","captcha":"1234"}`))
@@ -116,4 +147,82 @@ func compatAccessToken(t *testing.T, app *fiber.App) string {
 		t.Fatalf("access_token = %v, want non-empty string", data["access_token"])
 	}
 	return token
+}
+
+func createCompatUserToken(t *testing.T, app *fiber.App, adminToken string, username string, roleID int) string {
+	t.Helper()
+	body := `{"username":"` + username + `","password":"secret","nickname":"` + username + `","email":null,"phone":null,"dept_id":1,"roles":[` + itoa(roleID) + `]}`
+	resp, payload := compatRequestJSON(t, app, "POST", "/api/v1/sys/users", body, adminToken)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("POST /sys/users status = %d body = %v, want 200", resp.StatusCode, payload)
+	}
+	data, ok := payload["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("create user data = %T, want object", payload["data"])
+	}
+	id, ok := data["id"].(float64)
+	if !ok {
+		t.Fatalf("created user id = %v, want number", data["id"])
+	}
+	resp, payload = compatRequestJSON(t, app, "PUT", "/api/v1/sys/users/"+itoa(int(id))+"/permissions?type=staff", "", adminToken)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("PUT /sys/users/%d/permissions status = %d body = %v, want 200", int(id), resp.StatusCode, payload)
+	}
+	return compatAccessTokenForUser(t, app, username, "secret")
+}
+
+func compatAccessTokenForUser(t *testing.T, app *fiber.App, username string, password string) string {
+	t.Helper()
+	resp, payload := compatRequestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"`+username+`","password":"`+password+`","uuid":"fixture-captcha","captcha":"1234"}`, "")
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("POST /auth/login status = %d body = %v, want 200", resp.StatusCode, payload)
+	}
+	data, ok := payload["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("login data = %T, want object", payload["data"])
+	}
+	token, ok := data["access_token"].(string)
+	if !ok || token == "" {
+		t.Fatalf("access_token = %v, want non-empty string", data["access_token"])
+	}
+	return token
+}
+
+func compatRequestJSON(t *testing.T, app *fiber.App, method string, path string, body string, token string) (*http.Response, map[string]any) {
+	t.Helper()
+	resp, raw := compatRequestRaw(t, app, method, path, body, token)
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("decode %s %s response: %v", method, path, err)
+	}
+	return resp, payload
+}
+
+func compatRequestRaw(t *testing.T, app *fiber.App, method string, path string, body string, token string) (*http.Response, string) {
+	t.Helper()
+	var reqBody io.Reader
+	if body != "" {
+		reqBody = strings.NewReader(body)
+	}
+	req := httptest.NewRequest(method, path, reqBody)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("%s %s error = %v", method, path, err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read %s %s response: %v", method, path, err)
+	}
+	return resp, string(raw)
+}
+
+func itoa(value int) string {
+	return strconv.Itoa(value)
 }
