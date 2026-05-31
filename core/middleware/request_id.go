@@ -24,6 +24,10 @@ func RequestID() fiber.Handler {
 	}
 }
 
+func RequestIDFromCtx(c fiber.Ctx) string {
+	return requestIDFromCtx(c)
+}
+
 func requestIDFromCtx(c fiber.Ctx) string {
 	if value, ok := c.Locals(RequestIDLocalKey).(string); ok && value != "" {
 		return value

@@ -39,17 +39,35 @@ func Test(opts TestOptions) (TestResult, error) {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
 	authToken := opts.AuthToken
-	if authToken == "" && opts.Contracts.API.BasePath != "" && hasAuthenticatedRoute(opts.Contracts.API.PriorityRoutes) {
+	if authToken == "" && opts.Contracts.API.BasePath != "" && needsAdminToken(opts.Contracts.API.PriorityRoutes, opts.Contracts.API.NegativeRoutes) {
 		token, err := bootstrapAuthToken(client, opts.BaseURL, opts.Contracts.API.BasePath)
 		if err != nil {
 			return TestResult{}, err
 		}
 		authToken = token
 	}
+	limitedToken := ""
+	if authToken != "" && hasLimitedNegativeRoute(opts.Contracts.API.NegativeRoutes) {
+		token, err := bootstrapLimitedAuthToken(client, opts.BaseURL, opts.Contracts.API.BasePath, authToken)
+		if err != nil {
+			return TestResult{}, err
+		}
+		limitedToken = token
+	}
 
 	result := TestResult{Passed: true}
 	for _, route := range opts.Contracts.API.PriorityRoutes {
 		if failure := probeRoute(client, opts.BaseURL, route, opts.Contracts.Response, authToken); failure != nil {
+			result.Passed = false
+			result.Failures = append(result.Failures, *failure)
+		}
+	}
+	for _, route := range opts.Contracts.API.NegativeRoutes {
+		routeAuthToken, applyAuth, err := negativeRouteAuthToken(client, opts.BaseURL, opts.Contracts.API.BasePath, route, authToken, &limitedToken)
+		if err != nil {
+			return TestResult{}, err
+		}
+		if failure := probeNegativeRoute(client, opts.BaseURL, route, opts.Contracts.Response, routeAuthToken, applyAuth); failure != nil {
 			result.Passed = false
 			result.Failures = append(result.Failures, *failure)
 		}
@@ -102,6 +120,58 @@ func probeRoute(client *http.Client, baseURL string, route Route, response Respo
 	return nil
 }
 
+func probeNegativeRoute(client *http.Client, baseURL string, route Route, response ResponseContract, authToken string, applyAuth bool) *Failure {
+	probePath := route.Path
+	if route.SamplePath != "" {
+		probePath = route.SamplePath
+	}
+	if route.ExpectedStatus == 0 {
+		return routeFailure(route, probePath, 0, "negative route expected_status is required", "")
+	}
+	var requestBody io.Reader
+	if route.Request != nil && route.Request.Body != "" {
+		requestBody = strings.NewReader(route.Request.Body)
+	}
+	req, err := http.NewRequest(route.Method, strings.TrimRight(baseURL, "/")+probePath, requestBody)
+	if err != nil {
+		return routeFailure(route, probePath, 0, err.Error(), "")
+	}
+	applyRequestSample(req, route.Request)
+	if applyAuth && authToken != "" && req.Header.Get("Authorization") == "" {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return routeFailure(route, probePath, 0, err.Error(), "")
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return routeFailure(route, probePath, resp.StatusCode, err.Error(), "")
+	}
+	bodyPreview := previewResponseBody(body)
+	if resp.StatusCode != route.ExpectedStatus {
+		return routeFailure(route, probePath, resp.StatusCode, fmt.Sprintf("unexpected status %d, want %d", resp.StatusCode, route.ExpectedStatus), bodyPreview)
+	}
+	if err := validateErrorEnvelope(body, route, response, route.ExpectedStatus); err != nil {
+		return routeFailure(route, probePath, resp.StatusCode, err.Error(), bodyPreview)
+	}
+	return nil
+}
+
+func needsAdminToken(priorityRoutes []Route, negativeRoutes []Route) bool {
+	if hasAuthenticatedRoute(priorityRoutes) {
+		return true
+	}
+	for _, route := range negativeRoutes {
+		switch route.Auth {
+		case "admin", "limited":
+			return true
+		}
+	}
+	return false
+}
+
 func hasAuthenticatedRoute(routes []Route) bool {
 	for _, route := range routes {
 		if routeNeedsAuth(route) {
@@ -109,6 +179,41 @@ func hasAuthenticatedRoute(routes []Route) bool {
 		}
 	}
 	return false
+}
+
+func hasLimitedNegativeRoute(routes []Route) bool {
+	for _, route := range routes {
+		if route.Auth == "limited" {
+			return true
+		}
+	}
+	return false
+}
+
+func negativeRouteAuthToken(client *http.Client, baseURL string, basePath string, route Route, adminToken string, limitedToken *string) (string, bool, error) {
+	switch route.Auth {
+	case "", "none":
+		return "", false, nil
+	case "admin":
+		if adminToken == "" {
+			return "", false, fmt.Errorf("negative route %s %s requires admin auth token", route.Method, route.Path)
+		}
+		return adminToken, true, nil
+	case "limited":
+		if adminToken == "" {
+			return "", false, fmt.Errorf("negative route %s %s requires admin auth token", route.Method, route.Path)
+		}
+		if *limitedToken == "" {
+			token, err := bootstrapLimitedAuthToken(client, baseURL, basePath, adminToken)
+			if err != nil {
+				return "", false, err
+			}
+			*limitedToken = token
+		}
+		return *limitedToken, true, nil
+	default:
+		return "", false, fmt.Errorf("negative route %s %s has unsupported auth mode %q", route.Method, route.Path, route.Auth)
+	}
 }
 
 func routeNeedsAuth(route Route) bool {
@@ -161,6 +266,78 @@ func bootstrapAuthToken(client *http.Client, baseURL string, basePath string) (s
 	return decoded.Data.AccessToken, nil
 }
 
+func bootstrapLimitedAuthToken(client *http.Client, baseURL string, basePath string, adminToken string) (string, error) {
+	if basePath == "" {
+		basePath = "/api/v1"
+	}
+	root := strings.TrimRight(baseURL, "/") + strings.TrimRight(basePath, "/")
+	createBody := `{"username":"contract_limited_user","password":"secret","nickname":"Contract Limited","email":null,"phone":null,"dept_id":1,"roles":[2]}`
+	createPayload, err := doContractJSON(client, http.MethodPost, root+"/sys/users", createBody, adminToken)
+	if err != nil {
+		return "", err
+	}
+	var created struct {
+		Data struct {
+			ID int `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(createPayload, &created); err != nil {
+		return "", fmt.Errorf("decode limited user bootstrap: %w", err)
+	}
+	if created.Data.ID == 0 {
+		return "", fmt.Errorf("limited user bootstrap missing user id")
+	}
+	if _, err := doContractJSON(client, http.MethodPut, fmt.Sprintf("%s/sys/users/%d/permissions?type=staff", root, created.Data.ID), "", adminToken); err != nil {
+		return "", err
+	}
+	loginPayload, err := doContractJSON(client, http.MethodPost, root+"/auth/login", `{"username":"contract_limited_user","password":"secret","uuid":"fixture-captcha","captcha":"1234"}`, "")
+	if err != nil {
+		return "", err
+	}
+	var login struct {
+		Data struct {
+			AccessToken string `json:"access_token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(loginPayload, &login); err != nil {
+		return "", fmt.Errorf("decode limited login bootstrap: %w", err)
+	}
+	if login.Data.AccessToken == "" {
+		return "", fmt.Errorf("limited login bootstrap missing access_token")
+	}
+	return login.Data.AccessToken, nil
+}
+
+func doContractJSON(client *http.Client, method string, url string, body string, bearerToken string) ([]byte, error) {
+	var requestBody io.Reader
+	if body != "" {
+		requestBody = strings.NewReader(body)
+	}
+	req, err := http.NewRequest(method, url, requestBody)
+	if err != nil {
+		return nil, err
+	}
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("contract bootstrap %s %s returned %d: %s", method, url, resp.StatusCode, previewResponseBody(payload))
+	}
+	return payload, nil
+}
+
 func applyRequestSample(req *http.Request, sample *RequestSample) {
 	if sample == nil {
 		return
@@ -197,6 +374,25 @@ func validateResponseEnvelope(body []byte, route Route, response ResponseContrac
 	}
 	if response.Success.Msg != "" && payload["msg"] != response.Success.Msg {
 		return fmt.Errorf("unexpected response msg %v, want %q", payload["msg"], response.Success.Msg)
+	}
+	return nil
+}
+
+func validateErrorEnvelope(body []byte, route Route, response ResponseContract, expectedStatus int) error {
+	if !response.Error.Envelope {
+		return nil
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return fmt.Errorf("response is not a JSON object error envelope: %w", err)
+	}
+	for _, field := range response.Error.RequiredFields {
+		if _, ok := payload[field]; !ok {
+			return fmt.Errorf("missing response error envelope field %q", field)
+		}
+	}
+	if expectedStatus != 0 && !jsonNumberEquals(payload["code"], expectedStatus) {
+		return fmt.Errorf("unexpected response code %v, want %d", payload["code"], expectedStatus)
 	}
 	return nil
 }

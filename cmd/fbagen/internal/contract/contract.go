@@ -17,6 +17,7 @@ type APIContract struct {
 	Version        int     `yaml:"version"`
 	BasePath       string  `yaml:"base_path"`
 	PriorityRoutes []Route `yaml:"priority_routes"`
+	NegativeRoutes []Route `yaml:"negative_routes"`
 	Routes         []Route `yaml:"routes"`
 }
 
@@ -27,6 +28,8 @@ type Route struct {
 	Request          *RequestSample `yaml:"request,omitempty" json:"request,omitempty"`
 	Owner            string         `yaml:"owner,omitempty" json:"owner,omitempty"`
 	Permission       string         `yaml:"permission,omitempty" json:"permission,omitempty"`
+	Auth             string         `yaml:"auth,omitempty" json:"auth,omitempty"`
+	ExpectedStatus   int            `yaml:"expected_status,omitempty" json:"expected_status,omitempty"`
 	ResponseEnvelope *bool          `yaml:"response_envelope,omitempty" json:"response_envelope,omitempty"`
 }
 

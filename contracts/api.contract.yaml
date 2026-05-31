@@ -1,6 +1,21 @@
 version: 1
 base_path: /api/v1
 
+negative_routes:
+  - method: GET
+    path: /api/v1/dict-types/all
+    owner: plugin:dict
+    auth: none
+    expected_status: 401
+  - method: POST
+    path: /api/v1/dict-types
+    owner: plugin:dict
+    auth: limited
+    expected_status: 403
+    permission: dict:type:add
+    request:
+      body: '{"name":"Denied Type","code":"denied_type","remark":null}'
+
 priority_routes:
   - method: POST
     path: /api/v1/auth/login/swagger

@@ -63,6 +63,34 @@ func TestLoadIncludesFirstBatchPythonParityPriorityRoutes(t *testing.T) {
 	}
 }
 
+func TestLoadIncludesAuthNegativeRoutes(t *testing.T) {
+	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		auth   string
+		status int
+	}{
+		{"GET", "/api/v1/dict-types/all", "none", http.StatusUnauthorized},
+		{"POST", "/api/v1/dict-types", "limited", http.StatusForbidden},
+	} {
+		route := findNegativeRoute(loaded.API.NegativeRoutes, tc.method, tc.path)
+		if route == nil {
+			t.Fatalf("missing negative route %s %s", tc.method, tc.path)
+		}
+		if route.Auth != tc.auth {
+			t.Fatalf("%s %s auth = %q, want %q", tc.method, tc.path, route.Auth, tc.auth)
+		}
+		if route.ExpectedStatus != tc.status {
+			t.Fatalf("%s %s expected_status = %d, want %d", tc.method, tc.path, route.ExpectedStatus, tc.status)
+		}
+	}
+}
+
 func TestLoadIncludesSecondBatchAdminParityPriorityRoutes(t *testing.T) {
 	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
 	if err != nil {
@@ -571,6 +599,142 @@ func TestRunnerBootstrapsAuthForProtectedPriorityRoutes(t *testing.T) {
 	}
 }
 
+func TestRunnerChecksNegativeRouteWithoutAuth(t *testing.T) {
+	transport := &negativeNoAuthTransport{t: t}
+	loaded := contract.Contracts{
+		API: contract.APIContract{
+			BasePath: "/api/v1",
+			NegativeRoutes: []contract.Route{
+				{
+					Method:         "GET",
+					Path:           "/api/v1/dict-types/all",
+					Auth:           "none",
+					ExpectedStatus: http.StatusUnauthorized,
+				},
+			},
+		},
+		Response: contract.ResponseContract{
+			Error: contract.ResponseError{
+				Envelope:       true,
+				RequiredFields: []string{"code", "msg", "data", "trace_id"},
+			},
+		},
+	}
+
+	result, err := contract.Test(contract.TestOptions{
+		BaseURL:   "http://fba.test",
+		Contracts: loaded,
+		Client:    &http.Client{Transport: transport},
+	})
+	if err != nil {
+		t.Fatalf("Test() error = %v", err)
+	}
+	if !transport.called {
+		t.Fatal("negative route was not probed")
+	}
+	if !result.Passed {
+		t.Fatalf("Passed = false, failures = %+v", result.Failures)
+	}
+}
+
+func TestRunnerChecksNegativeRouteWithLimitedAuth(t *testing.T) {
+	transport := &negativeLimitedAuthTransport{t: t}
+	loaded := contract.Contracts{
+		API: contract.APIContract{
+			BasePath: "/api/v1",
+			NegativeRoutes: []contract.Route{
+				{
+					Method:         "POST",
+					Path:           "/api/v1/dict-types",
+					Auth:           "limited",
+					ExpectedStatus: http.StatusForbidden,
+					Request: &contract.RequestSample{
+						Body: `{"name":"Denied Type","code":"denied_type","remark":null}`,
+					},
+				},
+			},
+		},
+		Response: contract.ResponseContract{
+			Error: contract.ResponseError{
+				Envelope:       true,
+				RequiredFields: []string{"code", "msg", "data", "trace_id"},
+			},
+		},
+	}
+
+	result, err := contract.Test(contract.TestOptions{
+		BaseURL:   "http://fba.test",
+		Contracts: loaded,
+		Client:    &http.Client{Transport: transport},
+	})
+	if err != nil {
+		t.Fatalf("Test() error = %v", err)
+	}
+	if !transport.targetCalled {
+		t.Fatal("limited-auth negative route was not probed")
+	}
+	if !result.Passed {
+		t.Fatalf("Passed = false, failures = %+v", result.Failures)
+	}
+}
+
+func TestRunnerBootstrapsLimitedAuthBeforePriorityMutations(t *testing.T) {
+	transport := &limitedBeforeMutationTransport{t: t}
+	loaded := contract.Contracts{
+		API: contract.APIContract{
+			BasePath: "/api/v1",
+			PriorityRoutes: []contract.Route{
+				{
+					Method:     "DELETE",
+					Path:       "/api/v1/sys/depts/{pk}",
+					SamplePath: "/api/v1/sys/depts/1",
+				},
+			},
+			NegativeRoutes: []contract.Route{
+				{
+					Method:         "POST",
+					Path:           "/api/v1/dict-types",
+					Auth:           "limited",
+					ExpectedStatus: http.StatusForbidden,
+					Request: &contract.RequestSample{
+						Body: `{"name":"Denied Type","code":"denied_type","remark":null}`,
+					},
+				},
+			},
+		},
+		Response: contract.ResponseContract{
+			Success: contract.ResponseSuccess{
+				Envelope:       true,
+				RequiredFields: []string{"code", "msg", "data"},
+				Code:           200,
+				Msg:            "请求成功",
+			},
+			Error: contract.ResponseError{
+				Envelope:       true,
+				RequiredFields: []string{"code", "msg", "data", "trace_id"},
+			},
+		},
+	}
+
+	result, err := contract.Test(contract.TestOptions{
+		BaseURL:   "http://fba.test",
+		Contracts: loaded,
+		Client:    &http.Client{Transport: transport},
+	})
+	if err != nil {
+		t.Fatalf("Test() error = %v", err)
+	}
+	if !transport.deptDeleted {
+		t.Fatal("priority mutation route was not probed")
+	}
+	if !transport.targetCalled {
+		t.Fatal("negative route was not probed")
+	}
+	if !result.Passed {
+		t.Fatalf("Passed = false, failures = %+v", result.Failures)
+	}
+}
+
 func TestFormatFailuresIncludesRouteDetails(t *testing.T) {
 	result := contract.TestResult{
 		Failures: []contract.Failure{
@@ -601,6 +765,15 @@ func TestFormatFailuresIncludesRouteDetails(t *testing.T) {
 }
 
 func findPriorityRoute(routes []contract.Route, method, path string) *contract.Route {
+	for i := range routes {
+		if routes[i].Method == method && routes[i].Path == path {
+			return &routes[i]
+		}
+	}
+	return nil
+}
+
+func findNegativeRoute(routes []contract.Route, method, path string) *contract.Route {
 	for i := range routes {
 		if routes[i].Method == method && routes[i].Path == path {
 			return &routes[i]
@@ -690,6 +863,154 @@ func (transport authBootstrapTransport) RoundTrip(req *http.Request) (*http.Resp
 		transport.t.Fatalf("unexpected path %s", req.URL.Path)
 		return nil, nil
 	}
+}
+
+type negativeNoAuthTransport struct {
+	t      *testing.T
+	called bool
+}
+
+func (transport *negativeNoAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	transport.t.Helper()
+	if req.URL.Path != "/api/v1/dict-types/all" {
+		transport.t.Fatalf("path = %s, want /api/v1/dict-types/all", req.URL.Path)
+	}
+	if got := req.Header.Get("Authorization"); got != "" {
+		transport.t.Fatalf("Authorization = %q, want empty", got)
+	}
+	transport.called = true
+	return &http.Response{
+		StatusCode: http.StatusUnauthorized,
+		Body:       io.NopCloser(strings.NewReader(`{"code":401,"msg":"未认证","data":null,"trace_id":"trace-1"}`)),
+		Header:     make(http.Header),
+		Request:    req,
+	}, nil
+}
+
+type negativeLimitedAuthTransport struct {
+	t            *testing.T
+	targetCalled bool
+}
+
+func (transport *negativeLimitedAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	transport.t.Helper()
+	var body []byte
+	if req.Body != nil {
+		var err error
+		body, err = io.ReadAll(req.Body)
+		if err != nil {
+			transport.t.Fatalf("ReadAll(%s) error = %v", req.URL.Path, err)
+		}
+	}
+	switch req.URL.Path {
+	case "/api/v1/auth/login":
+		if strings.Contains(string(body), `"username":"admin"`) {
+			return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":{"access_token":"admin-token"}}`), nil
+		}
+		if strings.Contains(string(body), `"username":"contract_limited_user"`) {
+			return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":{"access_token":"limited-token"}}`), nil
+		}
+		transport.t.Fatalf("unexpected login body = %q", body)
+	case "/api/v1/sys/users":
+		if req.Method != http.MethodPost {
+			transport.t.Fatalf("method = %s, want POST", req.Method)
+		}
+		if req.Header.Get("Authorization") != "Bearer admin-token" {
+			transport.t.Fatalf("create user Authorization = %q, want Bearer admin-token", req.Header.Get("Authorization"))
+		}
+		if !strings.Contains(string(body), `"username":"contract_limited_user"`) || !strings.Contains(string(body), `"roles":[2]`) {
+			transport.t.Fatalf("create user body = %q, want limited user with viewer role", body)
+		}
+		return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":{"id":2}}`), nil
+	case "/api/v1/sys/users/2/permissions":
+		if req.Method != http.MethodPut {
+			transport.t.Fatalf("method = %s, want PUT", req.Method)
+		}
+		if req.URL.RawQuery != "type=staff" {
+			transport.t.Fatalf("query = %s, want type=staff", req.URL.RawQuery)
+		}
+		if req.Header.Get("Authorization") != "Bearer admin-token" {
+			transport.t.Fatalf("staff update Authorization = %q, want Bearer admin-token", req.Header.Get("Authorization"))
+		}
+		return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":null}`), nil
+	case "/api/v1/dict-types":
+		if req.Method != http.MethodPost {
+			transport.t.Fatalf("method = %s, want POST", req.Method)
+		}
+		if req.Header.Get("Authorization") != "Bearer limited-token" {
+			transport.t.Fatalf("target Authorization = %q, want Bearer limited-token", req.Header.Get("Authorization"))
+		}
+		if string(body) != `{"name":"Denied Type","code":"denied_type","remark":null}` {
+			transport.t.Fatalf("target body = %q, want denied_type sample", body)
+		}
+		transport.targetCalled = true
+		return jsonResponse(req, http.StatusForbidden, `{"code":403,"msg":"无权限","data":null,"trace_id":"trace-2"}`), nil
+	default:
+		transport.t.Fatalf("unexpected path %s", req.URL.Path)
+	}
+	return nil, nil
+}
+
+func jsonResponse(req *http.Request, status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+		Request:    req,
+	}
+}
+
+type limitedBeforeMutationTransport struct {
+	t            *testing.T
+	deptDeleted  bool
+	targetCalled bool
+}
+
+func (transport *limitedBeforeMutationTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	transport.t.Helper()
+	body := readRequestBody(transport.t, req)
+	switch req.URL.Path {
+	case "/api/v1/auth/login":
+		if strings.Contains(string(body), `"username":"admin"`) {
+			return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":{"access_token":"admin-token"}}`), nil
+		}
+		if strings.Contains(string(body), `"username":"contract_limited_user"`) {
+			return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":{"access_token":"limited-token"}}`), nil
+		}
+	case "/api/v1/sys/users":
+		if transport.deptDeleted {
+			return jsonResponse(req, http.StatusInternalServerError, `{"code":500,"msg":"内部服务器错误","data":null,"trace_id":"trace-create"}`), nil
+		}
+		return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":{"id":2}}`), nil
+	case "/api/v1/sys/users/2/permissions":
+		return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":null}`), nil
+	case "/api/v1/sys/depts/1":
+		if req.Method != http.MethodDelete {
+			transport.t.Fatalf("method = %s, want DELETE", req.Method)
+		}
+		transport.deptDeleted = true
+		return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":null}`), nil
+	case "/api/v1/dict-types":
+		if req.Header.Get("Authorization") != "Bearer limited-token" {
+			transport.t.Fatalf("target Authorization = %q, want Bearer limited-token", req.Header.Get("Authorization"))
+		}
+		transport.targetCalled = true
+		return jsonResponse(req, http.StatusForbidden, `{"code":403,"msg":"无权限","data":null,"trace_id":"trace-target"}`), nil
+	}
+	transport.t.Fatalf("unexpected path %s body %q", req.URL.Path, body)
+	return nil, nil
+}
+
+func readRequestBody(t *testing.T, req *http.Request) []byte {
+	t.Helper()
+	if req.Body == nil {
+		return nil
+	}
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		t.Fatalf("ReadAll(%s) error = %v", req.URL.Path, err)
+	}
+	return body
 }
 
 func (transport assertRequestTransport) RoundTrip(req *http.Request) (*http.Response, error) {

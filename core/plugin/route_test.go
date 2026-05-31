@@ -1,10 +1,13 @@
 package plugin_test
 
 import (
+	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/middleware"
 	"github.com/yuWorm/fba-go/core/plugin"
 	"github.com/yuWorm/fba-go/core/rbac"
 )
@@ -91,6 +94,33 @@ func TestMountRoutesRejectsProtectedRouteWithoutAuthenticator(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestMountRoutesAuthFailureIncludesTraceID(t *testing.T) {
+	app := fiber.New()
+	app.Use(middleware.RequestID())
+	routes := []plugin.Route{
+		plugin.GET("/secure", "Secure", func(c fiber.Ctx) error {
+			return c.SendString("ok")
+		}, plugin.Auth()),
+	}
+
+	plugin.MountRoutes(app.Group("/api/v1"), routes)
+
+	req := httptest.NewRequest("GET", "/api/v1/secure", nil)
+	req.Header.Set(middleware.RequestIDHeader, "request-1")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("GET /secure error = %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	if !strings.Contains(string(body), `"trace_id":"request-1"`) {
+		t.Fatalf("body = %s, want trace_id request-1", body)
 	}
 }
 

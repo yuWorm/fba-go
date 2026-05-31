@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/yuWorm/fba-go/core/di"
+	"github.com/yuWorm/fba-go/core/middleware"
 	"github.com/yuWorm/fba-go/core/rbac"
 	"github.com/yuWorm/fba-go/core/response"
 )
@@ -106,5 +107,5 @@ func authMessage(err error) string {
 }
 
 func authFailure(c fiber.Ctx, status int, message string) error {
-	return c.Status(status).JSON(response.Error(status, message, ""))
+	return c.Status(status).JSON(response.Error(status, message, middleware.RequestIDFromCtx(c)))
 }
