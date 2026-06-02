@@ -621,6 +621,12 @@ func (r *GORMRepository) GetDataRule(ctx context.Context, id int) (model.DataRul
 	return item, mapGORMError(err)
 }
 
+func (r *GORMRepository) GetDataRuleByName(ctx context.Context, name string) (model.DataRule, error) {
+	var item model.DataRule
+	err := r.provider.Read().WithContext(ctx).Where("name = ?", name).First(&item).Error
+	return item, mapGORMError(err)
+}
+
 func (r *GORMRepository) ListDataRules(ctx context.Context, filter DataRuleFilter, page int, size int) ([]model.DataRule, int64, error) {
 	query := r.provider.Read().WithContext(ctx).Model(&model.DataRule{})
 	if filter.Name != "" {

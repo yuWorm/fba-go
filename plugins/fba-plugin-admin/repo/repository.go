@@ -97,6 +97,7 @@ type Repository interface {
 	DataRuleModelColumns(ctx context.Context, modelName string) ([]model.DataRuleColumn, error)
 	DataRuleValueTemplateVariables(ctx context.Context) ([]model.DataRuleTemplateVariable, error)
 	GetDataRule(ctx context.Context, id int) (model.DataRule, error)
+	GetDataRuleByName(ctx context.Context, name string) (model.DataRule, error)
 	ListDataRules(ctx context.Context, filter DataRuleFilter, page int, size int) ([]model.DataRule, int64, error)
 	CreateDataRule(ctx context.Context, param dto.DataRuleParam) error
 	UpdateDataRule(ctx context.Context, id int, param dto.DataRuleParam) error

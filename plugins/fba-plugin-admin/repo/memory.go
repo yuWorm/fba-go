@@ -769,6 +769,17 @@ func (r *MemoryRepository) GetDataRule(_ context.Context, id int) (model.DataRul
 	return model.DataRule{}, ErrNotFound
 }
 
+func (r *MemoryRepository) GetDataRuleByName(_ context.Context, name string) (model.DataRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.dataRules {
+		if item.Name == name {
+			return item, nil
+		}
+	}
+	return model.DataRule{}, ErrNotFound
+}
+
 func (r *MemoryRepository) ListDataRules(_ context.Context, filter DataRuleFilter, page int, size int) ([]model.DataRule, int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

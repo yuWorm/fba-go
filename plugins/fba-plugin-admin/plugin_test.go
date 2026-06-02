@@ -1506,10 +1506,8 @@ func TestDataRuleMetadataEndpointsMatchPythonConfig(t *testing.T) {
 		t.Fatalf("value template variables = %v, want Python default variables", variables)
 	}
 
-	resp, _ = requestRaw(t, app, "GET", "/api/v1/sys/data-rules/models/missing/columns", "")
-	if resp.StatusCode == fiber.StatusOK {
-		t.Fatal("missing data-rule model columns returned 200")
-	}
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-rules/models/missing/columns", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "数据规则可用模型不存在")
 }
 
 func TestDataRuleEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
@@ -1560,6 +1558,30 @@ func TestDataRuleEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	if !ok || len(items) != 0 {
 		t.Fatalf("deleted data-rule items = %T len %d, want empty list", page["items"], len(items))
 	}
+}
+
+func TestDataRuleEndpointsApplyPythonCRUDGuards(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/data-rules/999999", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "数据规则不存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/data-rules", `{"name":"Guard Rule","model":"user","column":"dept_id","operator":0,"expression":0,"value":"{{ dept_id }}"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/data-rules", `{"name":"Guard Rule","model":"user","column":"id","operator":0,"expression":0,"value":"{{ user_id }}"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "数据规则已存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/data-rules/999999", `{"name":"Missing Rule","model":"user","column":"id","operator":0,"expression":0,"value":"{{ user_id }}"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "数据规则不存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/data-rules", `{"name":"Guard Rule Other","model":"user","column":"dept_id","operator":0,"expression":0,"value":"{{ dept_id }}"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	otherRuleID := findDataRuleID(t, app, "Guard Rule Other")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/data-rules/"+itoa(otherRuleID), `{"name":"Guard Rule","model":"user","column":"id","operator":0,"expression":0,"value":"{{ user_id }}"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "数据规则已存在")
 }
 
 func TestDataScopeEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
@@ -2066,6 +2088,20 @@ func findDataScopeID(t *testing.T, app *fiber.App, name string) int {
 	items := assertSlice(t, page["items"])
 	if len(items) != 1 {
 		t.Fatalf("data scope %q lookup count = %d, want 1", name, len(items))
+	}
+	item := assertMap(t, items[0])
+	return int(item["id"].(float64))
+}
+
+func findDataRuleID(t *testing.T, app *fiber.App, name string) int {
+	t.Helper()
+	escapedName := strings.ReplaceAll(name, " ", "%20")
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/data-rules?name="+escapedName, "")
+	assertStatusOK(t, resp)
+	page := assertEnvelopeMap(t, body)
+	items := assertSlice(t, page["items"])
+	if len(items) != 1 {
+		t.Fatalf("data rule %q lookup count = %d, want 1", name, len(items))
 	}
 	item := assertMap(t, items[0])
 	return int(item["id"].(float64))
