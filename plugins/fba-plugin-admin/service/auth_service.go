@@ -267,16 +267,17 @@ func (s *AuthService) verifyCaptcha(uuid string, captcha string) error {
 	}
 	s.mu.Lock()
 	code, ok := s.captchas[uuid]
-	if ok {
-		delete(s.captchas, uuid)
-	}
-	s.mu.Unlock()
 	if !ok {
+		s.mu.Unlock()
 		return authError("验证码已过期")
 	}
 	if !strings.EqualFold(code, captcha) {
+		// Keep invalid attempts retryable; the Python service consumes captchas only after a successful match.
+		s.mu.Unlock()
 		return authError("验证码错误")
 	}
+	delete(s.captchas, uuid)
+	s.mu.Unlock()
 	return nil
 }
 

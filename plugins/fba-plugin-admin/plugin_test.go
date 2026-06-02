@@ -407,6 +407,26 @@ func TestLoginMatchesPythonSchemaAndSetsRefreshCookie(t *testing.T) {
 	assertRefreshCookie(t, resp.Header.Get("Set-Cookie"))
 }
 
+func TestLoginCaptchaMismatchDoesNotConsumeCaptcha(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/auth/captcha", "")
+	assertStatusOK(t, resp)
+	captcha := assertEnvelopeMap(t, body)
+	uuid := captcha["uuid"].(string)
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"admin","password":"admin","uuid":"`+uuid+`","captcha":"0000"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "验证码错误")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"admin","password":"admin","uuid":"`+uuid+`","captcha":"1234"}`)
+	assertStatusOK(t, resp)
+	data := assertEnvelopeMap(t, body)
+	user := assertMap(t, data["user"])
+	if user["username"] != "admin" {
+		t.Fatalf("login user = %v, want admin", user["username"])
+	}
+}
+
 func TestAuthEndpointsAreStatefulAndValidateUsers(t *testing.T) {
 	app := newAdminApp(t)
 
