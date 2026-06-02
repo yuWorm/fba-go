@@ -48,28 +48,45 @@ func (s *DeptService) Delete(ctx context.Context, id int) error {
 }
 
 func buildDeptTree(items []model.Dept) []dto.DeptDetail {
-	nodes := make(map[int]*dto.DeptDetail, len(items))
+	byID := make(map[int]model.Dept, len(items))
+	childrenByParent := make(map[int][]model.Dept, len(items))
 	for _, item := range items {
-		detail := dto.DeptFromModel(item)
-		detail.Children = []dto.DeptDetail{}
-		nodes[item.ID] = &detail
+		byID[item.ID] = item
+		if item.ParentID != nil {
+			childrenByParent[*item.ParentID] = append(childrenByParent[*item.ParentID], item)
+		}
 	}
 
-	// Build child links before collecting roots; appending values too early would copy stale children.
-	for _, item := range items {
-		node := nodes[item.ID]
-		if item.ParentID != nil {
-			if parent, ok := nodes[*item.ParentID]; ok {
-				parent.Children = append(parent.Children, *node)
-			}
+	var buildNode func(model.Dept, map[int]bool) dto.DeptDetail
+	buildNode = func(item model.Dept, visiting map[int]bool) dto.DeptDetail {
+		detail := dto.DeptFromModel(item)
+		children := childrenByParent[item.ID]
+		if len(children) == 0 {
+			return detail
 		}
+
+		detail.Children = make([]dto.DeptDetail, 0, len(children))
+		visiting[item.ID] = true
+		defer delete(visiting, item.ID)
+		for _, child := range children {
+			// Build values from the leaves upward so grandchildren are not lost through stale value copies.
+			if visiting[child.ID] {
+				continue
+			}
+			detail.Children = append(detail.Children, buildNode(child, visiting))
+		}
+		return detail
 	}
 
 	roots := make([]dto.DeptDetail, 0, len(items))
 	for _, item := range items {
 		// Keep filtered or orphaned children visible as roots, matching the Python tree helper.
-		if item.ParentID == nil || nodes[*item.ParentID] == nil {
-			roots = append(roots, *nodes[item.ID])
+		parentExists := false
+		if item.ParentID != nil {
+			_, parentExists = byID[*item.ParentID]
+		}
+		if item.ParentID == nil || !parentExists {
+			roots = append(roots, buildNode(item, map[int]bool{}))
 		}
 	}
 	return roots

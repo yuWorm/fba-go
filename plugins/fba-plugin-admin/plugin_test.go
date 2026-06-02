@@ -1228,6 +1228,11 @@ func TestDeptTreeReflectsCreatedChildren(t *testing.T) {
 	if created["name"] != "Platform" {
 		t.Fatalf("created dept name = %v, want Platform", created["name"])
 	}
+	platformID := int(created["id"].(float64))
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/depts", `{"name":"Backend","parent_id":`+itoa(platformID)+`,"sort":1,"leader":"Sam","phone":"13700000000","email":"backend@example.com","status":1}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
 
 	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/depts", "")
 	assertStatusOK(t, resp)
@@ -1235,6 +1240,10 @@ func TestDeptTreeReflectsCreatedChildren(t *testing.T) {
 	child := findNodeInTree(t, tree, "Platform")
 	if child["parent_id"] != float64(1) {
 		t.Fatalf("created child parent_id = %v, want 1", child["parent_id"])
+	}
+	grandchild := findNodeInTree(t, tree, "Backend")
+	if grandchild["parent_id"] != float64(platformID) {
+		t.Fatalf("created grandchild parent_id = %v, want %d", grandchild["parent_id"], platformID)
 	}
 }
 
