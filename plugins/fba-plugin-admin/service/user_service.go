@@ -141,18 +141,32 @@ func (s *UserService) Update(ctx context.Context, id int, param dto.UserUpdatePa
 func (s *UserService) UpdatePassword(ctx context.Context, id int, param dto.UserPasswordParam) error {
 	user, err := s.repo.GetUser(ctx, id)
 	if err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return userNotFound("用户不存在", err)
+		}
 		return err
 	}
-	if user.Password != "" && user.Password != param.OldPassword {
-		return repo.ErrNotFound
+	password := user.Password
+	// Seed admin keeps an empty password and AuthService treats that as the fixture "admin" password.
+	if password == "" {
+		password = "admin"
+	}
+	if password != param.OldPassword {
+		return userBadRequest("原密码错误", nil)
 	}
 	if param.NewPassword != param.ConfirmPassword {
-		return repo.ErrNotFound
+		return userBadRequest("两次密码输入不一致", nil)
 	}
 	return s.repo.ResetUserPassword(ctx, id, param.NewPassword)
 }
 
 func (s *UserService) ResetPassword(ctx context.Context, id int, password string) error {
+	if _, err := s.repo.GetUser(ctx, id); err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return userNotFound("用户不存在", err)
+		}
+		return err
+	}
 	return s.repo.ResetUserPassword(ctx, id, password)
 }
 

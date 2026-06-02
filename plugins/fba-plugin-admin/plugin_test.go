@@ -95,7 +95,7 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		{"POST", "/api/v1/sys/users", `{"username":"contract_user","password":"Passw0rd!","nickname":"Contract User","email":null,"phone":null,"dept_id":1,"roles":[1]}`},
 		{"PUT", "/api/v1/sys/users/1", `{"dept_id":null,"username":"admin","nickname":"Admin","avatar":null,"email":null,"phone":null,"roles":[1]}`},
 		{"PUT", "/api/v1/sys/users/1/permissions?type=multi_login", ""},
-		{"PUT", "/api/v1/sys/users/me/password", `{"old_password":"old-password","new_password":"new-password","confirm_password":"new-password"}`},
+		{"PUT", "/api/v1/sys/users/me/password", `{"old_password":"admin","new_password":"new-password","confirm_password":"new-password"}`},
 		{"PUT", "/api/v1/sys/users/1/password", `{"password":"new-password"}`},
 		{"PUT", "/api/v1/sys/users/me/nickname", `{"nickname":"Admin"}`},
 		{"PUT", "/api/v1/sys/users/me/avatar", `{"avatar":"https://example.invalid/avatar.png"}`},
@@ -834,6 +834,19 @@ func TestCurrentUserEmailUpdateAppliesPythonGuards(t *testing.T) {
 
 	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/email", `{"captcha":"123456","email":"email-taken@example.com"}`)
 	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "邮箱已被绑定")
+}
+
+func TestUserPasswordEndpointsApplyPythonGuards(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"wrong-password","new_password":"new-password","confirm_password":"new-password"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "原密码错误")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"admin","new_password":"new-password","confirm_password":"different-password"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "两次密码输入不一致")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/999999/password", `{"password":"new-password"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "用户不存在")
 }
 
 func TestPluginEndpointsAreStatefulAndPythonCompatible(t *testing.T) {

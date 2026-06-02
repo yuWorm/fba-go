@@ -69,7 +69,7 @@ priority_routes:
     path: /api/v1/sys/users/me/password
     owner: plugin:admin
     request:
-      body: '{"old_password":"old-password","new_password":"new-password","confirm_password":"new-password"}'
+      body: '{"old_password":"admin","new_password":"new-password","confirm_password":"new-password"}'
   - method: PUT
     path: /api/v1/sys/users/{pk}/password
     sample_path: /api/v1/sys/users/1/password
