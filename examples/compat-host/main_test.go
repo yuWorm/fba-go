@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,6 +11,11 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/db"
+	adminmodel "github.com/yuWorm/fba-plugin-admin/model"
+	dictmodel "github.com/yuWorm/fba-plugin-dict/model"
+	noticemodel "github.com/yuWorm/fba-plugin-notice/model"
+	taskmodel "github.com/yuWorm/fba-plugin-task/model"
 )
 
 func TestCompatHostRegistersFixturePlugin(t *testing.T) {
@@ -89,6 +95,37 @@ func TestCompatHostOfficialPluginPriorityResponses(t *testing.T) {
 	data, ok := body["data"].([]any)
 	if !ok || len(data) != 2 {
 		t.Fatalf("data = %T len %d, want 2 dict rows", body["data"], len(data))
+	}
+}
+
+func TestCompatHostSQLiteModeRunsPluginMigrationsAndSeeds(t *testing.T) {
+	t.Setenv("FBA_COMPAT_DB", "sqlite")
+	t.Setenv("FBA_COMPAT_SQLITE_DSN", compatSQLiteTestDSN(t))
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication() error = %v", err)
+	}
+
+	var provider db.Provider
+	if ok := app.Container().Resolve(&provider); !ok {
+		t.Fatalf("db.Provider was not registered in sqlite compat mode")
+	}
+
+	adminSeed := adminmodel.SeedData()
+	assertCompatTableCount(t, provider, &adminmodel.User{}, len(adminSeed.Users))
+	assertCompatTableCount(t, provider, &adminmodel.Role{}, len(adminSeed.Roles))
+	assertCompatTableCount(t, provider, &adminmodel.Plugin{}, len(adminSeed.Plugins))
+	assertCompatTableCount(t, provider, &dictmodel.DictType{}, len(dictmodel.SeedDictTypes()))
+	assertCompatTableCount(t, provider, &dictmodel.DictData{}, len(dictmodel.SeedDictData()))
+	assertCompatTableCount(t, provider, &noticemodel.Notice{}, len(noticemodel.SeedNotices()))
+	assertCompatTableCount(t, provider, &taskmodel.TaskScheduler{}, len(taskmodel.SeedSchedulers()))
+	assertCompatTableCount(t, provider, &taskmodel.TaskResult{}, len(taskmodel.SeedTaskResults()))
+
+	token := compatAccessToken(t, app.HTTP())
+	resp, body := compatRequestJSON(t, app.HTTP(), "GET", "/api/v1/schedulers", "", token)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /schedulers status = %d body = %v, want 200", resp.StatusCode, body)
 	}
 }
 
@@ -225,4 +262,21 @@ func compatRequestRaw(t *testing.T, app *fiber.App, method string, path string, 
 
 func itoa(value int) string {
 	return strconv.Itoa(value)
+}
+
+func compatSQLiteTestDSN(t *testing.T) string {
+	t.Helper()
+	name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name())
+	return "file:" + name + "?mode=memory&cache=shared"
+}
+
+func assertCompatTableCount(t *testing.T, provider db.Provider, table any, want int) {
+	t.Helper()
+	var got int64
+	if err := provider.Read().WithContext(context.Background()).Model(table).Count(&got).Error; err != nil {
+		t.Fatalf("count %T error = %v", table, err)
+	}
+	if got != int64(want) {
+		t.Fatalf("count %T = %d, want %d", table, got, want)
+	}
 }
