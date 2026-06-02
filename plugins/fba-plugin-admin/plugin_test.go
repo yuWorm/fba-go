@@ -32,6 +32,7 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		t.Fatalf("Register() error = %v", err)
 	}
 	registerRoutes(ctx.APIGroup(), ctx.Routes())
+	refreshCookie := loginForRefreshCookie(t, app, "admin", "admin")
 
 	for _, tc := range []struct {
 		method string
@@ -77,6 +78,9 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		{"GET", "/api/v1/monitors/sessions"},
 	} {
 		req := httptest.NewRequest(tc.method, tc.path, nil)
+		if tc.path == "/api/v1/auth/refresh" {
+			req.AddCookie(refreshCookie)
+		}
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("%s %s error = %v", tc.method, tc.path, err)
@@ -673,7 +677,7 @@ func TestAdminRuntimeSwaggerTokenAuthorizesRoutes(t *testing.T) {
 func TestRefreshMatchesPythonSchemaAndSetsRefreshCookie(t *testing.T) {
 	app := newAdminApp(t)
 	req := httptest.NewRequest("POST", "/api/v1/auth/refresh", nil)
-	req.AddCookie(&http.Cookie{Name: "fba_refresh_token", Value: "fixture-refresh-token"})
+	req.AddCookie(loginForRefreshCookie(t, app, "admin", "admin"))
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("POST /auth/refresh error = %v", err)
@@ -688,6 +692,13 @@ func TestRefreshMatchesPythonSchemaAndSetsRefreshCookie(t *testing.T) {
 	data := assertEnvelopeMap(t, body)
 	assertKeys(t, data, "access_token", "access_token_expire_time", "session_uuid")
 	assertRefreshCookie(t, resp.Header.Get("Set-Cookie"))
+}
+
+func TestRefreshRejectsMissingCookieLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/auth/refresh", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "Refresh Token 已过期，请重新登录")
 }
 
 func TestCurrentUserMatchesPythonSchema(t *testing.T) {
@@ -2058,6 +2069,14 @@ func loginForAccessToken(t *testing.T, app *fiber.App, username string, password
 		t.Fatalf("access_token = %v, want non-empty string", data["access_token"])
 	}
 	return token
+}
+
+func loginForRefreshCookie(t *testing.T, app *fiber.App, username string, password string) *http.Cookie {
+	t.Helper()
+	resp, body := requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"`+username+`","password":"`+password+`","uuid":"fixture-captcha","captcha":"1234"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+	return requireCookie(t, resp.Header.Get("Set-Cookie"), "fba_refresh_token")
 }
 
 func assertStatusOK(t *testing.T, resp *http.Response) {

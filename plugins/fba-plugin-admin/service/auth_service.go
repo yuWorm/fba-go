@@ -121,8 +121,7 @@ func (s *AuthService) SwaggerLogin(ctx context.Context, username string, passwor
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (dto.AccessTokenBase, string, error) {
 	userID, sessionUUID, ok := parseToken(refreshToken, "refresh")
 	if !ok {
-		userID = 1
-		sessionUUID = defaultSessionUUID
+		return dto.AccessTokenBase{}, "", refreshRequestError("Refresh Token 已过期，请重新登录")
 	}
 	session, err := s.repo.GetSession(ctx, userID, sessionUUID)
 	if err != nil {
@@ -444,4 +443,8 @@ func randomID() string {
 
 func authError(message string) error {
 	return fbaerrors.New(http.StatusUnauthorized, http.StatusUnauthorized, message, nil)
+}
+
+func refreshRequestError(message string) error {
+	return fbaerrors.New(http.StatusBadRequest, http.StatusBadRequest, message, nil)
 }

@@ -21,6 +21,11 @@ type TestResult struct {
 	Failures []Failure `json:"failures"`
 }
 
+type authBootstrap struct {
+	AccessToken   string
+	RefreshCookie *http.Cookie
+}
+
 type Failure struct {
 	Method       string `json:"method"`
 	Path         string `json:"path"`
@@ -39,12 +44,21 @@ func Test(opts TestOptions) (TestResult, error) {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
 	authToken := opts.AuthToken
-	if authToken == "" && opts.Contracts.API.BasePath != "" && needsAdminToken(opts.Contracts.API.PriorityRoutes, opts.Contracts.API.NegativeRoutes) {
-		token, err := bootstrapAuthToken(client, opts.BaseURL, opts.Contracts.API.BasePath)
+	var refreshCookie *http.Cookie
+	// Refresh is public from an Authorization perspective, but the positive probe
+	// still needs a login-issued refresh cookie to match the real auth contract.
+	bootstrapNeeded := opts.Contracts.API.BasePath != "" &&
+		((authToken == "" && needsAdminToken(opts.Contracts.API.PriorityRoutes, opts.Contracts.API.NegativeRoutes)) ||
+			needsRefreshCookie(opts.Contracts.API.PriorityRoutes))
+	if bootstrapNeeded {
+		auth, err := bootstrapAuthSession(client, opts.BaseURL, opts.Contracts.API.BasePath)
 		if err != nil {
 			return TestResult{}, err
 		}
-		authToken = token
+		if authToken == "" {
+			authToken = auth.AccessToken
+		}
+		refreshCookie = auth.RefreshCookie
 	}
 	limitedToken := ""
 	if authToken != "" && hasLimitedNegativeRoute(opts.Contracts.API.NegativeRoutes) {
@@ -57,7 +71,7 @@ func Test(opts TestOptions) (TestResult, error) {
 
 	result := TestResult{Passed: true}
 	for _, route := range opts.Contracts.API.PriorityRoutes {
-		if failure := probeRoute(client, opts.BaseURL, route, opts.Contracts.Response, authToken); failure != nil {
+		if failure := probeRoute(client, opts.BaseURL, route, opts.Contracts.Response, authToken, refreshCookie); failure != nil {
 			result.Passed = false
 			result.Failures = append(result.Failures, *failure)
 		}
@@ -75,7 +89,7 @@ func Test(opts TestOptions) (TestResult, error) {
 	return result, nil
 }
 
-func probeRoute(client *http.Client, baseURL string, route Route, response ResponseContract, authToken string) *Failure {
+func probeRoute(client *http.Client, baseURL string, route Route, response ResponseContract, authToken string, refreshCookie *http.Cookie) *Failure {
 	probePath := route.Path
 	if route.SamplePath != "" {
 		probePath = route.SamplePath
@@ -91,6 +105,9 @@ func probeRoute(client *http.Client, baseURL string, route Route, response Respo
 	applyRequestSample(req, route.Request)
 	if routeNeedsAuth(route) && authToken != "" && req.Header.Get("Authorization") == "" {
 		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+	if routeNeedsRefreshCookie(route) && refreshCookie != nil && req.Header.Get("Cookie") == "" {
+		req.AddCookie(refreshCookie)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -181,6 +198,15 @@ func hasAuthenticatedRoute(routes []Route) bool {
 	return false
 }
 
+func needsRefreshCookie(routes []Route) bool {
+	for _, route := range routes {
+		if routeNeedsRefreshCookie(route) {
+			return true
+		}
+	}
+	return false
+}
+
 func hasLimitedNegativeRoute(routes []Route) bool {
 	for _, route := range routes {
 		if route.Auth == "limited" {
@@ -216,6 +242,10 @@ func negativeRouteAuthToken(client *http.Client, baseURL string, basePath string
 	}
 }
 
+func routeNeedsRefreshCookie(route Route) bool {
+	return strings.HasSuffix(strings.TrimRight(route.Path, "/"), "/auth/refresh")
+}
+
 func routeNeedsAuth(route Route) bool {
 	path := strings.TrimRight(route.Path, "/")
 	switch {
@@ -230,27 +260,27 @@ func routeNeedsAuth(route Route) bool {
 	}
 }
 
-func bootstrapAuthToken(client *http.Client, baseURL string, basePath string) (string, error) {
+func bootstrapAuthSession(client *http.Client, baseURL string, basePath string) (authBootstrap, error) {
 	if basePath == "" {
 		basePath = "/api/v1"
 	}
 	body := strings.NewReader(`{"username":"admin","password":"admin","uuid":"fixture-captcha","captcha":"1234"}`)
 	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(baseURL, "/")+strings.TrimRight(basePath, "/")+"/auth/login", body)
 	if err != nil {
-		return "", err
+		return authBootstrap{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return authBootstrap{}, err
 	}
 	defer resp.Body.Close()
 	payload, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return authBootstrap{}, err
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("contract auth bootstrap returned %d: %s", resp.StatusCode, previewResponseBody(payload))
+		return authBootstrap{}, fmt.Errorf("contract auth bootstrap returned %d: %s", resp.StatusCode, previewResponseBody(payload))
 	}
 	var decoded struct {
 		Data struct {
@@ -258,12 +288,24 @@ func bootstrapAuthToken(client *http.Client, baseURL string, basePath string) (s
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(payload, &decoded); err != nil {
-		return "", fmt.Errorf("decode contract auth bootstrap: %w", err)
+		return authBootstrap{}, fmt.Errorf("decode contract auth bootstrap: %w", err)
 	}
 	if decoded.Data.AccessToken == "" {
-		return "", fmt.Errorf("contract auth bootstrap missing access_token")
+		return authBootstrap{}, fmt.Errorf("contract auth bootstrap missing access_token")
 	}
-	return decoded.Data.AccessToken, nil
+	return authBootstrap{
+		AccessToken:   decoded.Data.AccessToken,
+		RefreshCookie: findCookie(resp.Cookies(), "fba_refresh_token"),
+	}, nil
+}
+
+func findCookie(cookies []*http.Cookie, name string) *http.Cookie {
+	for _, cookie := range cookies {
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+	return nil
 }
 
 func bootstrapLimitedAuthToken(client *http.Client, baseURL string, basePath string, adminToken string) (string, error) {
