@@ -41,7 +41,7 @@ func RoleRoutes(h Handler) []plugin.Route {
 		plugin.POST("/sys/roles", "Create role", h.CreateRole, plugin.Auth(), plugin.Perm("sys:role:add")),
 		plugin.PUT("/sys/roles/:pk", "Update role", h.UpdateRole, plugin.Auth(), plugin.Perm("sys:role:edit")),
 		plugin.PUT("/sys/roles/:pk/menus", "Update role menus", h.UpdateRoleMenus, plugin.Auth(), plugin.Perm("sys:role:menu:edit")),
-		plugin.PUT("/sys/roles/:pk/scopes", "Update role scopes", h.UpdateRoleScopes, plugin.Auth()),
+		plugin.PUT("/sys/roles/:pk/scopes", "Update role scopes", h.UpdateRoleScopes, plugin.Auth(), plugin.Perm("sys:role:scope:edit")),
 		plugin.DELETE("/sys/roles", "Delete roles", h.DeleteRoles, plugin.Auth(), plugin.Perm("sys:role:del")),
 	}
 }
@@ -61,9 +61,9 @@ func DeptRoutes(h Handler) []plugin.Route {
 	return []plugin.Route{
 		plugin.GET("/sys/depts/:pk", "Get dept", h.GetDept, plugin.Auth()),
 		plugin.GET("/sys/depts", "List depts", h.ListDepts, plugin.Auth()),
-		plugin.POST("/sys/depts", "Create dept", h.CreateDept, plugin.Auth()),
-		plugin.PUT("/sys/depts/:pk", "Update dept", h.UpdateDept, plugin.Auth()),
-		plugin.DELETE("/sys/depts/:pk", "Delete dept", h.DeleteDept, plugin.Auth()),
+		plugin.POST("/sys/depts", "Create dept", h.CreateDept, plugin.Auth(), plugin.Perm("sys:dept:add")),
+		plugin.PUT("/sys/depts/:pk", "Update dept", h.UpdateDept, plugin.Auth(), plugin.Perm("sys:dept:edit")),
+		plugin.DELETE("/sys/depts/:pk", "Delete dept", h.DeleteDept, plugin.Auth(), plugin.Perm("sys:dept:del")),
 	}
 }
 
