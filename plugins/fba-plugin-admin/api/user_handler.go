@@ -18,9 +18,17 @@ func (h Handler) CurrentUser(c fiber.Ctx) error {
 }
 
 func currentUserID(c fiber.Ctx) int {
-	user, ok := c.Locals(plugin.CurrentUserLocalKey).(*rbac.CurrentUser)
-	if !ok || user == nil || user.ID <= 0 {
+	user := currentUser(c)
+	if user == nil || user.ID <= 0 {
 		return defaultCurrentUserID
 	}
 	return int(user.ID)
+}
+
+func currentUser(c fiber.Ctx) *rbac.CurrentUser {
+	user, ok := c.Locals(plugin.CurrentUserLocalKey).(*rbac.CurrentUser)
+	if !ok {
+		return nil
+	}
+	return user
 }

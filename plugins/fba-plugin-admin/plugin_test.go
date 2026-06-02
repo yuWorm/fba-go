@@ -524,6 +524,76 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	}
 }
 
+func TestAdminRuntimeDeptTreeAppliesPythonDataPermission(t *testing.T) {
+	app := newAdminRuntimeApp(t)
+	adminToken := loginForAccessToken(t, app, "admin", "admin")
+
+	resp, body := requestJSONAuth(t, app, "POST", "/api/v1/sys/depts", `{"name":"Platform","parent_id":1,"sort":1,"leader":"Alex","phone":"13900000000","email":"platform@example.com","status":1}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/depts", `{"name":"ExternalRoot","parent_id":null,"sort":2,"leader":"Lee","phone":"13600000000","email":"external@example.com","status":1}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/data-rules", `{"name":"OwnDeptChildren","model":"dept","column":"parent_id","operator":0,"expression":0,"value":"${dept_id}"}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/data-rules?name=OwnDeptChildren", "", adminToken)
+	assertStatusOK(t, resp)
+	rulePage := assertEnvelopeMap(t, body)
+	ruleItems := assertSlice(t, rulePage["items"])
+	if len(ruleItems) != 1 {
+		t.Fatalf("data rule items = %d, want 1", len(ruleItems))
+	}
+	ruleID := int(assertMap(t, ruleItems[0])["id"].(float64))
+
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/data-scopes", `{"name":"OwnDeptScope","status":1}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/data-scopes?name=OwnDeptScope", "", adminToken)
+	assertStatusOK(t, resp)
+	scopePage := assertEnvelopeMap(t, body)
+	scopeItems := assertSlice(t, scopePage["items"])
+	if len(scopeItems) != 1 {
+		t.Fatalf("data scope items = %d, want 1", len(scopeItems))
+	}
+	scopeID := int(assertMap(t, scopeItems[0])["id"].(float64))
+	resp, body = requestJSONAuth(t, app, "PUT", "/api/v1/sys/data-scopes/"+itoa(scopeID)+"/rules", `{"rules":[`+itoa(ruleID)+`]}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"DeptLimited","status":1,"is_filter_scopes":true,"remark":null}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/roles?name=DeptLimited", "", adminToken)
+	assertStatusOK(t, resp)
+	rolePage := assertEnvelopeMap(t, body)
+	roleItems := assertSlice(t, rolePage["items"])
+	if len(roleItems) != 1 {
+		t.Fatalf("role items = %d, want 1", len(roleItems))
+	}
+	roleID := int(assertMap(t, roleItems[0])["id"].(float64))
+	resp, body = requestJSONAuth(t, app, "PUT", "/api/v1/sys/roles/"+itoa(roleID)+"/scopes", `{"scopes":[`+itoa(scopeID)+`]}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/users", `{"username":"dept_limited","password":"secret","nickname":"Dept Limited","email":null,"phone":null,"dept_id":1,"roles":[`+itoa(roleID)+`]}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+	limitedToken := loginForAccessToken(t, app, "dept_limited", "secret")
+
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/depts", "", limitedToken)
+	assertStatusOK(t, resp)
+	tree := assertEnvelopeSlice(t, body)
+	platform := findNodeInTree(t, tree, "Platform")
+	if platform["parent_id"] != float64(1) {
+		t.Fatalf("Platform parent_id = %v, want 1", platform["parent_id"])
+	}
+	if _, ok := findNodeInTreeValue(t, tree, "ExternalRoot"); ok {
+		t.Fatalf("ExternalRoot is visible in data-filtered dept tree: %v", tree)
+	}
+}
+
 func TestAdminRuntimeSwaggerTokenAuthorizesRoutes(t *testing.T) {
 	app := newAdminRuntimeApp(t)
 
@@ -1656,6 +1726,15 @@ func assertMap(t *testing.T, value any) map[string]any {
 	got, ok := value.(map[string]any)
 	if !ok {
 		t.Fatalf("value = %T, want JSON object", value)
+	}
+	return got
+}
+
+func assertSlice(t *testing.T, value any) []any {
+	t.Helper()
+	got, ok := value.([]any)
+	if !ok {
+		t.Fatalf("value = %T, want JSON array", value)
 	}
 	return got
 }

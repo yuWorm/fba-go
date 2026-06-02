@@ -153,9 +153,15 @@ func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*
 	if err != nil {
 		return nil, err
 	}
+	var deptID *int64
+	if user.DeptID != nil {
+		value := int64(*user.DeptID)
+		deptID = &value
+	}
 	return &rbac.CurrentUser{
 		ID:           int64(user.ID),
 		Username:     user.Username,
+		DeptID:       deptID,
 		IsSuperAdmin: user.IsSuperuser,
 		IsStaff:      user.IsStaff,
 		Roles:        roles,
@@ -332,10 +338,11 @@ func (s *AuthService) currentUserRoles(ctx context.Context, userID int) ([]rbac.
 			return nil, err
 		}
 		out = append(out, rbac.Role{
-			ID:          int64(role.ID),
-			Code:        role.Name,
-			Enabled:     role.Status == 1,
-			Permissions: permissionsFromMenus(menus),
+			ID:             int64(role.ID),
+			Code:           role.Name,
+			Enabled:        role.Status == 1,
+			IsFilterScopes: role.IsFilterScopes,
+			Permissions:    permissionsFromMenus(menus),
 		})
 	}
 	return out, nil

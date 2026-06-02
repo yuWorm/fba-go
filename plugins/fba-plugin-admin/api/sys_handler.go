@@ -351,12 +351,12 @@ func (h Handler) GetDept(c fiber.Ctx) error {
 }
 
 func (h Handler) ListDepts(c fiber.Ctx) error {
-	depts, err := h.depts.Tree(c.RequestCtx(), repo.DeptFilter{
+	depts, err := h.depts.TreeForUser(c.RequestCtx(), repo.DeptFilter{
 		Name:   c.Query("name"),
 		Leader: c.Query("leader"),
 		Phone:  c.Query("phone"),
 		Status: intPtrQuery(c, "status"),
-	})
+	}, currentUser(c))
 	if err != nil {
 		return err
 	}
