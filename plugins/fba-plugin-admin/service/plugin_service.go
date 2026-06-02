@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	stderrors "errors"
+	"net/http"
 	"net/url"
 	"path"
 	"strings"
 
+	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/repo"
 )
@@ -34,6 +37,13 @@ func (s *PluginService) Changed(ctx context.Context) (bool, error) {
 }
 
 func (s *PluginService) Install(ctx context.Context, pluginType string, repoURL string) error {
+	if pluginType == "zip" {
+		// The Go compatibility host does not accept multipart plugin uploads yet; preserve Python's empty-file guard.
+		return pluginBadRequest("ZIP 压缩包不能为空", nil)
+	}
+	if repoURL == "" {
+		return pluginBadRequest("Git 仓库地址不能为空", nil)
+	}
 	_, err := s.repo.InstallPlugin(ctx, dto.PluginInstallParam{
 		Type:    pluginType,
 		RepoURL: repoURL,
@@ -43,19 +53,42 @@ func (s *PluginService) Install(ctx context.Context, pluginType string, repoURL 
 }
 
 func (s *PluginService) Uninstall(ctx context.Context, name string) error {
-	return s.repo.UninstallPlugin(ctx, name)
+	if err := s.repo.UninstallPlugin(ctx, name); err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return pluginNotFound("插件不存在", err)
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *PluginService) ToggleStatus(ctx context.Context, name string) error {
-	return s.repo.TogglePluginStatus(ctx, name)
+	if err := s.repo.TogglePluginStatus(ctx, name); err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return pluginNotFound("插件不存在", err)
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *PluginService) Download(ctx context.Context, name string) (string, error) {
 	item, err := s.repo.GetPlugin(ctx, name)
 	if err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return "", pluginNotFound("插件不存在", err)
+		}
 		return "", err
 	}
 	return "plugin " + item.ID + " package", nil
+}
+
+func pluginBadRequest(message string, cause error) error {
+	return fbaerrors.New(http.StatusBadRequest, http.StatusBadRequest, message, cause)
+}
+
+func pluginNotFound(message string, cause error) error {
+	return fbaerrors.New(http.StatusNotFound, http.StatusNotFound, message, cause)
 }
 
 func pluginNameFromRepoURL(raw string) string {

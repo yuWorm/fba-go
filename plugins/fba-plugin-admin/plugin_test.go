@@ -893,6 +893,25 @@ func TestPluginEndpointsAreStatefulAndPythonCompatible(t *testing.T) {
 	}
 }
 
+func TestPluginEndpointsApplyPythonGuards(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/plugins?type=git", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "Git 仓库地址不能为空")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/plugins?type=zip", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "ZIP 压缩包不能为空")
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/plugins/missing", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "插件不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/plugins/missing/status", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "插件不存在")
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/plugins/missing", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "插件不存在")
+}
+
 func TestLogEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	app := newAdminApp(t)
 
