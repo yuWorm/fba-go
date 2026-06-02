@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	stderrors "errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -122,6 +123,16 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (dto.Acc
 	userID, sessionUUID, ok := parseToken(refreshToken, "refresh")
 	if !ok {
 		return dto.AccessTokenBase{}, "", refreshRequestError("Refresh Token 已过期，请重新登录")
+	}
+	user, err := s.repo.GetUser(ctx, userID)
+	if err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return dto.AccessTokenBase{}, "", refreshNotFoundError("用户不存在", err)
+		}
+		return dto.AccessTokenBase{}, "", err
+	}
+	if user.Status != 1 {
+		return dto.AccessTokenBase{}, "", refreshForbiddenError("用户已被锁定, 请联系统管理员")
 	}
 	session, err := s.repo.GetSession(ctx, userID, sessionUUID)
 	if err != nil {
@@ -447,4 +458,12 @@ func authError(message string) error {
 
 func refreshRequestError(message string) error {
 	return fbaerrors.New(http.StatusBadRequest, http.StatusBadRequest, message, nil)
+}
+
+func refreshNotFoundError(message string, cause error) error {
+	return fbaerrors.New(http.StatusNotFound, http.StatusNotFound, message, cause)
+}
+
+func refreshForbiddenError(message string) error {
+	return fbaerrors.New(http.StatusForbidden, http.StatusForbidden, message, nil)
 }

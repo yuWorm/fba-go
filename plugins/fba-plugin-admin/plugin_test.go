@@ -701,6 +701,32 @@ func TestRefreshRejectsMissingCookieLikePython(t *testing.T) {
 	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "Refresh Token 已过期，请重新登录")
 }
 
+func TestRefreshRejectsLockedUserLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"refresh_locked","password":"secret","nickname":"Refresh Locked","email":null,"phone":null,"dept_id":1,"roles":[1]}`)
+	assertStatusOK(t, resp)
+	user := assertEnvelopeMap(t, body)
+	userID := int(user["id"].(float64))
+	refreshCookie := loginForRefreshCookie(t, app, "refresh_locked", "secret")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/"+itoa(userID)+"/permissions?type=status", "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	req := httptest.NewRequest("POST", "/api/v1/auth/refresh", nil)
+	req.AddCookie(refreshCookie)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("POST /auth/refresh locked user error = %v", err)
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode locked refresh body: %v", err)
+	}
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户已被锁定, 请联系统管理员")
+}
+
 func TestCurrentUserMatchesPythonSchema(t *testing.T) {
 	app := newAdminApp(t)
 	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/users/me", "")
