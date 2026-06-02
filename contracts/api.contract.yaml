@@ -281,7 +281,7 @@ priority_routes:
     permission: sys:file:upload
     request:
       content_type: multipart/form-data; boundary=fba-contract
-      body: "--fba-contract\r\nContent-Disposition: form-data; name=\"file\"; filename=\"contract.txt\"\r\nContent-Type: text/plain\r\n\r\ncontract\r\n--fba-contract--\r\n"
+      body: "--fba-contract\r\nContent-Disposition: form-data; name=\"file\"; filename=\"contract.png\"\r\nContent-Type: image/png\r\n\r\ncontract\r\n--fba-contract--\r\n"
   - method: GET
     path: /api/v1/sys/plugins
     owner: plugin:admin

@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -147,7 +148,7 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		}
 	}
 
-	uploadBody := "--fba-contract\r\nContent-Disposition: form-data; name=\"file\"; filename=\"contract.txt\"\r\nContent-Type: text/plain\r\n\r\ncontract\r\n--fba-contract--\r\n"
+	uploadBody := "--fba-contract\r\nContent-Disposition: form-data; name=\"file\"; filename=\"contract.png\"\r\nContent-Type: image/png\r\n\r\ncontract\r\n--fba-contract--\r\n"
 	req := httptest.NewRequest("POST", "/api/v1/sys/files/upload", strings.NewReader(uploadBody))
 	req.Header.Set("Content-Type", "multipart/form-data; boundary=fba-contract")
 	resp, err := app.Test(req)
@@ -1010,7 +1011,7 @@ func TestLogDeleteMissingReturnsPythonBusinessFailure(t *testing.T) {
 func TestUploadFileUsesMultipartFilenameLikePython(t *testing.T) {
 	app := newAdminApp(t)
 
-	uploadBody := "--fba-upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audit.txt\"\r\nContent-Type: text/plain\r\n\r\nhello\r\n--fba-upload--\r\n"
+	uploadBody := "--fba-upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audit.png\"\r\nContent-Type: image/png\r\n\r\nhello\r\n--fba-upload--\r\n"
 	req := httptest.NewRequest("POST", "/api/v1/sys/files/upload", strings.NewReader(uploadBody))
 	req.Header.Set("Content-Type", "multipart/form-data; boundary=fba-upload")
 	resp, err := app.Test(req)
@@ -1024,9 +1025,27 @@ func TestUploadFileUsesMultipartFilenameLikePython(t *testing.T) {
 		t.Fatalf("decode upload body: %v", err)
 	}
 	data := assertEnvelopeMap(t, body)
-	if data["url"] != "/static/upload/audit.txt" {
-		t.Fatalf("upload url = %v, want /static/upload/audit.txt", data["url"])
+	url, ok := data["url"].(string)
+	if !ok {
+		t.Fatalf("upload url = %T, want string", data["url"])
 	}
+	if !regexp.MustCompile(`^/static/upload/audit_\d+\.png$`).MatchString(url) {
+		t.Fatalf("upload url = %v, want Python timestamped png path", data["url"])
+	}
+
+	uploadBody = "--fba-upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audit.txt\"\r\nContent-Type: text/plain\r\n\r\nhello\r\n--fba-upload--\r\n"
+	req = httptest.NewRequest("POST", "/api/v1/sys/files/upload", strings.NewReader(uploadBody))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=fba-upload")
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("POST /sys/files/upload(txt) error = %v", err)
+	}
+	defer resp.Body.Close()
+	body = map[string]any{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode upload txt body: %v", err)
+	}
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "此文件格式 txt 暂不支持")
 }
 
 func TestMonitorEndpointsUseServiceData(t *testing.T) {

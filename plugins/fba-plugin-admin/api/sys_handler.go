@@ -593,7 +593,7 @@ func (h Handler) UploadFile(c fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "file is required")
 	}
-	uploaded, err := h.files.Upload(c.RequestCtx(), file.Filename)
+	uploaded, err := h.files.Upload(c.RequestCtx(), file.Filename, file.Size)
 	if err != nil {
 		return err
 	}
