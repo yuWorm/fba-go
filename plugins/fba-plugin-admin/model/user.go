@@ -16,6 +16,7 @@ type User struct {
 	IsSuperuser   bool       `gorm:"column:is_superuser"`
 	IsStaff       bool       `gorm:"column:is_staff"`
 	IsMultiLogin  bool       `gorm:"column:is_multi_login"`
+	Deleted       int        `gorm:"column:deleted;index"`
 	JoinTime      time.Time  `gorm:"column:join_time;autoCreateTime"`
 	LastLoginTime *time.Time `gorm:"column:last_login_time"`
 	DeletedTime   *time.Time `gorm:"column:deleted_time;index"`

@@ -127,18 +127,24 @@ func (r *GORMRepository) Seed(ctx context.Context) error {
 
 func (r *GORMRepository) GetUser(ctx context.Context, id int) (model.User, error) {
 	var item model.User
-	err := r.provider.Read().WithContext(ctx).First(&item, id).Error
+	err := r.provider.Read().WithContext(ctx).Where("id = ? AND deleted = ?", id, 0).First(&item).Error
 	return item, mapGORMError(err)
 }
 
 func (r *GORMRepository) GetUserByUsername(ctx context.Context, username string) (model.User, error) {
 	var item model.User
-	err := r.provider.Read().WithContext(ctx).Where("username = ?", username).First(&item).Error
+	err := r.provider.Read().WithContext(ctx).Where("username = ? AND deleted = ?", username, 0).First(&item).Error
+	return item, mapGORMError(err)
+}
+
+func (r *GORMRepository) GetUserByEmail(ctx context.Context, email string) (model.User, error) {
+	var item model.User
+	err := r.provider.Read().WithContext(ctx).Where("email = ? AND deleted = ?", email, 0).First(&item).Error
 	return item, mapGORMError(err)
 }
 
 func (r *GORMRepository) ListUsers(ctx context.Context, filter UserFilter, page int, size int) ([]model.User, int64, error) {
-	query := r.provider.Read().WithContext(ctx).Model(&model.User{})
+	query := r.provider.Read().WithContext(ctx).Model(&model.User{}).Where("deleted = ?", 0)
 	if filter.Dept != nil {
 		query = query.Where("dept_id = ?", *filter.Dept)
 	}
@@ -177,6 +183,7 @@ func (r *GORMRepository) CreateUser(ctx context.Context, param dto.UserCreatePar
 		IsSuperuser:  false,
 		IsStaff:      false,
 		IsMultiLogin: false,
+		Deleted:      0,
 		JoinTime:     time.Now(),
 	}
 	err := r.provider.Write().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -198,7 +205,7 @@ func (r *GORMRepository) UpdateUser(ctx context.Context, id int, param dto.UserU
 		return err
 	}
 	return r.provider.Write().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&model.User{}).Where("id = ?", id).Updates(map[string]any{
+		result := tx.Model(&model.User{}).Where("id = ? AND deleted = ?", id, 0).Updates(map[string]any{
 			"dept_id":  param.DeptID,
 			"username": param.Username,
 			"nickname": param.Nickname,
@@ -259,7 +266,11 @@ func (r *GORMRepository) DeleteUser(ctx context.Context, id int) error {
 		if err := tx.Where("user_id = ?", id).Delete(&UserRole{}).Error; err != nil {
 			return err
 		}
-		return tx.Delete(&model.User{}, id).Error
+		result := tx.Model(&model.User{}).Where("id = ? AND deleted = ?", id, 0).Updates(map[string]any{
+			"deleted":      id,
+			"deleted_time": time.Now(),
+		})
+		return rowsError(result)
 	})
 }
 
@@ -560,7 +571,7 @@ func (r *GORMRepository) DeptHasChildren(ctx context.Context, id int) (bool, err
 
 func (r *GORMRepository) DeptHasUsers(ctx context.Context, id int) (bool, error) {
 	var count int64
-	if err := r.provider.Read().WithContext(ctx).Model(&model.User{}).Where("dept_id = ? AND deleted_time IS NULL", id).Count(&count).Error; err != nil {
+	if err := r.provider.Read().WithContext(ctx).Model(&model.User{}).Where("dept_id = ? AND deleted = ?", id, 0).Count(&count).Error; err != nil {
 		return false, err
 	}
 	return count > 0, nil
@@ -945,7 +956,7 @@ func setPluginChanged(tx *gorm.DB, changed bool) error {
 }
 
 func updateUserColumns(query *gorm.DB, id int, updates map[string]any) error {
-	result := query.Model(&model.User{}).Where("id = ?", id).Updates(updates)
+	result := query.Model(&model.User{}).Where("id = ? AND deleted = ?", id, 0).Updates(updates)
 	return rowsError(result)
 }
 

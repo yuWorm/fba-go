@@ -53,6 +53,7 @@ type SessionFilter struct {
 type Repository interface {
 	GetUser(ctx context.Context, id int) (model.User, error)
 	GetUserByUsername(ctx context.Context, username string) (model.User, error)
+	GetUserByEmail(ctx context.Context, email string) (model.User, error)
 	ListUsers(ctx context.Context, filter UserFilter, page int, size int) ([]model.User, int64, error)
 	CreateUser(ctx context.Context, param dto.UserCreateParam) (model.User, error)
 	UpdateUser(ctx context.Context, id int, param dto.UserUpdateParam) error

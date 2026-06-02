@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/model"
@@ -112,7 +113,7 @@ func (r *MemoryRepository) GetUser(_ context.Context, id int) (model.User, error
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, item := range r.users {
-		if item.ID == id {
+		if item.ID == id && item.Deleted == 0 {
 			return item, nil
 		}
 	}
@@ -123,7 +124,18 @@ func (r *MemoryRepository) GetUserByUsername(_ context.Context, username string)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, item := range r.users {
-		if item.Username == username {
+		if item.Username == username && item.Deleted == 0 {
+			return item, nil
+		}
+	}
+	return model.User{}, ErrNotFound
+}
+
+func (r *MemoryRepository) GetUserByEmail(_ context.Context, email string) (model.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.users {
+		if item.Email != nil && *item.Email == email && item.Deleted == 0 {
 			return item, nil
 		}
 	}
@@ -136,6 +148,9 @@ func (r *MemoryRepository) ListUsers(_ context.Context, filter UserFilter, page 
 
 	items := make([]model.User, 0, len(r.users))
 	for _, item := range r.users {
+		if item.Deleted != 0 {
+			continue
+		}
 		if filter.Dept != nil && (item.DeptID == nil || *item.DeptID != *filter.Dept) {
 			continue
 		}
@@ -184,6 +199,7 @@ func (r *MemoryRepository) CreateUser(_ context.Context, param dto.UserCreatePar
 		IsSuperuser:  false,
 		IsStaff:      false,
 		IsMultiLogin: false,
+		Deleted:      0,
 		JoinTime:     model.SeedData().Users[0].JoinTime,
 	}
 	r.users = append(r.users, user)
@@ -203,7 +219,7 @@ func (r *MemoryRepository) UpdateUser(_ context.Context, id int, param dto.UserU
 		}
 	}
 	for i := range r.users {
-		if r.users[i].ID == id {
+		if r.users[i].ID == id && r.users[i].Deleted == 0 {
 			r.users[i].DeptID = param.DeptID
 			r.users[i].Username = param.Username
 			r.users[i].Nickname = param.Nickname
@@ -221,7 +237,7 @@ func (r *MemoryRepository) UpdateUserNickname(_ context.Context, id int, nicknam
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.users {
-		if r.users[i].ID == id {
+		if r.users[i].ID == id && r.users[i].Deleted == 0 {
 			r.users[i].Nickname = nickname
 			return nil
 		}
@@ -233,7 +249,7 @@ func (r *MemoryRepository) UpdateUserAvatar(_ context.Context, id int, avatar *s
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.users {
-		if r.users[i].ID == id {
+		if r.users[i].ID == id && r.users[i].Deleted == 0 {
 			r.users[i].Avatar = avatar
 			return nil
 		}
@@ -245,7 +261,7 @@ func (r *MemoryRepository) UpdateUserEmail(_ context.Context, id int, email *str
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.users {
-		if r.users[i].ID == id {
+		if r.users[i].ID == id && r.users[i].Deleted == 0 {
 			r.users[i].Email = email
 			return nil
 		}
@@ -257,7 +273,7 @@ func (r *MemoryRepository) ResetUserPassword(_ context.Context, id int, password
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.users {
-		if r.users[i].ID == id {
+		if r.users[i].ID == id && r.users[i].Deleted == 0 {
 			r.users[i].Password = password
 			return nil
 		}
@@ -269,7 +285,7 @@ func (r *MemoryRepository) UpdateUserPermission(_ context.Context, id int, permi
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.users {
-		if r.users[i].ID == id {
+		if r.users[i].ID == id && r.users[i].Deleted == 0 {
 			switch permissionType {
 			case "superuser":
 				r.users[i].IsSuperuser = !r.users[i].IsSuperuser
@@ -295,9 +311,16 @@ func (r *MemoryRepository) UpdateUserPermission(_ context.Context, id int, permi
 func (r *MemoryRepository) DeleteUser(_ context.Context, id int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.users = deleteByIDs(r.users, []int{id}, func(item model.User) int { return item.ID })
-	delete(r.userRoles, id)
-	return nil
+	for i := range r.users {
+		if r.users[i].ID == id && r.users[i].Deleted == 0 {
+			now := time.Now()
+			r.users[i].Deleted = id
+			r.users[i].DeletedTime = &now
+			delete(r.userRoles, id)
+			return nil
+		}
+	}
+	return ErrNotFound
 }
 
 func (r *MemoryRepository) UserRoles(_ context.Context, userID int) ([]model.Role, error) {
@@ -652,7 +675,7 @@ func (r *MemoryRepository) DeptHasUsers(_ context.Context, id int) (bool, error)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, item := range r.users {
-		if item.DeptID != nil && *item.DeptID == id && item.DeletedTime == nil {
+		if item.DeptID != nil && *item.DeptID == id && item.Deleted == 0 {
 			return true, nil
 		}
 	}
@@ -1292,7 +1315,7 @@ func hasMenu(items []model.Menu, id int) bool {
 
 func hasUser(items []model.User, id int) bool {
 	for _, item := range items {
-		if item.ID == id {
+		if item.ID == id && item.Deleted == 0 {
 			return true
 		}
 	}

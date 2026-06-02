@@ -100,7 +100,7 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		{"PUT", "/api/v1/sys/users/me/nickname", `{"nickname":"Admin"}`},
 		{"PUT", "/api/v1/sys/users/me/avatar", `{"avatar":"https://example.invalid/avatar.png"}`},
 		{"PUT", "/api/v1/sys/users/me/email", `{"captcha":"123456","email":"admin@example.com"}`},
-		{"DELETE", "/api/v1/sys/users/999999", ""},
+		{"DELETE", "/api/v1/sys/users/2", ""},
 		{"POST", "/api/v1/sys/roles", `{"name":"Contract Role","status":1,"is_filter_scopes":true,"remark":null}`},
 		{"PUT", "/api/v1/sys/roles/1", `{"name":"admin","status":1,"is_filter_scopes":true,"remark":null}`},
 		{"PUT", "/api/v1/sys/roles/1/menus", `{"menus":[1]}`},
@@ -716,6 +716,69 @@ func TestUserEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	if !ok || len(items) != 0 {
 		t.Fatalf("deleted user items = %T len %d, want empty list", page["items"], len(items))
 	}
+}
+
+func TestUserEndpointsApplyPythonCRUDGuards(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"guard_a","password":"secret","nickname":null,"email":"guard-a@example.com","phone":null,"dept_id":1,"roles":[1]}`)
+	assertStatusOK(t, resp)
+	guardA := assertEnvelopeMap(t, body)
+	guardAID := int(guardA["id"].(float64))
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"guard_a","password":"secret","nickname":null,"email":"guard-a-copy@example.com","phone":null,"dept_id":1,"roles":[1]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "用户名已注册")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"guard_email","password":"secret","nickname":null,"email":"guard-a@example.com","phone":null,"dept_id":1,"roles":[1]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "邮箱已被绑定")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"guard_empty_password","password":"","nickname":null,"email":null,"phone":null,"dept_id":1,"roles":[1]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "密码不允许为空")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"guard_missing_dept","password":"secret","nickname":null,"email":null,"phone":null,"dept_id":999999,"roles":[1]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "部门不存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"guard_missing_role","password":"secret","nickname":null,"email":null,"phone":null,"dept_id":1,"roles":[999999]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "角色不存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"guard_b","password":"secret","nickname":"Guard B","email":"guard-b@example.com","phone":null,"dept_id":1,"roles":[1]}`)
+	assertStatusOK(t, resp)
+	guardB := assertEnvelopeMap(t, body)
+	guardBID := int(guardB["id"].(float64))
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/999999", `{"dept_id":1,"username":"missing","nickname":"Missing","avatar":null,"email":null,"phone":null,"roles":[1]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "用户不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/"+itoa(guardBID), `{"dept_id":1,"username":"guard_a","nickname":"Guard B","avatar":null,"email":"guard-b@example.com","phone":null,"roles":[1]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "用户名已注册")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/"+itoa(guardBID), `{"dept_id":1,"username":"guard_b","nickname":"Guard B","avatar":null,"email":"guard-a@example.com","phone":null,"roles":[1]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "邮箱已被绑定")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/"+itoa(guardBID), `{"dept_id":999999,"username":"guard_b","nickname":"Guard B","avatar":null,"email":"guard-b@example.com","phone":null,"roles":[1]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "部门不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/"+itoa(guardBID), `{"dept_id":1,"username":"guard_b","nickname":"Guard B","avatar":null,"email":"guard-b@example.com","phone":null,"roles":[999999]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "角色不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/999999/permissions?type=status", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "用户不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/1/permissions?type=status", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "禁止修改自身权限")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/"+itoa(guardBID)+"/permissions?type=missing", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "权限类型不存在")
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/users/999999", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "用户不存在")
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/users/"+itoa(guardAID), "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"guard_a","password":"secret","nickname":null,"email":"guard-a@example.com","phone":null,"dept_id":1,"roles":[1]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
 }
 
 func TestCurrentUserProfileEndpointsAreStateful(t *testing.T) {

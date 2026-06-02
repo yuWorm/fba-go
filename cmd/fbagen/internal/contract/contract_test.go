@@ -231,7 +231,7 @@ func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 		{"PUT", "/api/v1/sys/users/me/nickname", "", true, ""},
 		{"PUT", "/api/v1/sys/users/me/avatar", "", true, ""},
 		{"PUT", "/api/v1/sys/users/me/email", "", true, ""},
-		{"DELETE", "/api/v1/sys/users/{pk}", "/api/v1/sys/users/999999", false, "sys:user:del"},
+		{"DELETE", "/api/v1/sys/users/{pk}", "/api/v1/sys/users/3", false, "sys:user:del"},
 		{"POST", "/api/v1/sys/roles", "", true, "sys:role:add"},
 		{"PUT", "/api/v1/sys/roles/{pk}", "/api/v1/sys/roles/1", true, "sys:role:edit"},
 		{"PUT", "/api/v1/sys/roles/{pk}/menus", "/api/v1/sys/roles/1/menus", true, "sys:role:menu:edit"},

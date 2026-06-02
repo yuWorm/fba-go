@@ -93,7 +93,7 @@ priority_routes:
       body: '{"captcha":"123456","email":"admin@example.com"}'
   - method: DELETE
     path: /api/v1/sys/users/{pk}
-    sample_path: /api/v1/sys/users/999999
+    sample_path: /api/v1/sys/users/3
     owner: plugin:admin
     permission: sys:user:del
   - method: GET

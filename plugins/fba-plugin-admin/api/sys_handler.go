@@ -79,7 +79,7 @@ func (h Handler) UpdateUserPermission(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.users.UpdatePermission(c.RequestCtx(), id, c.Query("type")); err != nil {
+	if err := h.users.UpdatePermission(c.RequestCtx(), id, c.Query("type"), currentUserID(c)); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
