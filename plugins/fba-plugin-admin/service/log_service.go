@@ -29,7 +29,7 @@ func (s *LogService) ListLogin(ctx context.Context, filter repo.LogFilter, page 
 	return pagination.NewPageData(dto.LoginLogsFromModel(items), total, page, size, basePath), nil
 }
 
-func (s *LogService) DeleteLogin(ctx context.Context, ids []int) error {
+func (s *LogService) DeleteLogin(ctx context.Context, ids []int) (int, error) {
 	return s.repo.DeleteLoginLogs(ctx, ids)
 }
 
@@ -45,7 +45,7 @@ func (s *LogService) ListOpera(ctx context.Context, filter repo.LogFilter, page 
 	return pagination.NewPageData(dto.OperaLogsFromModel(items), total, page, size, basePath), nil
 }
 
-func (s *LogService) DeleteOpera(ctx context.Context, ids []int) error {
+func (s *LogService) DeleteOpera(ctx context.Context, ids []int) (int, error) {
 	return s.repo.DeleteOperaLogs(ctx, ids)
 }
 

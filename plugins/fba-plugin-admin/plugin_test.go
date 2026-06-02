@@ -122,9 +122,9 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		{"POST", "/api/v1/sys/plugins?type=git&repo_url=https://example.invalid/plugin.git", ""},
 		{"DELETE", "/api/v1/sys/plugins/dict", ""},
 		{"PUT", "/api/v1/sys/plugins/dict/status", ""},
-		{"DELETE", "/api/v1/logs/login", `{"pks":[999999]}`},
+		{"DELETE", "/api/v1/logs/login", `{"pks":[1]}`},
 		{"DELETE", "/api/v1/logs/login/all", ""},
-		{"DELETE", "/api/v1/logs/opera", `{"pks":[999999]}`},
+		{"DELETE", "/api/v1/logs/opera", `{"pks":[1]}`},
 		{"DELETE", "/api/v1/logs/opera/all", ""},
 		{"DELETE", "/api/v1/monitors/sessions/1?session_uuid=fixture-session", ""},
 	} {
@@ -966,6 +966,18 @@ func TestLogEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	if !ok || len(items) != 0 {
 		t.Fatalf("deleted opera log items = %T len %d, want empty list", page["items"], len(items))
 	}
+}
+
+func TestLogDeleteMissingReturnsPythonBusinessFailure(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "DELETE", "/api/v1/logs/login", `{"pks":[999999]}`)
+	assertStatusOK(t, resp)
+	assertBusinessFailEnvelope(t, body)
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/logs/opera", `{"pks":[999999]}`)
+	assertStatusOK(t, resp)
+	assertBusinessFailEnvelope(t, body)
 }
 
 func TestUploadFileUsesMultipartFilenameLikePython(t *testing.T) {
@@ -1983,6 +1995,19 @@ func assertEnvelopeNil(t *testing.T, body map[string]any) {
 	}
 	if body["msg"] != "请求成功" {
 		t.Fatalf("msg = %v, want 请求成功", body["msg"])
+	}
+	if body["data"] != nil {
+		t.Fatalf("data = %v, want nil", body["data"])
+	}
+}
+
+func assertBusinessFailEnvelope(t *testing.T, body map[string]any) {
+	t.Helper()
+	if body["code"] != float64(400) {
+		t.Fatalf("code = %v, want 400; body = %v", body["code"], body)
+	}
+	if body["msg"] != "请求错误" {
+		t.Fatalf("msg = %v, want 请求错误", body["msg"])
 	}
 	if body["data"] != nil {
 		t.Fatalf("data = %v, want nil", body["data"])

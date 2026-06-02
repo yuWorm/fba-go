@@ -182,8 +182,12 @@ func TestGORMRepositoryPersistsLogs(t *testing.T) {
 	if total != 1 || len(loginLogs) != 1 || loginLogs[0].Username != "admin" {
 		t.Fatalf("login logs = total:%d items:%+v, want admin fixture", total, loginLogs)
 	}
-	if err := repository.DeleteLoginLogs(ctx, []int{loginLogs[0].ID}); err != nil {
+	deleted, err := repository.DeleteLoginLogs(ctx, []int{loginLogs[0].ID})
+	if err != nil {
 		t.Fatalf("DeleteLoginLogs() error = %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("DeleteLoginLogs() deleted = %d, want 1", deleted)
 	}
 	nextRepository := repo.NewGORMRepository(provider, repo.SeedData())
 	_, total, err = nextRepository.ListLoginLogs(ctx, repo.LogFilter{}, 1, 20)

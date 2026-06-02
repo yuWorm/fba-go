@@ -1047,11 +1047,12 @@ func (r *MemoryRepository) ListLoginLogs(_ context.Context, filter LogFilter, pa
 	return pageSlice(items, page, size), int64(len(items)), nil
 }
 
-func (r *MemoryRepository) DeleteLoginLogs(_ context.Context, ids []int) error {
+func (r *MemoryRepository) DeleteLoginLogs(_ context.Context, ids []int) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	before := len(r.loginLogs)
 	r.loginLogs = deleteByIDs(r.loginLogs, ids, func(item model.LoginLog) int { return item.ID })
-	return nil
+	return before - len(r.loginLogs), nil
 }
 
 func (r *MemoryRepository) DeleteAllLoginLogs(context.Context) error {
@@ -1080,11 +1081,12 @@ func (r *MemoryRepository) ListOperaLogs(_ context.Context, filter LogFilter, pa
 	return pageSlice(items, page, size), int64(len(items)), nil
 }
 
-func (r *MemoryRepository) DeleteOperaLogs(_ context.Context, ids []int) error {
+func (r *MemoryRepository) DeleteOperaLogs(_ context.Context, ids []int) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	before := len(r.operaLogs)
 	r.operaLogs = deleteByIDs(r.operaLogs, ids, func(item model.OperaLog) int { return item.ID })
-	return nil
+	return before - len(r.operaLogs), nil
 }
 
 func (r *MemoryRepository) DeleteAllOperaLogs(context.Context) error {

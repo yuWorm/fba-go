@@ -118,10 +118,10 @@ type Repository interface {
 	TogglePluginStatus(ctx context.Context, id string) error
 	PluginsChanged(ctx context.Context) (bool, error)
 	ListLoginLogs(ctx context.Context, filter LogFilter, page int, size int) ([]model.LoginLog, int64, error)
-	DeleteLoginLogs(ctx context.Context, ids []int) error
+	DeleteLoginLogs(ctx context.Context, ids []int) (int, error)
 	DeleteAllLoginLogs(ctx context.Context) error
 	ListOperaLogs(ctx context.Context, filter LogFilter, page int, size int) ([]model.OperaLog, int64, error)
-	DeleteOperaLogs(ctx context.Context, ids []int) error
+	DeleteOperaLogs(ctx context.Context, ids []int) (int, error)
 	DeleteAllOperaLogs(ctx context.Context) error
 	ListSessions(ctx context.Context, filter SessionFilter) ([]model.Session, error)
 	GetSession(ctx context.Context, userID int, sessionUUID string) (model.Session, error)

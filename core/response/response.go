@@ -21,6 +21,14 @@ func Success[T any](data T) Response[T] {
 	}
 }
 
+func Fail[T any](data T) Response[T] {
+	return Response[T]{
+		Code: 400,
+		Msg:  "请求错误",
+		Data: data,
+	}
+}
+
 func Error(code int, msg string, traceID string) ErrorResponse {
 	return ErrorResponse{
 		Code:    code,

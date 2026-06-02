@@ -663,8 +663,13 @@ func (h Handler) DeleteLoginLogs(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.logs.DeleteLogin(c.RequestCtx(), param.PKs); err != nil {
+	count, err := h.logs.DeleteLogin(c.RequestCtx(), param.PKs)
+	if err != nil {
 		return err
+	}
+	// Python returns a business failure envelope, not an HTTP error, when no log rows are deleted.
+	if count == 0 {
+		return c.JSON(response.Fail[any](nil))
 	}
 	return c.JSON(response.Success[any](nil))
 }
@@ -694,8 +699,13 @@ func (h Handler) DeleteOperaLogs(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.logs.DeleteOpera(c.RequestCtx(), param.PKs); err != nil {
+	count, err := h.logs.DeleteOpera(c.RequestCtx(), param.PKs)
+	if err != nil {
 		return err
+	}
+	// Python returns a business failure envelope, not an HTTP error, when no log rows are deleted.
+	if count == 0 {
+		return c.JSON(response.Fail[any](nil))
 	}
 	return c.JSON(response.Success[any](nil))
 }

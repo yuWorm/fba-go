@@ -313,7 +313,7 @@ priority_routes:
     owner: plugin:admin
     permission: log:login:del
     request:
-      body: '{"pks":[999999]}'
+      body: '{"pks":[1]}'
   - method: DELETE
     path: /api/v1/logs/login/all
     owner: plugin:admin
@@ -326,7 +326,7 @@ priority_routes:
     owner: plugin:admin
     permission: log:opera:del
     request:
-      body: '{"pks":[999999]}'
+      body: '{"pks":[1]}'
   - method: DELETE
     path: /api/v1/logs/opera/all
     owner: plugin:admin

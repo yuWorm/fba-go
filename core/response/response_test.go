@@ -19,6 +19,18 @@ func TestSuccessMarshalsCompatibleEnvelopeWithNullData(t *testing.T) {
 	}
 }
 
+func TestFailMarshalsCompatibleBusinessFailureEnvelope(t *testing.T) {
+	got, err := json.Marshal(response.Fail[any](nil))
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	const want = `{"code":400,"msg":"请求错误","data":null}`
+	if string(got) != want {
+		t.Fatalf("Fail() JSON = %s, want %s", got, want)
+	}
+}
+
 func TestErrorMarshalsTraceIDForFailures(t *testing.T) {
 	got, err := json.Marshal(response.Error(400, "请求参数非法", "trace-1"))
 	if err != nil {

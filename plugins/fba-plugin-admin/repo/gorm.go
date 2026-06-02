@@ -864,11 +864,12 @@ func (r *GORMRepository) ListLoginLogs(ctx context.Context, filter LogFilter, pa
 	return paginateGORM[model.LoginLog](query.Order("created_time DESC, id DESC"), page, size)
 }
 
-func (r *GORMRepository) DeleteLoginLogs(ctx context.Context, ids []int) error {
+func (r *GORMRepository) DeleteLoginLogs(ctx context.Context, ids []int) (int, error) {
 	if len(ids) == 0 {
-		return nil
+		return 0, nil
 	}
-	return r.provider.Write().WithContext(ctx).Delete(&model.LoginLog{}, ids).Error
+	result := r.provider.Write().WithContext(ctx).Delete(&model.LoginLog{}, ids)
+	return int(result.RowsAffected), result.Error
 }
 
 func (r *GORMRepository) DeleteAllLoginLogs(ctx context.Context) error {
@@ -889,11 +890,12 @@ func (r *GORMRepository) ListOperaLogs(ctx context.Context, filter LogFilter, pa
 	return paginateGORM[model.OperaLog](query.Order("created_time DESC, id DESC"), page, size)
 }
 
-func (r *GORMRepository) DeleteOperaLogs(ctx context.Context, ids []int) error {
+func (r *GORMRepository) DeleteOperaLogs(ctx context.Context, ids []int) (int, error) {
 	if len(ids) == 0 {
-		return nil
+		return 0, nil
 	}
-	return r.provider.Write().WithContext(ctx).Delete(&model.OperaLog{}, ids).Error
+	result := r.provider.Write().WithContext(ctx).Delete(&model.OperaLog{}, ids)
+	return int(result.RowsAffected), result.Error
 }
 
 func (r *GORMRepository) DeleteAllOperaLogs(ctx context.Context) error {
