@@ -98,6 +98,17 @@ func TestCompatHostOfficialPluginPriorityResponses(t *testing.T) {
 	}
 }
 
+func TestCompatHostDictSeedsPythonMainOptions(t *testing.T) {
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication() error = %v", err)
+	}
+	token := compatAccessToken(t, app.HTTP())
+
+	assertCompatDictDataLen(t, app.HTTP(), token, "task_period_type", 5)
+	assertCompatDictDataLen(t, app.HTTP(), token, "notice", 2)
+}
+
 func TestCompatHostSQLiteModeRunsPluginMigrationsAndSeeds(t *testing.T) {
 	t.Setenv("FBA_COMPAT_DB", "sqlite")
 	t.Setenv("FBA_COMPAT_SQLITE_DSN", compatSQLiteTestDSN(t))
@@ -278,5 +289,20 @@ func assertCompatTableCount(t *testing.T, provider db.Provider, table any, want 
 	}
 	if got != int64(want) {
 		t.Fatalf("count %T = %d, want %d", table, got, want)
+	}
+}
+
+func assertCompatDictDataLen(t *testing.T, app *fiber.App, token string, code string, want int) {
+	t.Helper()
+	resp, body := compatRequestJSON(t, app, "GET", "/api/v1/dict-datas/type-codes/"+code, "", token)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /dict-datas/type-codes/%s status = %d body = %v, want 200", code, resp.StatusCode, body)
+	}
+	data, ok := body["data"].([]any)
+	if !ok {
+		t.Fatalf("GET /dict-datas/type-codes/%s data = %T, want array", code, body["data"])
+	}
+	if len(data) != want {
+		t.Fatalf("GET /dict-datas/type-codes/%s len = %d, want %d", code, len(data), want)
 	}
 }
