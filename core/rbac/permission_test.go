@@ -29,6 +29,30 @@ func TestAuthorizeAllowsSuperAdmin(t *testing.T) {
 	}
 }
 
+func TestAuthorizeRequiresSuperuserWhenRouteDemandsIt(t *testing.T) {
+	user := &rbac.CurrentUser{
+		ID:      2,
+		IsStaff: true,
+		Roles: []rbac.Role{
+			{Enabled: true, Permissions: []string{"sys:plugin:view"}},
+		},
+	}
+
+	err := rbac.Authorize(user, rbac.RouteAccess{Method: "GET", SuperuserRequired: true})
+	if !errors.Is(err, rbac.ErrSuperuserRequired) {
+		t.Fatalf("Authorize() error = %v, want superuser required", err)
+	}
+}
+
+func TestAuthorizeAllowsSuperuserRouteForSuperAdminWithoutRoles(t *testing.T) {
+	user := &rbac.CurrentUser{ID: 1, IsSuperAdmin: true}
+
+	err := rbac.Authorize(user, rbac.RouteAccess{Method: "GET", SuperuserRequired: true})
+	if err != nil {
+		t.Fatalf("Authorize() error = %v", err)
+	}
+}
+
 func TestAuthorizeRejectsNonStaffWrite(t *testing.T) {
 	user := &rbac.CurrentUser{
 		ID: 2,

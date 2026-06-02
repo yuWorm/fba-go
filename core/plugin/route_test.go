@@ -21,6 +21,7 @@ func TestRouteHelpersApplyCommonOptions(t *testing.T) {
 		handler,
 		plugin.Auth(),
 		plugin.Perm("sys:user:list"),
+		plugin.Superuser(),
 		plugin.Tags("sys", "users"),
 	)
 
@@ -35,6 +36,9 @@ func TestRouteHelpersApplyCommonOptions(t *testing.T) {
 	}
 	if !route.AuthRequired {
 		t.Fatal("AuthRequired = false, want true")
+	}
+	if !route.SuperuserRequired {
+		t.Fatal("SuperuserRequired = false, want true")
 	}
 	if route.Permission != "sys:user:list" {
 		t.Fatalf("Permission = %q, want sys:user:list", route.Permission)
@@ -166,6 +170,61 @@ func TestMountRoutesAuthorizesWithAuthenticatorAndPermission(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("DELETE /users status = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestMountRoutesRejectsSuperuserRouteForNonSuperuser(t *testing.T) {
+	app := fiber.New()
+	authenticator := fakeAuthenticator{
+		user: &rbac.CurrentUser{
+			ID:      2,
+			IsStaff: true,
+			Roles: []rbac.Role{
+				{ID: 1, Enabled: true},
+			},
+		},
+	}
+	routes := []plugin.Route{
+		plugin.GET("/plugins", "Plugins", func(c fiber.Ctx) error {
+			return c.SendString("ok")
+		}, plugin.Superuser()),
+	}
+
+	plugin.MountRoutes(app.Group("/api/v1"), routes, plugin.WithAuthenticator(authenticator))
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/v1/plugins", nil))
+	if err != nil {
+		t.Fatalf("GET /plugins error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("GET /plugins status = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestMountRoutesAllowsSuperuserRouteForSuperAdmin(t *testing.T) {
+	app := fiber.New()
+	authenticator := fakeAuthenticator{
+		user: &rbac.CurrentUser{
+			ID:           1,
+			IsSuperAdmin: true,
+		},
+	}
+	routes := []plugin.Route{
+		plugin.GET("/plugins", "Plugins", func(c fiber.Ctx) error {
+			return c.SendString("ok")
+		}, plugin.Superuser()),
+	}
+
+	plugin.MountRoutes(app.Group("/api/v1"), routes, plugin.WithAuthenticator(authenticator))
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/v1/plugins", nil))
+	if err != nil {
+		t.Fatalf("GET /plugins error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /plugins status = %d, want 200", resp.StatusCode)
 	}
 }
 

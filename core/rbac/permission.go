@@ -7,16 +7,18 @@ import (
 )
 
 var (
-	ErrUnauthenticated  = errors.New("unauthenticated")
-	ErrNoEnabledRole    = errors.New("no enabled role")
-	ErrStaffRequired    = errors.New("staff required")
-	ErrPermissionDenied = errors.New("permission denied")
+	ErrUnauthenticated   = errors.New("unauthenticated")
+	ErrNoEnabledRole     = errors.New("no enabled role")
+	ErrStaffRequired     = errors.New("staff required")
+	ErrSuperuserRequired = errors.New("superuser required")
+	ErrPermissionDenied  = errors.New("permission denied")
 )
 
 type RouteAccess struct {
-	Method      string
-	Permission  string
-	Whitelisted bool
+	Method            string
+	Permission        string
+	SuperuserRequired bool
+	Whitelisted       bool
 }
 
 func Authorize(user *CurrentUser, route RouteAccess) error {
@@ -25,6 +27,13 @@ func Authorize(user *CurrentUser, route RouteAccess) error {
 	}
 	if user == nil {
 		return ErrUnauthenticated
+	}
+	// Superuser-only routes are stricter than role permissions and do not depend on enabled roles.
+	if route.SuperuserRequired {
+		if user.IsSuperAdmin {
+			return nil
+		}
+		return ErrSuperuserRequired
 	}
 	if user.IsSuperAdmin {
 		return nil

@@ -58,7 +58,7 @@ func MountRoutes(router fiber.Router, routes []Route, options ...MountOption) {
 	for _, item := range routes {
 		route := item
 		handler := route.Handler
-		if route.AuthRequired || route.Permission != "" {
+		if route.AuthRequired || route.Permission != "" || route.SuperuserRequired {
 			handler = authHandler(route, opts.authenticator)
 		}
 		router.Add([]string{strings.ToUpper(route.Method)}, route.Path, handler)
@@ -75,9 +75,10 @@ func authHandler(route Route, authenticator Authenticator) fiber.Handler {
 			return authFailure(c, http.StatusUnauthorized, "未认证")
 		}
 		if err := rbac.Authorize(user, rbac.RouteAccess{
-			Method:      route.Method,
-			Permission:  route.Permission,
-			Whitelisted: !route.AuthRequired && route.Permission == "",
+			Method:            route.Method,
+			Permission:        route.Permission,
+			SuperuserRequired: route.SuperuserRequired,
+			Whitelisted:       !route.AuthRequired && route.Permission == "" && !route.SuperuserRequired,
 		}); err != nil {
 			return authFailure(c, authStatus(err), authMessage(err))
 		}
@@ -101,6 +102,8 @@ func authMessage(err error) string {
 		return "无可用角色"
 	case errors.Is(err, rbac.ErrStaffRequired):
 		return "需要管理员权限"
+	case errors.Is(err, rbac.ErrSuperuserRequired):
+		return "需要超级用户权限"
 	default:
 		return "无权限"
 	}

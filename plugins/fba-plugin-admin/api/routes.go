@@ -19,14 +19,14 @@ func UserRoutes(h Handler) []plugin.Route {
 		plugin.GET("/sys/users/:pk", "Get user", h.GetUser, plugin.Auth()),
 		plugin.GET("/sys/users/:pk/roles", "Get user roles", h.GetUserRoles, plugin.Auth()),
 		plugin.GET("/sys/users", "List users", h.ListUsers, plugin.Auth()),
-		plugin.POST("/sys/users", "Create user", h.CreateUser, plugin.Auth()),
+		plugin.POST("/sys/users", "Create user", h.CreateUser, plugin.Superuser()),
 		plugin.PUT("/sys/users/me/password", "Update current user password", h.UpdateCurrentUserPassword, plugin.Auth()),
 		plugin.PUT("/sys/users/me/nickname", "Update current user nickname", h.UpdateCurrentUserNickname, plugin.Auth()),
 		plugin.PUT("/sys/users/me/avatar", "Update current user avatar", h.UpdateCurrentUserAvatar, plugin.Auth()),
 		plugin.PUT("/sys/users/me/email", "Update current user email", h.UpdateCurrentUserEmail, plugin.Auth()),
-		plugin.PUT("/sys/users/:pk/permissions", "Update user permissions", h.UpdateUserPermission, plugin.Auth()),
-		plugin.PUT("/sys/users/:pk/password", "Reset user password", h.ResetUserPassword, plugin.Auth()),
-		plugin.PUT("/sys/users/:pk", "Update user", h.UpdateUser, plugin.Auth()),
+		plugin.PUT("/sys/users/:pk/permissions", "Update user permissions", h.UpdateUserPermission, plugin.Superuser()),
+		plugin.PUT("/sys/users/:pk/password", "Reset user password", h.ResetUserPassword, plugin.Superuser()),
+		plugin.PUT("/sys/users/:pk", "Update user", h.UpdateUser, plugin.Superuser()),
 		plugin.DELETE("/sys/users/:pk", "Delete user", h.DeleteUser, plugin.Auth(), plugin.Perm("sys:user:del")),
 	}
 }
@@ -102,12 +102,12 @@ func FileRoutes(h Handler) []plugin.Route {
 
 func PluginRoutes(h Handler) []plugin.Route {
 	return []plugin.Route{
-		plugin.GET("/sys/plugins", "List plugins", h.ListPlugins, plugin.Auth()),
-		plugin.GET("/sys/plugins/changed", "Plugin changed", h.PluginChanged, plugin.Auth()),
-		plugin.POST("/sys/plugins", "Install plugin", h.InstallPlugin, plugin.Auth()),
-		plugin.DELETE("/sys/plugins/:plugin", "Uninstall plugin", h.UninstallPlugin, plugin.Auth()),
-		plugin.PUT("/sys/plugins/:plugin/status", "Update plugin status", h.UpdatePluginStatus, plugin.Auth()),
-		plugin.GET("/sys/plugins/:plugin", "Download plugin", h.DownloadPlugin, plugin.Auth()),
+		plugin.GET("/sys/plugins", "List plugins", h.ListPlugins, plugin.Superuser()),
+		plugin.GET("/sys/plugins/changed", "Plugin changed", h.PluginChanged, plugin.Superuser()),
+		plugin.POST("/sys/plugins", "Install plugin", h.InstallPlugin, plugin.Superuser()),
+		plugin.DELETE("/sys/plugins/:plugin", "Uninstall plugin", h.UninstallPlugin, plugin.Superuser()),
+		plugin.PUT("/sys/plugins/:plugin/status", "Update plugin status", h.UpdatePluginStatus, plugin.Superuser()),
+		plugin.GET("/sys/plugins/:plugin", "Download plugin", h.DownloadPlugin, plugin.Superuser()),
 	}
 }
 
@@ -124,9 +124,9 @@ func LogRoutes(h Handler) []plugin.Route {
 
 func MonitorRoutes(h Handler) []plugin.Route {
 	return []plugin.Route{
-		plugin.GET("/monitors/server", "Server monitor", h.ServerMonitor, plugin.Auth()),
+		plugin.GET("/monitors/server", "Server monitor", h.ServerMonitor, plugin.Superuser()),
 		plugin.GET("/monitors/redis", "Redis monitor", h.RedisMonitor, plugin.Auth()),
-		plugin.GET("/monitors/sessions", "Online sessions", h.ListSessions, plugin.Auth()),
-		plugin.DELETE("/monitors/sessions/:pk", "Delete online session", h.DeleteSession, plugin.Auth()),
+		plugin.GET("/monitors/sessions", "Online sessions", h.ListSessions, plugin.Superuser()),
+		plugin.DELETE("/monitors/sessions/:pk", "Delete online session", h.DeleteSession, plugin.Superuser()),
 	}
 }

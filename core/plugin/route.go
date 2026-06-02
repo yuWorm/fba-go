@@ -3,13 +3,14 @@ package plugin
 import "github.com/gofiber/fiber/v3"
 
 type Route struct {
-	Method       string
-	Path         string
-	Summary      string
-	Tags         []string
-	Permission   string
-	AuthRequired bool
-	Handler      fiber.Handler
+	Method            string
+	Path              string
+	Summary           string
+	Tags              []string
+	Permission        string
+	AuthRequired      bool
+	SuperuserRequired bool
+	Handler           fiber.Handler
 }
 
 type RouteOption func(*Route)
@@ -23,6 +24,13 @@ func Auth() RouteOption {
 func Perm(permission string) RouteOption {
 	return func(route *Route) {
 		route.Permission = permission
+	}
+}
+
+func Superuser() RouteOption {
+	return func(route *Route) {
+		route.AuthRequired = true
+		route.SuperuserRequired = true
 	}
 }
 

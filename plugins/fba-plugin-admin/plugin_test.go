@@ -320,8 +320,28 @@ func TestAdminPluginRegistersPythonCompatibleRouteMetadata(t *testing.T) {
 		"POST /sys/users",
 		"PUT /sys/users/:pk",
 		"PUT /sys/users/:pk/permissions",
-		"PUT /sys/users/me/password",
 		"PUT /sys/users/:pk/password",
+		"GET /sys/plugins",
+		"GET /sys/plugins/changed",
+		"POST /sys/plugins",
+		"DELETE /sys/plugins/:plugin",
+		"PUT /sys/plugins/:plugin/status",
+		"GET /sys/plugins/:plugin",
+		"GET /monitors/server",
+		"GET /monitors/sessions",
+		"DELETE /monitors/sessions/:pk",
+	} {
+		route, ok := got[key]
+		if !ok {
+			t.Fatalf("route %s not registered; registered routes: %v", key, maps.Keys(got))
+		}
+		if !route.SuperuserRequired {
+			t.Fatalf("%s SuperuserRequired = false, want true", key)
+		}
+	}
+
+	for _, key := range []string{
+		"PUT /sys/users/me/password",
 		"PUT /sys/users/me/nickname",
 		"PUT /sys/users/me/avatar",
 		"PUT /sys/users/me/email",
@@ -496,6 +516,11 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	resp, _ = requestRawAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"Blocked","status":1,"is_filter_scopes":false,"remark":null}`, viewerToken)
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("viewer POST /sys/roles status = %d, want 403", resp.StatusCode)
+	}
+
+	resp, _ = requestRawAuth(t, app, "GET", "/api/v1/sys/plugins", "", viewerToken)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("viewer GET /sys/plugins status = %d, want 403", resp.StatusCode)
 	}
 }
 
