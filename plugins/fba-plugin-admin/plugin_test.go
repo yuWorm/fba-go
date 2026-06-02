@@ -954,6 +954,107 @@ func TestSeedMenusIncludeOfficialPluginMenusAndPermissions(t *testing.T) {
 	}
 }
 
+func TestSeedMenusIncludePythonBaseNavigationAndPermissions(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/menus", "")
+	assertStatusOK(t, resp)
+	tree := assertEnvelopeSlice(t, body)
+
+	for _, tc := range []struct {
+		name       string
+		title      string
+		parentName string
+	}{
+		{name: "Dashboard", title: "page.dashboard.title"},
+		{name: "Analytics", title: "page.dashboard.analytics", parentName: "Dashboard"},
+		{name: "Workspace", title: "page.dashboard.workspace", parentName: "Dashboard"},
+		{name: "System", title: "page.menu.system"},
+		{name: "SysDept", title: "page.menu.sysDept", parentName: "System"},
+		{name: "SysUser", title: "page.menu.sysUser", parentName: "System"},
+		{name: "SysRole", title: "page.menu.sysRole", parentName: "System"},
+		{name: "SysMenu", title: "page.menu.sysMenu", parentName: "System"},
+		{name: "SysDataPermission", title: "page.menu.sysDataPermission", parentName: "System"},
+		{name: "SysDataScope", title: "page.menu.sysDataScope", parentName: "SysDataPermission"},
+		{name: "SysDataRule", title: "page.menu.sysDataRule", parentName: "SysDataPermission"},
+		{name: "SysPlugin", title: "page.menu.sysPlugin", parentName: "System"},
+		{name: "Log", title: "page.menu.log"},
+		{name: "LoginLog", title: "page.menu.login", parentName: "Log"},
+		{name: "OperaLog", title: "page.menu.opera", parentName: "Log"},
+		{name: "Monitor", title: "page.menu.monitor"},
+		{name: "Online", title: "page.menu.online", parentName: "Monitor"},
+		{name: "Redis", title: "page.menu.redis", parentName: "Monitor"},
+		{name: "Server", title: "page.menu.server", parentName: "Monitor"},
+		{name: "Project", title: "项目"},
+		{name: "Document", title: "文档", parentName: "Project"},
+		{name: "Github", title: "Github", parentName: "Project"},
+		{name: "Apifox", title: "Apifox", parentName: "Project"},
+		{name: "Profile", title: "page.menu.profile"},
+	} {
+		menu := findNodeInTree(t, tree, tc.name)
+		if menu["title"] != tc.title {
+			t.Fatalf("%s title = %v, want %s", tc.name, menu["title"], tc.title)
+		}
+		if tc.parentName == "" {
+			if menu["parent_id"] != nil {
+				t.Fatalf("%s parent_id = %v, want nil", tc.name, menu["parent_id"])
+			}
+			continue
+		}
+		parent := findNodeInTree(t, tree, tc.parentName)
+		if menu["parent_id"] != parent["id"] {
+			t.Fatalf("%s parent_id = %v, want %v (%s)", tc.name, menu["parent_id"], parent["id"], tc.parentName)
+		}
+	}
+
+	for _, perm := range []string{
+		"sys:dept:add",
+		"sys:dept:edit",
+		"sys:dept:del",
+		"sys:user:del",
+		"sys:role:add",
+		"sys:role:edit",
+		"sys:role:menu:edit",
+		"sys:role:scope:edit",
+		"sys:role:del",
+		"sys:menu:add",
+		"sys:menu:edit",
+		"sys:menu:del",
+		"data:scope:add",
+		"data:scope:edit",
+		"data:scope:rule:edit",
+		"data:scope:del",
+		"data:rule:add",
+		"data:rule:edit",
+		"data:rule:del",
+		"log:login:del",
+		"log:login:clear",
+		"log:opera:del",
+		"log:opera:clear",
+	} {
+		node := findMenuNodeWithPerm(t, tree, perm)
+		if node["perms"] != perm {
+			t.Fatalf("permission node %s perms = %v, want %s", perm, node["perms"], perm)
+		}
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus/sidebar", "")
+	assertStatusOK(t, resp)
+	sidebar := assertEnvelopeSlice(t, body)
+	profile := findNodeInTree(t, sidebar, "Profile")
+	meta := assertMap(t, profile["meta"])
+	if meta["hideInMenu"] != true {
+		t.Fatalf("Profile hideInMenu = %v, want true", meta["hideInMenu"])
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/auth/codes", "")
+	assertStatusOK(t, resp)
+	codes := assertEnvelopeSlice(t, body)
+	for _, perm := range []string{"sys:dept:add", "sys:role:scope:edit", "log:login:clear", "log:opera:clear"} {
+		assertStringSliceContains(t, codes, perm)
+	}
+}
+
 func TestMenuEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	app := newAdminApp(t)
 

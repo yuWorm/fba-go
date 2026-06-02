@@ -56,56 +56,90 @@ func (s *MenuService) Delete(ctx context.Context, id int) error {
 }
 
 func buildMenuTree(items []model.Menu) []dto.MenuDetail {
-	nodes := make(map[int]*dto.MenuDetail, len(items))
+	byID := make(map[int]model.Menu, len(items))
+	childrenByParent := make(map[int][]model.Menu, len(items))
 	for _, item := range items {
-		detail := dto.MenuFromModel(item)
-		detail.Children = []dto.MenuDetail{}
-		nodes[item.ID] = &detail
+		byID[item.ID] = item
+		if item.ParentID != nil {
+			childrenByParent[*item.ParentID] = append(childrenByParent[*item.ParentID], item)
+		}
 	}
 
-	// Build child links before collecting roots; appending root values too early would copy stale children.
-	for _, item := range items {
-		node := nodes[item.ID]
-		if item.ParentID != nil {
-			if parent, ok := nodes[*item.ParentID]; ok {
-				parent.Children = append(parent.Children, *node)
-			}
+	var buildNode func(model.Menu, map[int]bool) dto.MenuDetail
+	buildNode = func(item model.Menu, visiting map[int]bool) dto.MenuDetail {
+		detail := dto.MenuFromModel(item)
+		children := childrenByParent[item.ID]
+		if len(children) == 0 {
+			return detail
 		}
+
+		detail.Children = make([]dto.MenuDetail, 0, len(children))
+		visiting[item.ID] = true
+		defer delete(visiting, item.ID)
+		for _, child := range children {
+			// Build values from the leaves upward so grandchildren are not lost through stale value copies.
+			if visiting[child.ID] {
+				continue
+			}
+			detail.Children = append(detail.Children, buildNode(child, visiting))
+		}
+		return detail
 	}
 
 	roots := make([]dto.MenuDetail, 0, len(items))
 	for _, item := range items {
 		// Keep filtered or orphaned children visible as roots, matching the Python tree helper.
-		if item.ParentID == nil || nodes[*item.ParentID] == nil {
-			roots = append(roots, *nodes[item.ID])
+		parentExists := false
+		if item.ParentID != nil {
+			_, parentExists = byID[*item.ParentID]
+		}
+		if item.ParentID == nil || !parentExists {
+			roots = append(roots, buildNode(item, map[int]bool{}))
 		}
 	}
 	return roots
 }
 
 func buildSidebarTree(items []model.Menu) []dto.SidebarMenu {
-	nodes := make(map[int]*dto.SidebarMenu, len(items))
+	byID := make(map[int]model.Menu, len(items))
+	childrenByParent := make(map[int][]model.Menu, len(items))
 	for _, item := range items {
-		sidebar := dto.SidebarMenuFromModel(item)
-		sidebar.Children = []dto.SidebarMenu{}
-		nodes[item.ID] = &sidebar
+		byID[item.ID] = item
+		if item.ParentID != nil {
+			childrenByParent[*item.ParentID] = append(childrenByParent[*item.ParentID], item)
+		}
 	}
 
-	// Build child links before collecting roots; appending root values too early would copy stale children.
-	for _, item := range items {
-		node := nodes[item.ID]
-		if item.ParentID != nil {
-			if parent, ok := nodes[*item.ParentID]; ok {
-				parent.Children = append(parent.Children, *node)
-			}
+	var buildNode func(model.Menu, map[int]bool) dto.SidebarMenu
+	buildNode = func(item model.Menu, visiting map[int]bool) dto.SidebarMenu {
+		sidebar := dto.SidebarMenuFromModel(item)
+		children := childrenByParent[item.ID]
+		if len(children) == 0 {
+			return sidebar
 		}
+
+		sidebar.Children = make([]dto.SidebarMenu, 0, len(children))
+		visiting[item.ID] = true
+		defer delete(visiting, item.ID)
+		for _, child := range children {
+			// Build values from the leaves upward so grandchildren are not lost through stale value copies.
+			if visiting[child.ID] {
+				continue
+			}
+			sidebar.Children = append(sidebar.Children, buildNode(child, visiting))
+		}
+		return sidebar
 	}
 
 	roots := make([]dto.SidebarMenu, 0, len(items))
 	for _, item := range items {
 		// Sidebar filtering can remove parents; promote orphaned nodes instead of dropping them.
-		if item.ParentID == nil || nodes[*item.ParentID] == nil {
-			roots = append(roots, *nodes[item.ID])
+		parentExists := false
+		if item.ParentID != nil {
+			_, parentExists = byID[*item.ParentID]
+		}
+		if item.ParentID == nil || !parentExists {
+			roots = append(roots, buildNode(item, map[int]bool{}))
 		}
 	}
 	return roots
