@@ -349,6 +349,17 @@ func (r *MemoryRepository) GetRole(_ context.Context, id int) (model.Role, error
 	return model.Role{}, ErrNotFound
 }
 
+func (r *MemoryRepository) GetRoleByName(_ context.Context, name string) (model.Role, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.roles {
+		if item.Name == name {
+			return item, nil
+		}
+	}
+	return model.Role{}, ErrNotFound
+}
+
 func (r *MemoryRepository) ListRoles(_ context.Context, filter RoleFilter, page int, size int) ([]model.Role, int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -66,6 +66,7 @@ type Repository interface {
 	UserRoles(ctx context.Context, userID int) ([]model.Role, error)
 	AllRoles(ctx context.Context) ([]model.Role, error)
 	GetRole(ctx context.Context, id int) (model.Role, error)
+	GetRoleByName(ctx context.Context, name string) (model.Role, error)
 	ListRoles(ctx context.Context, filter RoleFilter, page int, size int) ([]model.Role, int64, error)
 	CreateRole(ctx context.Context, param dto.RoleParam) error
 	UpdateRole(ctx context.Context, id int, param dto.RoleParam) error

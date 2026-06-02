@@ -301,6 +301,12 @@ func (r *GORMRepository) GetRole(ctx context.Context, id int) (model.Role, error
 	return item, mapGORMError(err)
 }
 
+func (r *GORMRepository) GetRoleByName(ctx context.Context, name string) (model.Role, error) {
+	var item model.Role
+	err := r.provider.Read().WithContext(ctx).Where("name = ?", name).First(&item).Error
+	return item, mapGORMError(err)
+}
+
 func (r *GORMRepository) ListRoles(ctx context.Context, filter RoleFilter, page int, size int) ([]model.Role, int64, error) {
 	query := r.provider.Read().WithContext(ctx).Model(&model.Role{})
 	if filter.Name != "" {

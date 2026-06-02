@@ -1633,6 +1633,48 @@ func TestRoleEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	}
 }
 
+func TestRoleEndpointsApplyPythonCRUDGuards(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/roles", `{"name":"GuardRole","status":1,"is_filter_scopes":true,"remark":null}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/roles", `{"name":"GuardRole","status":1,"is_filter_scopes":true,"remark":null}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "角色已存在")
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/roles/999999", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "角色不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/roles/999999", `{"name":"MissingRole","status":1,"is_filter_scopes":true,"remark":null}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "角色不存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/roles", `{"name":"GuardRoleOther","status":1,"is_filter_scopes":true,"remark":null}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	otherRoleID := findRoleID(t, app, "GuardRoleOther")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/roles/"+itoa(otherRoleID), `{"name":"GuardRole","status":1,"is_filter_scopes":true,"remark":null}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "角色已存在")
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/roles/999999/menus", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "角色不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/roles/999999/menus", `{"menus":[1]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "角色不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/roles/"+itoa(otherRoleID)+"/menus", `{"menus":[999999]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "菜单不存在")
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/roles/999999/scopes", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "角色不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/roles/999999/scopes", `{"scopes":[1]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "角色不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/roles/"+itoa(otherRoleID)+"/scopes", `{"scopes":[999999]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "数据范围不存在")
+}
+
 func TestRoleRelationEndpointsAreStateful(t *testing.T) {
 	app := newAdminApp(t)
 
@@ -1911,6 +1953,20 @@ func findDeptID(t *testing.T, app *fiber.App, name string) int {
 	items := assertEnvelopeSlice(t, body)
 	if len(items) != 1 {
 		t.Fatalf("dept %q lookup count = %d, want 1", name, len(items))
+	}
+	item := assertMap(t, items[0])
+	return int(item["id"].(float64))
+}
+
+func findRoleID(t *testing.T, app *fiber.App, name string) int {
+	t.Helper()
+	escapedName := strings.ReplaceAll(name, " ", "%20")
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/roles?name="+escapedName, "")
+	assertStatusOK(t, resp)
+	page := assertEnvelopeMap(t, body)
+	items := assertSlice(t, page["items"])
+	if len(items) != 1 {
+		t.Fatalf("role %q lookup count = %d, want 1", name, len(items))
 	}
 	item := assertMap(t, items[0])
 	return int(item["id"].(float64))
