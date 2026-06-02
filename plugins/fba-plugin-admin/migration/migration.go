@@ -23,11 +23,15 @@ func AutoMigrate(provider db.Provider) coremigration.Migration {
 				&model.Dept{},
 				&model.DataRule{},
 				&model.DataScope{},
+				&model.Plugin{},
+				&model.LoginLog{},
+				&model.OperaLog{},
 				&model.Session{},
 				&repo.UserRole{},
 				&repo.RoleMenu{},
 				&repo.RoleDataScope{},
 				&repo.DataScopeRule{},
+				&repo.PluginState{},
 			)
 		},
 	}

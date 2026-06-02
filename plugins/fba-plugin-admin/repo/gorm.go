@@ -11,6 +11,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const pluginChangedStateKey = "plugins_changed"
+
 type UserRole struct {
 	ID     int `gorm:"column:id;primaryKey"`
 	UserID int `gorm:"column:user_id;uniqueIndex:idx_sys_user_role"`
@@ -51,6 +53,15 @@ func (DataScopeRule) TableName() string {
 	return "sys_data_scope_rule"
 }
 
+type PluginState struct {
+	Key   string `gorm:"column:key;primaryKey;size:64"`
+	Value bool   `gorm:"column:value"`
+}
+
+func (PluginState) TableName() string {
+	return "sys_plugin_state"
+}
+
 type GORMRepository struct {
 	provider db.Provider
 	seed     model.Seed
@@ -87,6 +98,15 @@ func (r *GORMRepository) Seed(ctx context.Context) error {
 			return err
 		}
 		if err := seedIfEmpty(tx, &model.DataScope{}, r.seed.DataScopes); err != nil {
+			return err
+		}
+		if err := seedIfEmpty(tx, &model.Plugin{}, r.seed.Plugins); err != nil {
+			return err
+		}
+		if err := seedIfEmpty(tx, &model.LoginLog{}, r.seed.LoginLogs); err != nil {
+			return err
+		}
+		if err := seedIfEmpty(tx, &model.OperaLog{}, r.seed.OperaLogs); err != nil {
 			return err
 		}
 		if err := seedIfEmpty(tx, &model.Session{}, r.seed.Sessions); err != nil {
@@ -672,51 +692,143 @@ func (r *GORMRepository) DeleteDataScopes(ctx context.Context, ids []int) error 
 }
 
 func (r *GORMRepository) AllPlugins(ctx context.Context) ([]model.Plugin, error) {
-	return r.fallback.AllPlugins(ctx)
+	var items []model.Plugin
+	err := r.provider.Read().WithContext(ctx).Order("id ASC").Find(&items).Error
+	return items, err
 }
 
 func (r *GORMRepository) GetPlugin(ctx context.Context, id string) (model.Plugin, error) {
-	return r.fallback.GetPlugin(ctx, id)
+	var item model.Plugin
+	err := r.provider.Read().WithContext(ctx).Where("id = ?", id).First(&item).Error
+	return item, mapGORMError(err)
 }
 
 func (r *GORMRepository) InstallPlugin(ctx context.Context, param dto.PluginInstallParam) (model.Plugin, error) {
-	return r.fallback.InstallPlugin(ctx, param)
+	name := param.Name
+	if name == "" {
+		name = "plugin"
+	}
+	var item model.Plugin
+	err := r.provider.Write().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		err := tx.Where("id = ?", name).First(&item).Error
+		if err == nil {
+			if err := tx.Model(&model.Plugin{}).Where("id = ?", name).Update("enabled", true).Error; err != nil {
+				return err
+			}
+			item.Enabled = true
+			return setPluginChanged(tx, true)
+		}
+		if err != gorm.ErrRecordNotFound {
+			return err
+		}
+		item = model.Plugin{
+			ID:          name,
+			Summary:     name,
+			Version:     "0.0.1",
+			Description: "Installed plugin from " + param.Type,
+			Author:      "external",
+			Tags:        []string{"other"},
+			Database:    []string{"mysql", "postgresql"},
+			DependsOn:   []string{"admin"},
+			Enabled:     true,
+		}
+		if err := tx.Create(&item).Error; err != nil {
+			return err
+		}
+		return setPluginChanged(tx, true)
+	})
+	return item, err
 }
 
 func (r *GORMRepository) UninstallPlugin(ctx context.Context, id string) error {
-	return r.fallback.UninstallPlugin(ctx, id)
+	return r.provider.Write().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var item model.Plugin
+		if err := tx.Where("id = ?", id).First(&item).Error; err != nil {
+			return mapGORMError(err)
+		}
+		if item.BuiltIn {
+			return setPluginChanged(tx, true)
+		}
+		if err := tx.Delete(&model.Plugin{}, "id = ?", id).Error; err != nil {
+			return err
+		}
+		return setPluginChanged(tx, true)
+	})
 }
 
 func (r *GORMRepository) TogglePluginStatus(ctx context.Context, id string) error {
-	return r.fallback.TogglePluginStatus(ctx, id)
+	return r.provider.Write().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var item model.Plugin
+		if err := tx.Where("id = ?", id).First(&item).Error; err != nil {
+			return mapGORMError(err)
+		}
+		if err := tx.Model(&model.Plugin{}).Where("id = ?", id).Update("enabled", !item.Enabled).Error; err != nil {
+			return err
+		}
+		return setPluginChanged(tx, true)
+	})
 }
 
 func (r *GORMRepository) PluginsChanged(ctx context.Context) (bool, error) {
-	return r.fallback.PluginsChanged(ctx)
+	var state PluginState
+	err := r.provider.Read().WithContext(ctx).Where("key = ?", pluginChangedStateKey).First(&state).Error
+	if err == gorm.ErrRecordNotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return state.Value, nil
 }
 
 func (r *GORMRepository) ListLoginLogs(ctx context.Context, filter LogFilter, page int, size int) ([]model.LoginLog, int64, error) {
-	return r.fallback.ListLoginLogs(ctx, filter, page, size)
+	query := r.provider.Read().WithContext(ctx).Model(&model.LoginLog{})
+	if filter.Username != "" {
+		query = query.Where("username LIKE ?", "%"+filter.Username+"%")
+	}
+	if filter.Status != nil {
+		query = query.Where("status = ?", *filter.Status)
+	}
+	if filter.IP != "" {
+		query = query.Where("ip LIKE ?", "%"+filter.IP+"%")
+	}
+	return paginateGORM[model.LoginLog](query.Order("created_time DESC, id DESC"), page, size)
 }
 
 func (r *GORMRepository) DeleteLoginLogs(ctx context.Context, ids []int) error {
-	return r.fallback.DeleteLoginLogs(ctx, ids)
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.provider.Write().WithContext(ctx).Delete(&model.LoginLog{}, ids).Error
 }
 
 func (r *GORMRepository) DeleteAllLoginLogs(ctx context.Context) error {
-	return r.fallback.DeleteAllLoginLogs(ctx)
+	return r.provider.Write().WithContext(ctx).Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.LoginLog{}).Error
 }
 
 func (r *GORMRepository) ListOperaLogs(ctx context.Context, filter LogFilter, page int, size int) ([]model.OperaLog, int64, error) {
-	return r.fallback.ListOperaLogs(ctx, filter, page, size)
+	query := r.provider.Read().WithContext(ctx).Model(&model.OperaLog{})
+	if filter.Username != "" {
+		query = query.Where("username LIKE ?", "%"+filter.Username+"%")
+	}
+	if filter.Status != nil {
+		query = query.Where("status = ?", *filter.Status)
+	}
+	if filter.IP != "" {
+		query = query.Where("ip LIKE ?", "%"+filter.IP+"%")
+	}
+	return paginateGORM[model.OperaLog](query.Order("created_time DESC, id DESC"), page, size)
 }
 
 func (r *GORMRepository) DeleteOperaLogs(ctx context.Context, ids []int) error {
-	return r.fallback.DeleteOperaLogs(ctx, ids)
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.provider.Write().WithContext(ctx).Delete(&model.OperaLog{}, ids).Error
 }
 
 func (r *GORMRepository) DeleteAllOperaLogs(ctx context.Context) error {
-	return r.fallback.DeleteAllOperaLogs(ctx)
+	return r.provider.Write().WithContext(ctx).Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.OperaLog{}).Error
 }
 
 func (r *GORMRepository) ListSessions(ctx context.Context, filter SessionFilter) ([]model.Session, error) {
@@ -799,6 +911,11 @@ func seedDataScopeRules(tx *gorm.DB, source map[int][]int) error {
 		}
 	}
 	return nil
+}
+
+func setPluginChanged(tx *gorm.DB, changed bool) error {
+	state := PluginState{Key: pluginChangedStateKey, Value: changed}
+	return tx.Where("key = ?", pluginChangedStateKey).Assign(state).FirstOrCreate(&state).Error
 }
 
 func updateUserColumns(query *gorm.DB, id int, updates map[string]any) error {
