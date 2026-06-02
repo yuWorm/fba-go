@@ -886,6 +886,74 @@ func TestSidebarMenusMatchesPythonVben5Schema(t *testing.T) {
 	assertKeys(t, meta, "title", "icon", "iframeSrc", "link", "keepAlive", "hideInMenu", "menuVisibleWithForbidden")
 }
 
+func TestSeedMenusIncludeOfficialPluginMenusAndPermissions(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/menus", "")
+	assertStatusOK(t, resp)
+	tree := assertEnvelopeSlice(t, body)
+	system := findNodeInTree(t, tree, "System")
+	systemID := int(system["id"].(float64))
+
+	for _, tc := range []struct {
+		name     string
+		title    string
+		parentID int
+		perms    []string
+	}{
+		{
+			name:     "PluginDict",
+			title:    "dict.menu",
+			parentID: systemID,
+			perms:    []string{"dict:type:add", "dict:type:edit", "dict:type:del", "dict:data:add", "dict:data:edit", "dict:data:del"},
+		},
+		{
+			name:     "PluginNotice",
+			title:    "notice.menu",
+			parentID: systemID,
+			perms:    []string{"sys:notice:add", "sys:notice:edit", "sys:notice:del"},
+		},
+		{
+			name:     "Scheduler",
+			title:    "page.menu.scheduler",
+			parentID: 0,
+			perms:    []string{"sys:task:add", "sys:task:edit", "sys:task:del", "sys:task:exec", "sys:task:revoke"},
+		},
+	} {
+		menu := findNodeInTree(t, tree, tc.name)
+		if menu["title"] != tc.title {
+			t.Fatalf("%s title = %v, want %s", tc.name, menu["title"], tc.title)
+		}
+		if tc.parentID == 0 {
+			if menu["parent_id"] != nil {
+				t.Fatalf("%s parent_id = %v, want nil", tc.name, menu["parent_id"])
+			}
+		} else if menu["parent_id"] != float64(tc.parentID) {
+			t.Fatalf("%s parent_id = %v, want %d", tc.name, menu["parent_id"], tc.parentID)
+		}
+		for _, perm := range tc.perms {
+			node := findMenuNodeWithPerm(t, tree, perm)
+			if node["perms"] != perm {
+				t.Fatalf("permission node %s perms = %v, want %s", perm, node["perms"], perm)
+			}
+		}
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/roles/1/menus", "")
+	assertStatusOK(t, resp)
+	roleMenus := assertEnvelopeSlice(t, body)
+	for _, name := range []string{"PluginDict", "PluginNotice", "Scheduler", "AddDictType", "AddNotice", "AddScheduler"} {
+		assertFlatMenuContains(t, roleMenus, name)
+	}
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/auth/codes", "")
+	assertStatusOK(t, resp)
+	codes := assertEnvelopeSlice(t, body)
+	for _, perm := range []string{"dict:type:add", "dict:data:del", "sys:notice:add", "sys:task:add", "sys:task:exec", "sys:task:revoke"} {
+		assertStringSliceContains(t, codes, perm)
+	}
+}
+
 func TestMenuEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	app := newAdminApp(t)
 
@@ -938,7 +1006,16 @@ func TestMenuTreeAndSidebarReflectCreatedChildren(t *testing.T) {
 	assertStatusOK(t, resp)
 	assertEnvelopeNil(t, body)
 
-	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus/2", "")
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus?title=Reports%20Child", "")
+	assertStatusOK(t, resp)
+	items := assertEnvelopeSlice(t, body)
+	if len(items) != 1 {
+		t.Fatalf("created child lookup count = %d, want 1", len(items))
+	}
+	createdLookup := assertMap(t, items[0])
+	id := int(createdLookup["id"].(float64))
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/menus/"+itoa(id), "")
 	assertStatusOK(t, resp)
 	created := assertEnvelopeMap(t, body)
 	if created["title"] != "Reports Child" {
@@ -1475,21 +1552,77 @@ func assertUserInfoDetail(t *testing.T, user map[string]any) {
 
 func findNodeInTree(t *testing.T, items []any, name string) map[string]any {
 	t.Helper()
+	if found, ok := findNodeInTreeValue(t, items, name); ok {
+		return found
+	}
+	t.Fatalf("menu %q not found in tree %v", name, items)
+	return nil
+}
+
+func findNodeInTreeValue(t *testing.T, items []any, name string) (map[string]any, bool) {
+	t.Helper()
 	for _, raw := range items {
 		item := assertMap(t, raw)
 		if item["name"] == name || item["title"] == name {
-			return item
+			return item, true
 		}
 		children, _ := item["children"].([]any)
 		if len(children) == 0 {
 			continue
 		}
-		if found := findNodeInTree(t, children, name); found != nil {
-			return found
+		if found, ok := findNodeInTreeValue(t, children, name); ok {
+			return found, true
 		}
 	}
-	t.Fatalf("menu %q not found in tree %v", name, items)
+	return nil, false
+}
+
+func findMenuNodeWithPerm(t *testing.T, items []any, perm string) map[string]any {
+	t.Helper()
+	if found, ok := findMenuNodeWithPermValue(t, items, perm); ok {
+		return found
+	}
+	t.Fatalf("permission %q not found in menu tree %v", perm, items)
 	return nil
+}
+
+func findMenuNodeWithPermValue(t *testing.T, items []any, perm string) (map[string]any, bool) {
+	t.Helper()
+	for _, raw := range items {
+		item := assertMap(t, raw)
+		if item["perms"] == perm {
+			return item, true
+		}
+		children, _ := item["children"].([]any)
+		if len(children) == 0 {
+			continue
+		}
+		if found, ok := findMenuNodeWithPermValue(t, children, perm); ok {
+			return found, true
+		}
+	}
+	return nil, false
+}
+
+func assertFlatMenuContains(t *testing.T, items []any, name string) {
+	t.Helper()
+	for _, raw := range items {
+		item := assertMap(t, raw)
+		if item["name"] == name || item["title"] == name {
+			return
+		}
+	}
+	t.Fatalf("flat menu %q not found in %v", name, items)
+}
+
+func assertStringSliceContains(t *testing.T, items []any, want string) {
+	t.Helper()
+	for _, item := range items {
+		if item == want {
+			return
+		}
+	}
+	t.Fatalf("string %q not found in %v", want, items)
 }
 
 func findPluginByName(t *testing.T, items []any, name string) any {

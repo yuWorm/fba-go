@@ -38,8 +38,10 @@ func TestGORMRepositoryPersistsCoreAdminRelations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RoleMenus(admin) error = %v", err)
 	}
-	if len(menus) != 1 || menus[0].Name != "Dashboard" {
-		t.Fatalf("admin role menus = %+v, want Dashboard", menus)
+	for _, name := range []string{"Dashboard", "System", "PluginDict", "PluginNotice", "Scheduler", "AddDictType", "AddNotice", "AddScheduler"} {
+		if !hasMenuName(menus, name) {
+			t.Fatalf("admin role menus = %+v, want menu %s", menus, name)
+		}
 	}
 
 	nickname := "GORM User"
@@ -68,6 +70,15 @@ func TestGORMRepositoryPersistsCoreAdminRelations(t *testing.T) {
 	if total != 1 || len(users) != 1 || users[0].Username != "gorm_user" {
 		t.Fatalf("ListUsers(gorm) = total:%d items:%+v, want gorm_user", total, users)
 	}
+}
+
+func hasMenuName(menus []model.Menu, name string) bool {
+	for _, menu := range menus {
+		if menu.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGORMRepositoryPersistsSessions(t *testing.T) {
