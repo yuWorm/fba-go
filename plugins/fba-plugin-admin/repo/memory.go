@@ -482,6 +482,17 @@ func (r *MemoryRepository) GetMenu(_ context.Context, id int) (model.Menu, error
 	return model.Menu{}, ErrNotFound
 }
 
+func (r *MemoryRepository) GetMenuByTitle(_ context.Context, title string) (model.Menu, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.menus {
+		if item.Title == title && item.Type != 2 {
+			return item, nil
+		}
+	}
+	return model.Menu{}, ErrNotFound
+}
+
 func (r *MemoryRepository) ListMenus(_ context.Context, filter MenuFilter) ([]model.Menu, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -572,6 +583,17 @@ func (r *MemoryRepository) DeleteMenu(_ context.Context, id int) error {
 		r.roleMenus[roleID] = deleteInt(menuIDs, id)
 	}
 	return nil
+}
+
+func (r *MemoryRepository) MenuHasChildren(_ context.Context, id int) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.menus {
+		if item.ParentID != nil && *item.ParentID == id {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (r *MemoryRepository) GetDept(_ context.Context, id int) (model.Dept, error) {

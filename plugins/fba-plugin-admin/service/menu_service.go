@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	stderrors "errors"
+	"net/http"
 
+	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/model"
 	"github.com/yuWorm/fba-plugin-admin/repo"
@@ -22,6 +25,9 @@ func NewMenuService(repository repo.Repository) *MenuService {
 func (s *MenuService) Get(ctx context.Context, id int) (dto.MenuDetail, error) {
 	item, err := s.repo.GetMenu(ctx, id)
 	if err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return dto.MenuDetail{}, menuNotFound("菜单不存在", err)
+		}
 		return dto.MenuDetail{}, err
 	}
 	return dto.MenuFromModel(item), nil
@@ -44,15 +50,84 @@ func (s *MenuService) Sidebar(ctx context.Context) ([]dto.SidebarMenu, error) {
 }
 
 func (s *MenuService) Create(ctx context.Context, param dto.MenuParam) error {
+	if _, err := s.repo.GetMenuByTitle(ctx, param.Title); err == nil {
+		return menuConflict("菜单标题已存在", nil)
+	} else if !stderrors.Is(err, repo.ErrNotFound) {
+		return err
+	}
+	if err := s.ensureParent(ctx, param.ParentID); err != nil {
+		return err
+	}
 	return s.repo.CreateMenu(ctx, param)
 }
 
 func (s *MenuService) Update(ctx context.Context, id int, param dto.MenuParam) error {
+	menu, err := s.ensureMenu(ctx, id)
+	if err != nil {
+		return err
+	}
+	if menu.Title != param.Title {
+		if _, err := s.repo.GetMenuByTitle(ctx, param.Title); err == nil {
+			return menuConflict("菜单标题已存在", nil)
+		} else if !stderrors.Is(err, repo.ErrNotFound) {
+			return err
+		}
+	}
+	if err := s.ensureParent(ctx, param.ParentID); err != nil {
+		return err
+	}
+	if param.ParentID != nil && *param.ParentID == menu.ID {
+		return menuForbidden("禁止关联自身为父级", nil)
+	}
 	return s.repo.UpdateMenu(ctx, id, param)
 }
 
 func (s *MenuService) Delete(ctx context.Context, id int) error {
+	hasChildren, err := s.repo.MenuHasChildren(ctx, id)
+	if err != nil {
+		return err
+	}
+	if hasChildren {
+		return menuConflict("菜单下存在子菜单，无法删除", nil)
+	}
 	return s.repo.DeleteMenu(ctx, id)
+}
+
+func (s *MenuService) ensureMenu(ctx context.Context, id int) (model.Menu, error) {
+	menu, err := s.repo.GetMenu(ctx, id)
+	if err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return model.Menu{}, menuNotFound("菜单不存在", err)
+		}
+		return model.Menu{}, err
+	}
+	return menu, nil
+}
+
+func (s *MenuService) ensureParent(ctx context.Context, parentID *int) error {
+	// Python treats a missing or zero parent_id as "no parent"; keep that compatibility for request bodies.
+	if parentID == nil || *parentID == 0 {
+		return nil
+	}
+	if _, err := s.repo.GetMenu(ctx, *parentID); err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return menuNotFound("父级菜单不存在", err)
+		}
+		return err
+	}
+	return nil
+}
+
+func menuNotFound(message string, cause error) error {
+	return fbaerrors.New(http.StatusNotFound, http.StatusNotFound, message, cause)
+}
+
+func menuConflict(message string, cause error) error {
+	return fbaerrors.New(http.StatusConflict, http.StatusConflict, message, cause)
+}
+
+func menuForbidden(message string, cause error) error {
+	return fbaerrors.New(http.StatusForbidden, http.StatusForbidden, message, cause)
 }
 
 func buildMenuTree(items []model.Menu) []dto.MenuDetail {

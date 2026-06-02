@@ -77,11 +77,13 @@ type Repository interface {
 	RoleScopeIDs(ctx context.Context, roleID int) ([]int, error)
 	UpdateRoleScopes(ctx context.Context, roleID int, scopeIDs []int) error
 	GetMenu(ctx context.Context, id int) (model.Menu, error)
+	GetMenuByTitle(ctx context.Context, title string) (model.Menu, error)
 	ListMenus(ctx context.Context, filter MenuFilter) ([]model.Menu, error)
 	SidebarMenus(ctx context.Context) ([]model.Menu, error)
 	CreateMenu(ctx context.Context, param dto.MenuParam) error
 	UpdateMenu(ctx context.Context, id int, param dto.MenuParam) error
 	DeleteMenu(ctx context.Context, id int) error
+	MenuHasChildren(ctx context.Context, id int) (bool, error)
 	GetDept(ctx context.Context, id int) (model.Dept, error)
 	GetDeptByName(ctx context.Context, name string) (model.Dept, error)
 	ListDepts(ctx context.Context, filter DeptFilter) ([]model.Dept, error)

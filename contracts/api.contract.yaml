@@ -171,7 +171,7 @@ priority_routes:
       body: '{"title":"Dashboard","name":"Dashboard","path":"/dashboard","parent_id":null,"sort":0,"icon":"lucide:layout-dashboard","type":1,"component":"Layout","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}'
   - method: DELETE
     path: /api/v1/sys/menus/{pk}
-    sample_path: /api/v1/sys/menus/1
+    sample_path: /api/v1/sys/menus/999999
     owner: plugin:admin
     permission: sys:menu:del
   - method: GET

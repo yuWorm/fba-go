@@ -108,7 +108,7 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		{"DELETE", "/api/v1/sys/roles", `{"pks":[999999]}`},
 		{"POST", "/api/v1/sys/menus", `{"title":"Contract Menu","name":"ContractMenu","path":"/contract","parent_id":null,"sort":0,"icon":null,"type":1,"component":"Layout","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`},
 		{"PUT", "/api/v1/sys/menus/1", `{"title":"仪表盘","name":"Dashboard","path":"/dashboard","parent_id":null,"sort":0,"icon":"lucide:layout-dashboard","type":1,"component":"Layout","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`},
-		{"DELETE", "/api/v1/sys/menus/1", ""},
+		{"DELETE", "/api/v1/sys/menus/999999", ""},
 		{"POST", "/api/v1/sys/depts", `{"name":"Contract Dept","parent_id":null,"sort":0,"leader":null,"phone":null,"email":null,"status":1}`},
 		{"PUT", "/api/v1/sys/depts/1", `{"name":"总部","parent_id":null,"sort":0,"leader":null,"phone":null,"email":null,"status":1}`},
 		{"DELETE", "/api/v1/sys/depts/2", ""},
@@ -1263,6 +1263,45 @@ func TestMenuEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	}
 }
 
+func TestMenuEndpointsApplyPythonCRUDGuards(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/menus/999999", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "菜单不存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/menus", `{"title":"Guard Menu","name":"GuardMenu","path":"/guard","parent_id":null,"sort":9,"icon":null,"type":1,"component":"/guard/index","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/menus", `{"title":"Guard Menu","name":"GuardMenuDuplicate","path":"/guard-dup","parent_id":null,"sort":9,"icon":null,"type":1,"component":"/guard/index","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "菜单标题已存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/menus", `{"title":"Orphan Menu","name":"OrphanMenu","path":"/orphan","parent_id":999999,"sort":9,"icon":null,"type":1,"component":"/orphan/index","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "父级菜单不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/menus/999999", `{"title":"Missing Menu","name":"MissingMenu","path":"/missing","parent_id":null,"sort":9,"icon":null,"type":1,"component":"/missing/index","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "菜单不存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/menus", `{"title":"Guard Menu Other","name":"GuardMenuOther","path":"/guard-other","parent_id":null,"sort":9,"icon":null,"type":1,"component":"/guard/index","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	otherMenuID := findMenuID(t, app, "Guard Menu Other")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/menus/"+itoa(otherMenuID), `{"title":"Guard Menu","name":"GuardMenuOther","path":"/guard-other","parent_id":null,"sort":9,"icon":null,"type":1,"component":"/guard/index","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "菜单标题已存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/menus/"+itoa(otherMenuID), `{"title":"Guard Menu Other","name":"GuardMenuOther","path":"/guard-other","parent_id":999999,"sort":9,"icon":null,"type":1,"component":"/guard/index","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "父级菜单不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/menus/"+itoa(otherMenuID), `{"title":"Guard Menu Other","name":"GuardMenuOther","path":"/guard-other","parent_id":`+itoa(otherMenuID)+`,"sort":9,"icon":null,"type":1,"component":"/guard/index","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "禁止关联自身为父级")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/menus", `{"title":"Guard Child","name":"GuardChild","path":"/guard-other/child","parent_id":`+itoa(otherMenuID)+`,"sort":9,"icon":null,"type":1,"component":"/guard/index","perms":null,"status":1,"display":1,"cache":1,"link":null,"remark":null}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/menus/"+itoa(otherMenuID), "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "菜单下存在子菜单，无法删除")
+}
+
 func TestMenuTreeAndSidebarReflectCreatedChildren(t *testing.T) {
 	app := newAdminApp(t)
 
@@ -1967,6 +2006,19 @@ func findRoleID(t *testing.T, app *fiber.App, name string) int {
 	items := assertSlice(t, page["items"])
 	if len(items) != 1 {
 		t.Fatalf("role %q lookup count = %d, want 1", name, len(items))
+	}
+	item := assertMap(t, items[0])
+	return int(item["id"].(float64))
+}
+
+func findMenuID(t *testing.T, app *fiber.App, title string) int {
+	t.Helper()
+	escapedTitle := strings.ReplaceAll(title, " ", "%20")
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/menus?title="+escapedTitle, "")
+	assertStatusOK(t, resp)
+	items := assertEnvelopeSlice(t, body)
+	if len(items) != 1 {
+		t.Fatalf("menu %q lookup count = %d, want 1", title, len(items))
 	}
 	item := assertMap(t, items[0])
 	return int(item["id"].(float64))

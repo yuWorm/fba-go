@@ -433,6 +433,12 @@ func (r *GORMRepository) GetMenu(ctx context.Context, id int) (model.Menu, error
 	return item, mapGORMError(err)
 }
 
+func (r *GORMRepository) GetMenuByTitle(ctx context.Context, title string) (model.Menu, error) {
+	var item model.Menu
+	err := r.provider.Read().WithContext(ctx).Where("title = ? AND type <> ?", title, 2).First(&item).Error
+	return item, mapGORMError(err)
+}
+
 func (r *GORMRepository) ListMenus(ctx context.Context, filter MenuFilter) ([]model.Menu, error) {
 	query := r.provider.Read().WithContext(ctx).Model(&model.Menu{})
 	if filter.Title != "" {
@@ -499,6 +505,14 @@ func (r *GORMRepository) DeleteMenu(ctx context.Context, id int) error {
 		}
 		return tx.Delete(&model.Menu{}, id).Error
 	})
+}
+
+func (r *GORMRepository) MenuHasChildren(ctx context.Context, id int) (bool, error) {
+	var count int64
+	if err := r.provider.Read().WithContext(ctx).Model(&model.Menu{}).Where("parent_id = ?", id).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (r *GORMRepository) GetDept(ctx context.Context, id int) (model.Dept, error) {
