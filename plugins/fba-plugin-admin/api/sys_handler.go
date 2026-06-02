@@ -138,7 +138,7 @@ func (h Handler) UpdateCurrentUserEmail(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.users.UpdateEmail(c.RequestCtx(), currentUserID(c), param.Email); err != nil {
+	if err := h.users.UpdateEmail(c.RequestCtx(), currentUserID(c), param.Captcha, param.Email); err != nil {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))

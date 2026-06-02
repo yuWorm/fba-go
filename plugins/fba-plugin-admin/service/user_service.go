@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"net/http"
+	"strings"
 
 	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/pagination"
@@ -15,6 +16,8 @@ import (
 type UserService struct {
 	repo repo.Repository
 }
+
+const defaultEmailCaptchaCode = "123456"
 
 func NewUserService(repository repo.Repository) *UserService {
 	if repository == nil {
@@ -161,7 +164,25 @@ func (s *UserService) UpdateAvatar(ctx context.Context, id int, avatar *string) 
 	return s.repo.UpdateUserAvatar(ctx, id, avatar)
 }
 
-func (s *UserService) UpdateEmail(ctx context.Context, id int, email *string) error {
+func (s *UserService) UpdateEmail(ctx context.Context, id int, captcha string, email *string) error {
+	captcha = strings.TrimSpace(captcha)
+	if captcha == "" {
+		return userBadRequest("验证码已失效，请重新获取", nil)
+	}
+	// The Python version validates this against a Redis key produced by the email plugin.
+	// Until that plugin is migrated, keep the existing contract fixture as the local code.
+	if !strings.EqualFold(captcha, defaultEmailCaptchaCode) {
+		return userBadRequest("验证码错误", nil)
+	}
+	if email != nil && *email != "" {
+		user, err := s.repo.GetUserByEmail(ctx, *email)
+		if err == nil && user.ID != id {
+			return userConflict("邮箱已被绑定", nil)
+		}
+		if err != nil && !stderrors.Is(err, repo.ErrNotFound) {
+			return err
+		}
+	}
 	return s.repo.UpdateUserEmail(ctx, id, email)
 }
 

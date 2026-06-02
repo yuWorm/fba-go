@@ -822,6 +822,20 @@ func TestCurrentUserProfileEndpointsAreStateful(t *testing.T) {
 	}
 }
 
+func TestCurrentUserEmailUpdateAppliesPythonGuards(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"email_taken","password":"secret","nickname":"Email Taken","email":"email-taken@example.com","phone":null,"dept_id":1,"roles":[1]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/email", `{"captcha":"bad-code","email":"admin-guarded@example.com"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "验证码错误")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/email", `{"captcha":"123456","email":"email-taken@example.com"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "邮箱已被绑定")
+}
+
 func TestPluginEndpointsAreStatefulAndPythonCompatible(t *testing.T) {
 	app := newAdminApp(t)
 
