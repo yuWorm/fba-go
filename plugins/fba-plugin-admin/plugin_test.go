@@ -727,6 +727,42 @@ func TestRefreshRejectsLockedUserLikePython(t *testing.T) {
 	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户已被锁定, 请联系统管理员")
 }
 
+func TestRefreshRejectsOlderSingleLoginSessionLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"refresh_single","password":"secret","nickname":"Refresh Single","email":null,"phone":null,"dept_id":1,"roles":[1]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+
+	oldRefreshCookie := loginForRefreshCookie(t, app, "refresh_single", "secret")
+	currentRefreshCookie := loginForRefreshCookie(t, app, "refresh_single", "secret")
+
+	req := httptest.NewRequest("POST", "/api/v1/auth/refresh", nil)
+	req.AddCookie(oldRefreshCookie)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("POST /auth/refresh old single-login session error = %v", err)
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode old single-login refresh body: %v", err)
+	}
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "此用户已在异地登录，请重新登录并及时修改密码")
+
+	req = httptest.NewRequest("POST", "/api/v1/auth/refresh", nil)
+	req.AddCookie(currentRefreshCookie)
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("POST /auth/refresh current single-login session error = %v", err)
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode current single-login refresh body: %v", err)
+	}
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+}
+
 func TestCurrentUserMatchesPythonSchema(t *testing.T) {
 	app := newAdminApp(t)
 	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/users/me", "")

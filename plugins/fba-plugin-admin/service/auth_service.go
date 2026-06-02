@@ -134,6 +134,9 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (dto.Acc
 	if user.Status != 1 {
 		return dto.AccessTokenBase{}, "", refreshForbiddenError("用户已被锁定, 请联系统管理员")
 	}
+	if err := s.ensureRefreshSessionAllowed(ctx, user, sessionUUID); err != nil {
+		return dto.AccessTokenBase{}, "", err
+	}
 	session, err := s.repo.GetSession(ctx, userID, sessionUUID)
 	if err != nil {
 		return dto.AccessTokenBase{}, "", err
@@ -234,6 +237,9 @@ func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sess
 	if err != nil {
 		return dto.LoginToken{}, "", err
 	}
+	if err := s.clearOtherSessions(ctx, user, sessionUUID); err != nil {
+		return dto.LoginToken{}, "", err
+	}
 	if err := s.upsertSession(ctx, user, sessionUUID, expiresAt); err != nil {
 		return dto.LoginToken{}, "", err
 	}
@@ -300,6 +306,45 @@ func (s *AuthService) recordLoginLog(ctx context.Context, user model.User, usern
 		LoginTime:   now,
 		CreatedTime: now,
 	})
+}
+
+func (s *AuthService) ensureRefreshSessionAllowed(ctx context.Context, user model.User, sessionUUID string) error {
+	if user.IsMultiLogin {
+		return nil
+	}
+	// Python rejects refresh when TOKEN_REDIS_PREFIX contains another session
+	// for a single-login user. The Go compatibility store models that as sessions.
+	sessions, err := s.repo.ListSessions(ctx, repo.SessionFilter{Username: user.Username})
+	if err != nil {
+		return err
+	}
+	for _, session := range sessions {
+		if session.ID == user.ID && session.SessionUUID != sessionUUID {
+			return refreshForbiddenError("此用户已在异地登录，请重新登录并及时修改密码")
+		}
+	}
+	return nil
+}
+
+func (s *AuthService) clearOtherSessions(ctx context.Context, user model.User, sessionUUID string) error {
+	if user.IsMultiLogin {
+		return nil
+	}
+	// create_access_token/create_refresh_token delete old Redis keys when
+	// multi_login is false; remove stale sessions before storing the new one.
+	sessions, err := s.repo.ListSessions(ctx, repo.SessionFilter{Username: user.Username})
+	if err != nil {
+		return err
+	}
+	for _, session := range sessions {
+		if session.ID != user.ID || session.SessionUUID == sessionUUID {
+			continue
+		}
+		if err := s.repo.DeleteSession(ctx, session.ID, session.SessionUUID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *AuthService) verifyUser(ctx context.Context, username string, password string) (model.User, error) {
