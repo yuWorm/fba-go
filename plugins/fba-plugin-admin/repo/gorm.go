@@ -677,6 +677,12 @@ func (r *GORMRepository) GetDataScope(ctx context.Context, id int) (model.DataSc
 	return item, mapGORMError(err)
 }
 
+func (r *GORMRepository) GetDataScopeByName(ctx context.Context, name string) (model.DataScope, error) {
+	var item model.DataScope
+	err := r.provider.Read().WithContext(ctx).Where("name = ?", name).First(&item).Error
+	return item, mapGORMError(err)
+}
+
 func (r *GORMRepository) DataScopeRules(ctx context.Context, id int) (model.DataScope, []model.DataRule, error) {
 	scope, err := r.GetDataScope(ctx, id)
 	if err != nil {

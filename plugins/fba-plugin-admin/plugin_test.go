@@ -1625,6 +1625,39 @@ func TestDataScopeEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	}
 }
 
+func TestDataScopeEndpointsApplyPythonCRUDGuards(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/data-scopes/999999", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "数据范围不存在")
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/data-scopes/999999/rules", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "数据范围不存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/data-scopes", `{"name":"Guard Scope","status":1}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/data-scopes", `{"name":"Guard Scope","status":1}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "数据范围已存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/data-scopes/999999", `{"name":"Missing Scope","status":1}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "数据范围不存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/data-scopes", `{"name":"Guard Scope Other","status":1}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	otherScopeID := findDataScopeID(t, app, "Guard Scope Other")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/data-scopes/"+itoa(otherScopeID), `{"name":"Guard Scope","status":1}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "数据范围已存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/data-scopes/999999/rules", `{"rules":[1]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "数据范围不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/data-scopes/"+itoa(otherScopeID)+"/rules", `{"rules":[999999]}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "数据规则不存在")
+}
+
 func TestRoleEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	app := newAdminApp(t)
 
@@ -2019,6 +2052,20 @@ func findMenuID(t *testing.T, app *fiber.App, title string) int {
 	items := assertEnvelopeSlice(t, body)
 	if len(items) != 1 {
 		t.Fatalf("menu %q lookup count = %d, want 1", title, len(items))
+	}
+	item := assertMap(t, items[0])
+	return int(item["id"].(float64))
+}
+
+func findDataScopeID(t *testing.T, app *fiber.App, name string) int {
+	t.Helper()
+	escapedName := strings.ReplaceAll(name, " ", "%20")
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/data-scopes?name="+escapedName, "")
+	assertStatusOK(t, resp)
+	page := assertEnvelopeMap(t, body)
+	items := assertSlice(t, page["items"])
+	if len(items) != 1 {
+		t.Fatalf("data scope %q lookup count = %d, want 1", name, len(items))
 	}
 	item := assertMap(t, items[0])
 	return int(item["id"].(float64))

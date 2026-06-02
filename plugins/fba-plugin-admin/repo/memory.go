@@ -843,6 +843,17 @@ func (r *MemoryRepository) GetDataScope(_ context.Context, id int) (model.DataSc
 	return model.DataScope{}, ErrNotFound
 }
 
+func (r *MemoryRepository) GetDataScopeByName(_ context.Context, name string) (model.DataScope, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.scopes {
+		if item.Name == name {
+			return item, nil
+		}
+	}
+	return model.DataScope{}, ErrNotFound
+}
+
 func (r *MemoryRepository) DataScopeRules(_ context.Context, id int) (model.DataScope, []model.DataRule, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -103,6 +103,7 @@ type Repository interface {
 	DeleteDataRules(ctx context.Context, ids []int) error
 	AllDataScopes(ctx context.Context) ([]model.DataScope, error)
 	GetDataScope(ctx context.Context, id int) (model.DataScope, error)
+	GetDataScopeByName(ctx context.Context, name string) (model.DataScope, error)
 	DataScopeRules(ctx context.Context, id int) (model.DataScope, []model.DataRule, error)
 	ListDataScopes(ctx context.Context, filter DataScopeFilter, page int, size int) ([]model.DataScope, int64, error)
 	CreateDataScope(ctx context.Context, param dto.DataScopeParam) error
