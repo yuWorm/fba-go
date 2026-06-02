@@ -1,8 +1,11 @@
 package admin
 
 import (
+	"github.com/yuWorm/fba-go/core/db"
 	"github.com/yuWorm/fba-go/core/plugin"
 	adminapi "github.com/yuWorm/fba-plugin-admin/api"
+	adminmigration "github.com/yuWorm/fba-plugin-admin/migration"
+	"github.com/yuWorm/fba-plugin-admin/repo"
 )
 
 func FBAPlugin() plugin.Module {
@@ -21,7 +24,16 @@ func (Module) Meta() plugin.Meta {
 }
 
 func (Module) Register(ctx plugin.Context) error {
-	handler := adminapi.NewHandler()
+	repository := repo.Repository(repo.NewMemoryRepository(repo.SeedData()))
+	var provider db.Provider
+	if ctx.Container().Resolve(&provider) && provider != nil && provider.Write() != nil {
+		repository = repo.NewGORMRepository(provider)
+		if err := ctx.Migration(adminmigration.AutoMigrate(provider)); err != nil {
+			return err
+		}
+	}
+
+	handler := adminapi.NewHandlerWithRepository(repository)
 	if err := ctx.Provide(func() plugin.Authenticator {
 		return handler
 	}); err != nil {

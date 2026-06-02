@@ -6,68 +6,88 @@ import (
 )
 
 type Role struct {
-	ID             int
-	Name           string
-	Status         int
-	IsFilterScopes bool
-	Remark         *string
-	CreatedTime    time.Time
-	UpdatedTime    *time.Time
+	ID             int        `gorm:"column:id;primaryKey"`
+	Name           string     `gorm:"column:name;size:32;index"`
+	Status         int        `gorm:"column:status"`
+	IsFilterScopes bool       `gorm:"column:is_filter_scopes"`
+	Remark         *string    `gorm:"column:remark;type:text"`
+	CreatedTime    time.Time  `gorm:"column:created_time;autoCreateTime"`
+	UpdatedTime    *time.Time `gorm:"column:updated_time;autoUpdateTime"`
 }
 
 type Menu struct {
-	ID          int
-	Title       string
-	Name        string
-	Path        *string
-	ParentID    *int
-	Sort        int
-	Icon        *string
-	Type        int
-	Component   *string
-	Perms       *string
-	Status      int
-	Display     int
-	Cache       int
-	Link        *string
-	Remark      *string
-	CreatedTime time.Time
-	UpdatedTime *time.Time
+	ID          int        `gorm:"column:id;primaryKey"`
+	Title       string     `gorm:"column:title;size:64;index"`
+	Name        string     `gorm:"column:name;size:64"`
+	Path        *string    `gorm:"column:path;size:256"`
+	ParentID    *int       `gorm:"column:parent_id;index"`
+	Sort        int        `gorm:"column:sort"`
+	Icon        *string    `gorm:"column:icon;size:128"`
+	Type        int        `gorm:"column:type"`
+	Component   *string    `gorm:"column:component;size:256"`
+	Perms       *string    `gorm:"column:perms;type:text"`
+	Status      int        `gorm:"column:status"`
+	Display     int        `gorm:"column:display"`
+	Cache       int        `gorm:"column:cache"`
+	Link        *string    `gorm:"column:link;size:256"`
+	Remark      *string    `gorm:"column:remark;type:text"`
+	CreatedTime time.Time  `gorm:"column:created_time;autoCreateTime"`
+	UpdatedTime *time.Time `gorm:"column:updated_time;autoUpdateTime"`
 }
 
 type Dept struct {
-	ID          int
-	Name        string
-	ParentID    *int
-	Sort        int
-	Leader      *string
-	Phone       *string
-	Email       *string
-	Status      int
-	Deleted     int
-	CreatedTime time.Time
-	UpdatedTime *time.Time
-	DeletedTime *time.Time
+	ID          int        `gorm:"column:id;primaryKey"`
+	Name        string     `gorm:"column:name;size:64;index"`
+	ParentID    *int       `gorm:"column:parent_id;index"`
+	Sort        int        `gorm:"column:sort"`
+	Leader      *string    `gorm:"column:leader;size:64"`
+	Phone       *string    `gorm:"column:phone;size:32"`
+	Email       *string    `gorm:"column:email;size:256"`
+	Status      int        `gorm:"column:status"`
+	Deleted     int        `gorm:"column:deleted;index"`
+	CreatedTime time.Time  `gorm:"column:created_time;autoCreateTime"`
+	UpdatedTime *time.Time `gorm:"column:updated_time;autoUpdateTime"`
+	DeletedTime *time.Time `gorm:"column:deleted_time;index"`
 }
 
 type DataRule struct {
-	ID          int
-	Name        string
-	Model       string
-	Column      string
-	Operator    int
-	Expression  int
-	Value       string
-	CreatedTime time.Time
-	UpdatedTime *time.Time
+	ID          int        `gorm:"column:id;primaryKey"`
+	Name        string     `gorm:"column:name;size:64;index"`
+	Model       string     `gorm:"column:model;size:64"`
+	Column      string     `gorm:"column:column;size:64"`
+	Operator    int        `gorm:"column:operator"`
+	Expression  int        `gorm:"column:expression"`
+	Value       string     `gorm:"column:value;size:256"`
+	CreatedTime time.Time  `gorm:"column:created_time;autoCreateTime"`
+	UpdatedTime *time.Time `gorm:"column:updated_time;autoUpdateTime"`
 }
 
 type DataScope struct {
-	ID          int
-	Name        string
-	Status      int
-	CreatedTime time.Time
-	UpdatedTime *time.Time
+	ID          int        `gorm:"column:id;primaryKey"`
+	Name        string     `gorm:"column:name;size:64;index"`
+	Status      int        `gorm:"column:status"`
+	CreatedTime time.Time  `gorm:"column:created_time;autoCreateTime"`
+	UpdatedTime *time.Time `gorm:"column:updated_time;autoUpdateTime"`
+}
+
+func (Role) TableName() string {
+	return "sys_role"
+}
+
+func (Menu) TableName() string {
+	return "sys_menu"
+}
+
+func (Dept) TableName() string {
+	return "sys_dept"
+}
+
+func (DataRule) TableName() string {
+	return "sys_data_rule"
+}
+
+func (DataScope) TableName() string {
+	return "sys_data_scope"
 }
 
 type Seed struct {

@@ -32,6 +32,13 @@ type Handler struct {
 
 func NewHandler() Handler {
 	repository := repo.NewMemoryRepository(repo.SeedData())
+	return NewHandlerWithRepository(repository)
+}
+
+func NewHandlerWithRepository(repository repo.Repository) Handler {
+	if repository == nil {
+		repository = repo.NewMemoryRepository(repo.SeedData())
+	}
 	return Handler{
 		auth:       service.NewAuthService(repository),
 		users:      service.NewUserService(repository),

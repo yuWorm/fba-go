@@ -11,9 +11,11 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/db"
 	"github.com/yuWorm/fba-go/core/di"
 	"github.com/yuWorm/fba-go/core/plugin"
 	admin "github.com/yuWorm/fba-plugin-admin"
+	"gorm.io/gorm"
 )
 
 func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
@@ -155,6 +157,28 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 	if resp.StatusCode != fiber.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("POST /api/v1/sys/files/upload status = %d body = %s", resp.StatusCode, body)
+	}
+}
+
+func TestAdminPluginRegistersMigrationWhenDBProviderExists(t *testing.T) {
+	container := di.New()
+	if err := container.Provide(func() db.Provider {
+		return db.NewGORMProvider(&gorm.DB{}, nil)
+	}); err != nil {
+		t.Fatalf("Provide() error = %v", err)
+	}
+	ctx := plugin.NewContext(plugin.ContextOptions{Container: container})
+
+	if err := admin.FBAPlugin().Register(ctx); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	migrations := ctx.Migrations()
+	if len(migrations) != 1 {
+		t.Fatalf("migrations = %d, want 1", len(migrations))
+	}
+	if migrations[0].Scope != "plugin:admin" {
+		t.Fatalf("migration scope = %q, want plugin:admin", migrations[0].Scope)
 	}
 }
 
