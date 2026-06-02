@@ -78,7 +78,7 @@ func (h Handler) Login(c fiber.Ctx) error {
 			return err
 		}
 	}
-	token, refresh, err := h.auth.Login(c.RequestCtx(), param)
+	token, refresh, err := h.auth.Login(c.RequestCtx(), param, requestMetadata(c))
 	if err != nil {
 		return err
 	}
@@ -101,6 +101,21 @@ func (h Handler) Logout(c fiber.Ctx) error {
 	}
 	c.ClearCookie(refreshCookieName)
 	return c.JSON(response.Success[any](nil))
+}
+
+func requestMetadata(c fiber.Ctx) service.RequestMetadata {
+	return service.RequestMetadata{
+		IP:        c.IP(),
+		UserAgent: optionalString(c.Get("User-Agent")),
+	}
+}
+
+func optionalString(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func (h Handler) Codes(c fiber.Ctx) error {

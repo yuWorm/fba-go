@@ -117,6 +117,7 @@ type Repository interface {
 	UninstallPlugin(ctx context.Context, id string) error
 	TogglePluginStatus(ctx context.Context, id string) error
 	PluginsChanged(ctx context.Context) (bool, error)
+	CreateLoginLog(ctx context.Context, item model.LoginLog) error
 	ListLoginLogs(ctx context.Context, filter LogFilter, page int, size int) ([]model.LoginLog, int64, error)
 	DeleteLoginLogs(ctx context.Context, ids []int) (int, error)
 	DeleteAllLoginLogs(ctx context.Context) error

@@ -42,6 +42,7 @@ type MemoryRepository struct {
 	nextDeptID                      int
 	nextDataRuleID                  int
 	nextDataScopeID                 int
+	nextLoginLogID                  int
 }
 
 func NewMemoryRepository(seed model.Seed) *MemoryRepository {
@@ -81,6 +82,12 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 			nextDataScopeID = item.ID + 1
 		}
 	}
+	nextLoginLogID := 1
+	for _, item := range seed.LoginLogs {
+		if item.ID >= nextLoginLogID {
+			nextLoginLogID = item.ID + 1
+		}
+	}
 	return &MemoryRepository{
 		users:                           append([]model.User(nil), seed.Users...),
 		roles:                           append([]model.Role(nil), seed.Roles...),
@@ -106,6 +113,7 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 		nextDeptID:                      nextDeptID,
 		nextDataRuleID:                  nextDataRuleID,
 		nextDataScopeID:                 nextDataScopeID,
+		nextLoginLogID:                  nextLoginLogID,
 	}
 }
 
@@ -1047,6 +1055,25 @@ func (r *MemoryRepository) ListLoginLogs(_ context.Context, filter LogFilter, pa
 	return pageSlice(items, page, size), int64(len(items)), nil
 }
 
+func (r *MemoryRepository) CreateLoginLog(_ context.Context, item model.LoginLog) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	if item.ID == 0 {
+		item.ID = r.nextLoginLog()
+	} else if item.ID >= r.nextLoginLogID {
+		r.nextLoginLogID = item.ID + 1
+	}
+	if item.LoginTime.IsZero() {
+		item.LoginTime = now
+	}
+	if item.CreatedTime.IsZero() {
+		item.CreatedTime = item.LoginTime
+	}
+	r.loginLogs = append(r.loginLogs, item)
+	return nil
+}
+
 func (r *MemoryRepository) DeleteLoginLogs(_ context.Context, ids []int) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1184,6 +1211,12 @@ func (r *MemoryRepository) nextDataRule() int {
 func (r *MemoryRepository) nextDataScope() int {
 	id := r.nextDataScopeID
 	r.nextDataScopeID++
+	return id
+}
+
+func (r *MemoryRepository) nextLoginLog() int {
+	id := r.nextLoginLogID
+	r.nextLoginLogID++
 	return id
 }
 

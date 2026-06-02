@@ -197,6 +197,26 @@ func TestGORMRepositoryPersistsLogs(t *testing.T) {
 	if total != 0 {
 		t.Fatalf("login log total after delete = %d, want 0", total)
 	}
+	if err := nextRepository.CreateLoginLog(ctx, model.LoginLog{
+		UserUUID:  "created-login-user",
+		Username:  "created_login",
+		Status:    0,
+		IP:        "10.0.0.8",
+		Msg:       "用户名或密码有误",
+		LoginTime: time.Now(),
+	}); err != nil {
+		t.Fatalf("CreateLoginLog() error = %v", err)
+	}
+	createdLoginLogs, total, err := nextRepository.ListLoginLogs(ctx, repo.LogFilter{Username: "created_login", Status: intPtr(0), IP: "10.0"}, 1, 20)
+	if err != nil {
+		t.Fatalf("ListLoginLogs(created) error = %v", err)
+	}
+	if total != 1 || len(createdLoginLogs) != 1 || createdLoginLogs[0].Msg != "用户名或密码有误" {
+		t.Fatalf("created login logs = total:%d items:%+v, want persisted failure log", total, createdLoginLogs)
+	}
+	if err := nextRepository.DeleteAllLoginLogs(ctx); err != nil {
+		t.Fatalf("DeleteAllLoginLogs() error = %v", err)
+	}
 
 	operaLogs, total, err := nextRepository.ListOperaLogs(ctx, repo.LogFilter{Username: "admin", Status: intPtr(1), IP: "127"}, 1, 20)
 	if err != nil {

@@ -427,6 +427,45 @@ func TestLoginCaptchaMismatchDoesNotConsumeCaptcha(t *testing.T) {
 	}
 }
 
+func TestLoginCreatesSuccessAndFailureLogsLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "DELETE", "/api/v1/logs/login/all", "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"admin","password":"wrong","uuid":"fixture-captcha","captcha":"1234"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "用户名或密码有误")
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/logs/login?username=admin&status=0", "")
+	assertStatusOK(t, resp)
+	page := assertEnvelopeMap(t, body)
+	items := assertSlice(t, page["items"])
+	if len(items) != 1 {
+		t.Fatalf("failed login log count = %d, want 1", len(items))
+	}
+	failed := assertMap(t, items[0])
+	if failed["msg"] != "用户名或密码有误" {
+		t.Fatalf("failed login msg = %v, want 用户名或密码有误", failed["msg"])
+	}
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"admin","password":"admin","uuid":"fixture-captcha","captcha":"1234"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/logs/login?username=admin&status=1", "")
+	assertStatusOK(t, resp)
+	page = assertEnvelopeMap(t, body)
+	items = assertSlice(t, page["items"])
+	if len(items) != 1 {
+		t.Fatalf("successful login log count = %d, want 1", len(items))
+	}
+	success := assertMap(t, items[0])
+	if success["msg"] != "登录成功" {
+		t.Fatalf("successful login msg = %v, want 登录成功", success["msg"])
+	}
+}
+
 func TestAuthEndpointsAreStatefulAndValidateUsers(t *testing.T) {
 	app := newAdminApp(t)
 

@@ -25,7 +25,21 @@ const (
 	defaultSessionUUID = "fixture-session"
 	accessTokenTTL     = 2 * time.Hour
 	refreshTokenTTL    = 7 * 24 * time.Hour
+	loginLogFail       = 0
+	loginLogSuccess    = 1
+	loginSuccessMsg    = "登录成功"
 )
+
+type RequestMetadata struct {
+	IP        string
+	Country   *string
+	Region    *string
+	City      *string
+	UserAgent *string
+	Browser   *string
+	OS        *string
+	Device    *string
+}
 
 type AuthService struct {
 	repo         repo.Repository
@@ -58,17 +72,24 @@ func (s *AuthService) Captcha(context.Context) (dto.CaptchaDetail, error) {
 	}, nil
 }
 
-func (s *AuthService) Login(ctx context.Context, param dto.AuthLoginParam) (dto.LoginToken, string, error) {
+func (s *AuthService) Login(ctx context.Context, param dto.AuthLoginParam, meta RequestMetadata) (dto.LoginToken, string, error) {
 	param = defaultLoginParam(param)
 	if err := s.verifyCaptcha(param.UUID, param.Captcha); err != nil {
+		s.recordLoginLog(ctx, model.User{}, param.Username, loginLogFail, err.Error(), meta)
 		return dto.LoginToken{}, "", err
 	}
 	user, err := s.verifyUser(ctx, param.Username, param.Password)
 	if err != nil {
+		s.recordLoginLog(ctx, model.User{}, param.Username, loginLogFail, err.Error(), meta)
 		return dto.LoginToken{}, "", err
 	}
 	sessionUUID := "session-" + randomID()
-	return s.issueLoginToken(ctx, user, sessionUUID)
+	token, refresh, err := s.issueLoginToken(ctx, user, sessionUUID)
+	if err != nil {
+		return dto.LoginToken{}, "", err
+	}
+	s.recordLoginLog(ctx, user, param.Username, loginLogSuccess, loginSuccessMsg, meta)
+	return token, refresh, nil
 }
 
 func (s *AuthService) SwaggerLogin(ctx context.Context, username string, password string) (dto.SwaggerToken, error) {
@@ -239,6 +260,36 @@ func (s *AuthService) issueAccessToken(ctx context.Context, userID int, sessionU
 		return "", time.Time{}, authError("令牌创建失败")
 	}
 	return token.Token, token.ExpiresAt, nil
+}
+
+func (s *AuthService) recordLoginLog(ctx context.Context, user model.User, username string, status int, msg string, meta RequestMetadata) {
+	userUUID := user.UUID
+	if userUUID == "" {
+		userUUID = "login-log-" + randomID()
+	}
+	ip := meta.IP
+	if ip == "" {
+		ip = "127.0.0.1"
+	}
+	now := time.Now()
+	// Python creates login logs in a background task and catches its own failures,
+	// so log persistence is intentionally best-effort and must not alter login responses.
+	_ = s.repo.CreateLoginLog(ctx, model.LoginLog{
+		UserUUID:    userUUID,
+		Username:    username,
+		Status:      status,
+		IP:          ip,
+		Country:     meta.Country,
+		Region:      meta.Region,
+		City:        meta.City,
+		UserAgent:   meta.UserAgent,
+		Browser:     meta.Browser,
+		OS:          meta.OS,
+		Device:      meta.Device,
+		Msg:         msg,
+		LoginTime:   now,
+		CreatedTime: now,
+	})
 }
 
 func (s *AuthService) verifyUser(ctx context.Context, username string, password string) (model.User, error) {

@@ -864,6 +864,17 @@ func (r *GORMRepository) ListLoginLogs(ctx context.Context, filter LogFilter, pa
 	return paginateGORM[model.LoginLog](query.Order("created_time DESC, id DESC"), page, size)
 }
 
+func (r *GORMRepository) CreateLoginLog(ctx context.Context, item model.LoginLog) error {
+	now := time.Now()
+	if item.LoginTime.IsZero() {
+		item.LoginTime = now
+	}
+	if item.CreatedTime.IsZero() {
+		item.CreatedTime = item.LoginTime
+	}
+	return r.provider.Write().WithContext(ctx).Create(&item).Error
+}
+
 func (r *GORMRepository) DeleteLoginLogs(ctx context.Context, ids []int) (int, error) {
 	if len(ids) == 0 {
 		return 0, nil
