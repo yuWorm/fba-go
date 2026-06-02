@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	stderrors "errors"
+	"net/http"
 	"strconv"
 	"strings"
 
+	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/rbac"
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/model"
@@ -25,6 +28,9 @@ func NewDeptService(repository repo.Repository) *DeptService {
 func (s *DeptService) Get(ctx context.Context, id int) (dto.DeptDetail, error) {
 	item, err := s.repo.GetDept(ctx, id)
 	if err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return dto.DeptDetail{}, deptNotFound("部门不存在", err)
+		}
 		return dto.DeptDetail{}, err
 	}
 	return dto.DeptFromModel(item), nil
@@ -47,15 +53,85 @@ func (s *DeptService) TreeForUser(ctx context.Context, filter repo.DeptFilter, u
 }
 
 func (s *DeptService) Create(ctx context.Context, param dto.DeptParam) error {
+	if _, err := s.repo.GetDeptByName(ctx, param.Name); err == nil {
+		return deptConflict("部门名称已存在", nil)
+	} else if !stderrors.Is(err, repo.ErrNotFound) {
+		return err
+	}
+	if param.ParentID != nil {
+		if _, err := s.repo.GetDept(ctx, *param.ParentID); err != nil {
+			if stderrors.Is(err, repo.ErrNotFound) {
+				return deptNotFound("父级部门不存在", err)
+			}
+			return err
+		}
+	}
 	return s.repo.CreateDept(ctx, param)
 }
 
 func (s *DeptService) Update(ctx context.Context, id int, param dto.DeptParam) error {
+	item, err := s.repo.GetDept(ctx, id)
+	if err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return deptNotFound("部门不存在", err)
+		}
+		return err
+	}
+	if item.Name != param.Name {
+		if _, err := s.repo.GetDeptByName(ctx, param.Name); err == nil {
+			return deptConflict("部门名称已存在", nil)
+		} else if !stderrors.Is(err, repo.ErrNotFound) {
+			return err
+		}
+	}
+	if param.ParentID != nil {
+		if _, err := s.repo.GetDept(ctx, *param.ParentID); err != nil {
+			if stderrors.Is(err, repo.ErrNotFound) {
+				return deptNotFound("父级部门不存在", err)
+			}
+			return err
+		}
+		if *param.ParentID == item.ID {
+			return deptForbidden("禁止关联自身为父级", nil)
+		}
+	}
 	return s.repo.UpdateDept(ctx, id, param)
 }
 
 func (s *DeptService) Delete(ctx context.Context, id int) error {
+	if _, err := s.repo.GetDept(ctx, id); err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return deptNotFound("部门不存在", err)
+		}
+		return err
+	}
+	hasUsers, err := s.repo.DeptHasUsers(ctx, id)
+	if err != nil {
+		return err
+	}
+	if hasUsers {
+		return deptConflict("部门下存在用户，无法删除", nil)
+	}
+	hasChildren, err := s.repo.DeptHasChildren(ctx, id)
+	if err != nil {
+		return err
+	}
+	if hasChildren {
+		return deptConflict("部门下存在子部门，无法删除", nil)
+	}
 	return s.repo.DeleteDept(ctx, id)
+}
+
+func deptNotFound(message string, cause error) error {
+	return fbaerrors.New(http.StatusNotFound, http.StatusNotFound, message, cause)
+}
+
+func deptConflict(message string, cause error) error {
+	return fbaerrors.New(http.StatusConflict, http.StatusConflict, message, cause)
+}
+
+func deptForbidden(message string, cause error) error {
+	return fbaerrors.New(http.StatusForbidden, http.StatusForbidden, message, cause)
 }
 
 func (s *DeptService) applyDataPermission(ctx context.Context, items []model.Dept, user *rbac.CurrentUser) ([]model.Dept, error) {

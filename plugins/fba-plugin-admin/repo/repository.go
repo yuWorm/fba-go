@@ -81,10 +81,13 @@ type Repository interface {
 	UpdateMenu(ctx context.Context, id int, param dto.MenuParam) error
 	DeleteMenu(ctx context.Context, id int) error
 	GetDept(ctx context.Context, id int) (model.Dept, error)
+	GetDeptByName(ctx context.Context, name string) (model.Dept, error)
 	ListDepts(ctx context.Context, filter DeptFilter) ([]model.Dept, error)
 	CreateDept(ctx context.Context, param dto.DeptParam) error
 	UpdateDept(ctx context.Context, id int, param dto.DeptParam) error
 	DeleteDept(ctx context.Context, id int) error
+	DeptHasChildren(ctx context.Context, id int) (bool, error)
+	DeptHasUsers(ctx context.Context, id int) (bool, error)
 	AllDataRules(ctx context.Context) ([]model.DataRule, error)
 	DataRuleModels(ctx context.Context) ([]string, error)
 	DataRuleModelColumns(ctx context.Context, modelName string) ([]model.DataRuleColumn, error)

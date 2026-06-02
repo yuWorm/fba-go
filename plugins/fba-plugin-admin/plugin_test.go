@@ -13,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/yuWorm/fba-go/core/db"
 	"github.com/yuWorm/fba-go/core/di"
+	"github.com/yuWorm/fba-go/core/middleware"
 	"github.com/yuWorm/fba-go/core/plugin"
 	admin "github.com/yuWorm/fba-plugin-admin"
 	"gorm.io/gorm"
@@ -110,7 +111,7 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		{"DELETE", "/api/v1/sys/menus/1", ""},
 		{"POST", "/api/v1/sys/depts", `{"name":"Contract Dept","parent_id":null,"sort":0,"leader":null,"phone":null,"email":null,"status":1}`},
 		{"PUT", "/api/v1/sys/depts/1", `{"name":"总部","parent_id":null,"sort":0,"leader":null,"phone":null,"email":null,"status":1}`},
-		{"DELETE", "/api/v1/sys/depts/1", ""},
+		{"DELETE", "/api/v1/sys/depts/2", ""},
 		{"POST", "/api/v1/sys/data-rules", `{"name":"Contract Rule","model":"user","column":"id","operator":0,"expression":0,"value":"{{ user_id }}"}`},
 		{"PUT", "/api/v1/sys/data-rules/1", `{"name":"本人数据","model":"user","column":"id","operator":0,"expression":0,"value":"{{ user_id }}"}`},
 		{"DELETE", "/api/v1/sys/data-rules", `{"pks":[999999]}`},
@@ -1285,6 +1286,55 @@ func TestDeptEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	}
 }
 
+func TestDeptEndpointsApplyPythonCRUDGuards(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/depts", `{"name":"总部","parent_id":null,"sort":1,"leader":null,"phone":null,"email":null,"status":1}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "部门名称已存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/depts", `{"name":"Missing Parent","parent_id":999999,"sort":1,"leader":null,"phone":null,"email":null,"status":1}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "父级部门不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/depts/999999", `{"name":"Missing Dept","parent_id":null,"sort":1,"leader":null,"phone":null,"email":null,"status":1}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "部门不存在")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/depts", `{"name":"Guard Parent","parent_id":null,"sort":1,"leader":null,"phone":null,"email":null,"status":1}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	guardParentID := findDeptID(t, app, "Guard Parent")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/depts", `{"name":"Guard Child","parent_id":`+itoa(guardParentID)+`,"sort":1,"leader":null,"phone":null,"email":null,"status":1}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	guardChildID := findDeptID(t, app, "Guard Child")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/depts/"+itoa(guardChildID), `{"name":"总部","parent_id":null,"sort":1,"leader":null,"phone":null,"email":null,"status":1}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "部门名称已存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/depts/"+itoa(guardChildID), `{"name":"Guard Child","parent_id":999999,"sort":1,"leader":null,"phone":null,"email":null,"status":1}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "父级部门不存在")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/depts/"+itoa(guardChildID), `{"name":"Guard Child","parent_id":`+itoa(guardChildID)+`,"sort":1,"leader":null,"phone":null,"email":null,"status":1}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "禁止关联自身为父级")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/depts", `{"name":"Occupied Dept","parent_id":null,"sort":1,"leader":null,"phone":null,"email":null,"status":1}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	occupiedDeptID := findDeptID(t, app, "Occupied Dept")
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"dept_occupied","password":"secret","nickname":"Dept Occupied","email":null,"phone":null,"dept_id":`+itoa(occupiedDeptID)+`,"roles":[1]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/depts/"+itoa(occupiedDeptID), "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "部门下存在用户，无法删除")
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/depts/"+itoa(guardParentID), "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "部门下存在子部门，无法删除")
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/depts/999999", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "部门不存在")
+}
+
 func TestDeptTreeReflectsCreatedChildren(t *testing.T) {
 	app := newAdminApp(t)
 
@@ -1550,7 +1600,7 @@ func TestRoleRelationEndpointsAreStateful(t *testing.T) {
 
 func newAdminApp(t *testing.T) *fiber.App {
 	t.Helper()
-	app := fiber.New()
+	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler})
 	ctx := plugin.NewContext(plugin.ContextOptions{APIGroup: app.Group("/api/v1")})
 	if err := admin.FBAPlugin().Register(ctx); err != nil {
 		t.Fatalf("Register() error = %v", err)
@@ -1721,6 +1771,19 @@ func assertEnvelopeNil(t *testing.T, body map[string]any) {
 	}
 }
 
+func assertErrorEnvelope(t *testing.T, resp *http.Response, body map[string]any, status int, msg string) {
+	t.Helper()
+	if resp.StatusCode != status {
+		t.Fatalf("status = %d, want %d; body = %v", resp.StatusCode, status, body)
+	}
+	if body["code"] != float64(status) {
+		t.Fatalf("code = %v, want %d; body = %v", body["code"], status, body)
+	}
+	if body["msg"] != msg {
+		t.Fatalf("msg = %v, want %s", body["msg"], msg)
+	}
+}
+
 func assertMap(t *testing.T, value any) map[string]any {
 	t.Helper()
 	got, ok := value.(map[string]any)
@@ -1775,6 +1838,19 @@ func findNodeInTree(t *testing.T, items []any, name string) map[string]any {
 	}
 	t.Fatalf("menu %q not found in tree %v", name, items)
 	return nil
+}
+
+func findDeptID(t *testing.T, app *fiber.App, name string) int {
+	t.Helper()
+	escapedName := strings.ReplaceAll(name, " ", "%20")
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/depts?name="+escapedName, "")
+	assertStatusOK(t, resp)
+	items := assertEnvelopeSlice(t, body)
+	if len(items) != 1 {
+		t.Fatalf("dept %q lookup count = %d, want 1", name, len(items))
+	}
+	item := assertMap(t, items[0])
+	return int(item["id"].(float64))
 }
 
 func findNodeInTreeValue(t *testing.T, items []any, name string) (map[string]any, bool) {

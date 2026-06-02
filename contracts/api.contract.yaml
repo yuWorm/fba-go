@@ -194,7 +194,7 @@ priority_routes:
       body: '{"name":"Headquarters","parent_id":null,"sort":0,"leader":null,"phone":null,"email":null,"status":1}'
   - method: DELETE
     path: /api/v1/sys/depts/{pk}
-    sample_path: /api/v1/sys/depts/1
+    sample_path: /api/v1/sys/depts/2
     owner: plugin:admin
   - method: GET
     path: /api/v1/sys/data-rules/models

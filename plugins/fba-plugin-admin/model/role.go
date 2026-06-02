@@ -1105,6 +1105,7 @@ func SeedData() Seed {
 			{
 				ID:           1,
 				UUID:         "fixture-user",
+				DeptID:       intPtr(1),
 				Username:     "admin",
 				Nickname:     "Admin",
 				Status:       1,

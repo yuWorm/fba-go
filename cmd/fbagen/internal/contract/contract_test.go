@@ -242,7 +242,7 @@ func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 		{"DELETE", "/api/v1/sys/menus/{pk}", "/api/v1/sys/menus/1", false, "sys:menu:del"},
 		{"POST", "/api/v1/sys/depts", "", true, ""},
 		{"PUT", "/api/v1/sys/depts/{pk}", "/api/v1/sys/depts/1", true, ""},
-		{"DELETE", "/api/v1/sys/depts/{pk}", "/api/v1/sys/depts/1", false, ""},
+		{"DELETE", "/api/v1/sys/depts/{pk}", "/api/v1/sys/depts/2", false, ""},
 		{"POST", "/api/v1/sys/data-rules", "", true, "data:rule:add"},
 		{"PUT", "/api/v1/sys/data-rules/{pk}", "/api/v1/sys/data-rules/1", true, "data:rule:edit"},
 		{"DELETE", "/api/v1/sys/data-rules", "", true, "data:rule:del"},
@@ -687,7 +687,7 @@ func TestRunnerBootstrapsLimitedAuthBeforePriorityMutations(t *testing.T) {
 				{
 					Method:     "DELETE",
 					Path:       "/api/v1/sys/depts/{pk}",
-					SamplePath: "/api/v1/sys/depts/1",
+					SamplePath: "/api/v1/sys/depts/2",
 				},
 			},
 			NegativeRoutes: []contract.Route{
@@ -984,7 +984,7 @@ func (transport *limitedBeforeMutationTransport) RoundTrip(req *http.Request) (*
 		return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":{"id":2}}`), nil
 	case "/api/v1/sys/users/2/permissions":
 		return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":null}`), nil
-	case "/api/v1/sys/depts/1":
+	case "/api/v1/sys/depts/2":
 		if req.Method != http.MethodDelete {
 			transport.t.Fatalf("method = %s, want DELETE", req.Method)
 		}

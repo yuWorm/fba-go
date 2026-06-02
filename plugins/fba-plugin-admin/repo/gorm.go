@@ -486,12 +486,18 @@ func (r *GORMRepository) DeleteMenu(ctx context.Context, id int) error {
 
 func (r *GORMRepository) GetDept(ctx context.Context, id int) (model.Dept, error) {
 	var item model.Dept
-	err := r.provider.Read().WithContext(ctx).First(&item, id).Error
+	err := r.provider.Read().WithContext(ctx).Where("id = ? AND deleted = ?", id, 0).First(&item).Error
+	return item, mapGORMError(err)
+}
+
+func (r *GORMRepository) GetDeptByName(ctx context.Context, name string) (model.Dept, error) {
+	var item model.Dept
+	err := r.provider.Read().WithContext(ctx).Where("name = ? AND deleted = ?", name, 0).First(&item).Error
 	return item, mapGORMError(err)
 }
 
 func (r *GORMRepository) ListDepts(ctx context.Context, filter DeptFilter) ([]model.Dept, error) {
-	query := r.provider.Read().WithContext(ctx).Model(&model.Dept{})
+	query := r.provider.Read().WithContext(ctx).Model(&model.Dept{}).Where("deleted = ?", 0)
 	if filter.Name != "" {
 		query = query.Where("name LIKE ?", "%"+filter.Name+"%")
 	}
@@ -524,7 +530,7 @@ func (r *GORMRepository) CreateDept(ctx context.Context, param dto.DeptParam) er
 }
 
 func (r *GORMRepository) UpdateDept(ctx context.Context, id int, param dto.DeptParam) error {
-	result := r.provider.Write().WithContext(ctx).Model(&model.Dept{}).Where("id = ?", id).Updates(map[string]any{
+	result := r.provider.Write().WithContext(ctx).Model(&model.Dept{}).Where("id = ? AND deleted = ?", id, 0).Updates(map[string]any{
 		"name":      param.Name,
 		"parent_id": param.ParentID,
 		"sort":      param.Sort,
@@ -537,7 +543,27 @@ func (r *GORMRepository) UpdateDept(ctx context.Context, id int, param dto.DeptP
 }
 
 func (r *GORMRepository) DeleteDept(ctx context.Context, id int) error {
-	return r.provider.Write().WithContext(ctx).Delete(&model.Dept{}, id).Error
+	result := r.provider.Write().WithContext(ctx).Model(&model.Dept{}).Where("id = ? AND deleted = ?", id, 0).Updates(map[string]any{
+		"deleted":      id,
+		"deleted_time": time.Now(),
+	})
+	return rowsError(result)
+}
+
+func (r *GORMRepository) DeptHasChildren(ctx context.Context, id int) (bool, error) {
+	var count int64
+	if err := r.provider.Read().WithContext(ctx).Model(&model.Dept{}).Where("parent_id = ? AND deleted = ?", id, 0).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *GORMRepository) DeptHasUsers(ctx context.Context, id int) (bool, error) {
+	var count int64
+	if err := r.provider.Read().WithContext(ctx).Model(&model.User{}).Where("dept_id = ? AND deleted_time IS NULL", id).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (r *GORMRepository) AllDataRules(ctx context.Context) ([]model.DataRule, error) {

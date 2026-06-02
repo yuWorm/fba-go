@@ -544,7 +544,18 @@ func (r *MemoryRepository) GetDept(_ context.Context, id int) (model.Dept, error
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, item := range r.depts {
-		if item.ID == id {
+		if item.ID == id && item.Deleted == 0 {
+			return item, nil
+		}
+	}
+	return model.Dept{}, ErrNotFound
+}
+
+func (r *MemoryRepository) GetDeptByName(_ context.Context, name string) (model.Dept, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.depts {
+		if item.Name == name && item.Deleted == 0 {
 			return item, nil
 		}
 	}
@@ -557,6 +568,9 @@ func (r *MemoryRepository) ListDepts(_ context.Context, filter DeptFilter) ([]mo
 
 	items := make([]model.Dept, 0, len(r.depts))
 	for _, item := range r.depts {
+		if item.Deleted != 0 {
+			continue
+		}
 		if filter.Name != "" && !strings.Contains(item.Name, filter.Name) {
 			continue
 		}
@@ -614,8 +628,35 @@ func (r *MemoryRepository) UpdateDept(_ context.Context, id int, param dto.DeptP
 func (r *MemoryRepository) DeleteDept(_ context.Context, id int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.depts = deleteByIDs(r.depts, []int{id}, func(item model.Dept) int { return item.ID })
-	return nil
+	for i, item := range r.depts {
+		if item.ID == id && item.Deleted == 0 {
+			r.depts = append(r.depts[:i], r.depts[i+1:]...)
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) DeptHasChildren(_ context.Context, id int) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.depts {
+		if item.Deleted == 0 && item.ParentID != nil && *item.ParentID == id {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *MemoryRepository) DeptHasUsers(_ context.Context, id int) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.users {
+		if item.DeptID != nil && *item.DeptID == id && item.DeletedTime == nil {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (r *MemoryRepository) AllDataRules(context.Context) ([]model.DataRule, error) {
@@ -1269,7 +1310,7 @@ func hasRole(items []model.Role, id int) bool {
 
 func hasDept(items []model.Dept, id int) bool {
 	for _, item := range items {
-		if item.ID == id {
+		if item.ID == id && item.Deleted == 0 {
 			return true
 		}
 	}
