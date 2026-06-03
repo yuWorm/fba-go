@@ -9,6 +9,7 @@ import (
 var (
 	ErrUnauthenticated   = errors.New("unauthenticated")
 	ErrNoEnabledRole     = errors.New("no enabled role")
+	ErrNoRoleMenus       = errors.New("no role menus")
 	ErrStaffRequired     = errors.New("staff required")
 	ErrSuperuserRequired = errors.New("superuser required")
 	ErrPermissionDenied  = errors.New("permission denied")
@@ -43,6 +44,11 @@ func Authorize(user *CurrentUser, route RouteAccess) error {
 	if len(roles) == 0 {
 		return ErrNoEnabledRole
 	}
+	// Keep this before the staff/write guard to match the Python admin RBAC contract:
+	// an enabled role without any menus is a role assignment problem, not an operation privilege problem.
+	if !hasAnyRoleMenu(roles) {
+		return ErrNoRoleMenus
+	}
 	if isWriteMethod(route.Method) && !user.IsStaff {
 		return ErrStaffRequired
 	}
@@ -65,6 +71,15 @@ func enabledRoles(roles []Role) []Role {
 		}
 	}
 	return out
+}
+
+func hasAnyRoleMenu(roles []Role) bool {
+	for _, role := range roles {
+		if role.MenuCount > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func isWriteMethod(method string) bool {

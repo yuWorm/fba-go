@@ -129,6 +129,33 @@ func TestMountRoutesAuthFailureIncludesTraceID(t *testing.T) {
 	}
 }
 
+func TestMountRoutesAllowsAuthOnlyRouteWithoutRBACRoles(t *testing.T) {
+	app := fiber.New()
+	authenticator := fakeAuthenticator{
+		user: &rbac.CurrentUser{ID: 2},
+	}
+	routes := []plugin.Route{
+		plugin.GET("/profile", "Profile", func(c fiber.Ctx) error {
+			user, ok := c.Locals(plugin.CurrentUserLocalKey).(*rbac.CurrentUser)
+			if !ok || user.ID != 2 {
+				t.Fatalf("current user local = %#v, want user 2", c.Locals(plugin.CurrentUserLocalKey))
+			}
+			return c.SendString("ok")
+		}, plugin.Auth()),
+	}
+
+	plugin.MountRoutes(app.Group("/api/v1"), routes, plugin.WithAuthenticator(authenticator))
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/v1/profile", nil))
+	if err != nil {
+		t.Fatalf("GET /profile error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /profile status = %d, want 200", resp.StatusCode)
+	}
+}
+
 func TestMountRoutesPreservesAuthenticatorAppError(t *testing.T) {
 	app := fiber.New()
 	authenticator := fakeAuthenticator{
@@ -166,7 +193,7 @@ func TestMountRoutesAuthorizesWithAuthenticatorAndPermission(t *testing.T) {
 			ID:      2,
 			IsStaff: true,
 			Roles: []rbac.Role{
-				{ID: 1, Enabled: true, Permissions: []string{"sys:user:add"}},
+				{ID: 1, Enabled: true, MenuCount: 1, Permissions: []string{"sys:user:add"}},
 			},
 		},
 	}

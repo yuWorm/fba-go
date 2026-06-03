@@ -546,6 +546,7 @@ func (s *AuthService) currentUserRoles(ctx context.Context, userID int) ([]rbac.
 			Code:           role.Name,
 			Enabled:        role.Status == 1,
 			IsFilterScopes: role.IsFilterScopes,
+			MenuCount:      len(menus),
 			Permissions:    permissionsFromMenus(menus),
 		})
 	}

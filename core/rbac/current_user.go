@@ -14,5 +14,6 @@ type Role struct {
 	Code           string
 	Enabled        bool
 	IsFilterScopes bool
+	MenuCount      int
 	Permissions    []string
 }

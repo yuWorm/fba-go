@@ -625,6 +625,8 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	if len(codeViewerCodes) != 0 {
 		t.Fatalf("code_viewer codes = %v, want empty permissions", codeViewerCodes)
 	}
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"NoMenuBlocked","status":1,"is_filter_scopes":false,"remark":null}`, codeViewerToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户未分配菜单，请联系系统管理员")
 	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/auth/codes", "", adminToken)
 	assertStatusOK(t, resp)
 	adminCodes := assertEnvelopeSlice(t, body)

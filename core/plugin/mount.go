@@ -75,13 +75,16 @@ func authHandler(route Route, authenticator Authenticator) fiber.Handler {
 		if err != nil {
 			return authErrorFailure(c, err)
 		}
-		if err := rbac.Authorize(user, rbac.RouteAccess{
-			Method:            route.Method,
-			Permission:        route.Permission,
-			SuperuserRequired: route.SuperuserRequired,
-			Whitelisted:       !route.AuthRequired && route.Permission == "" && !route.SuperuserRequired,
-		}); err != nil {
-			return authFailure(c, authStatus(err), authMessage(err))
+		// Auth-only routes mirror Python's DependsJwtAuth: they require a valid user context
+		// but must not apply role/menu checks unless the route declares RBAC metadata.
+		if route.Permission != "" || route.SuperuserRequired {
+			if err := rbac.Authorize(user, rbac.RouteAccess{
+				Method:            route.Method,
+				Permission:        route.Permission,
+				SuperuserRequired: route.SuperuserRequired,
+			}); err != nil {
+				return authFailure(c, authStatus(err), authMessage(err))
+			}
 		}
 		c.Locals(CurrentUserLocalKey, user)
 		return route.Handler(c)
@@ -109,6 +112,8 @@ func authMessage(err error) string {
 		return "未认证"
 	case errors.Is(err, rbac.ErrNoEnabledRole):
 		return "无可用角色"
+	case errors.Is(err, rbac.ErrNoRoleMenus):
+		return "用户未分配菜单，请联系系统管理员"
 	case errors.Is(err, rbac.ErrStaffRequired):
 		return "需要管理员权限"
 	case errors.Is(err, rbac.ErrSuperuserRequired):

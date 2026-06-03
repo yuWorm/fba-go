@@ -57,13 +57,27 @@ func TestAuthorizeRejectsNonStaffWrite(t *testing.T) {
 	user := &rbac.CurrentUser{
 		ID: 2,
 		Roles: []rbac.Role{
-			{Enabled: true, Permissions: []string{"sys:user:del"}},
+			{Enabled: true, MenuCount: 1, Permissions: []string{"sys:user:del"}},
 		},
 	}
 
 	err := rbac.Authorize(user, rbac.RouteAccess{Method: "DELETE", Permission: "sys:user:del"})
 	if !errors.Is(err, rbac.ErrStaffRequired) {
 		t.Fatalf("Authorize() error = %v, want staff required", err)
+	}
+}
+
+func TestAuthorizeRejectsEnabledRolesWithoutMenusBeforeStaffGuard(t *testing.T) {
+	user := &rbac.CurrentUser{
+		ID: 2,
+		Roles: []rbac.Role{
+			{Enabled: true},
+		},
+	}
+
+	err := rbac.Authorize(user, rbac.RouteAccess{Method: "DELETE", Permission: "sys:user:del"})
+	if !errors.Is(err, rbac.ErrNoRoleMenus) {
+		t.Fatalf("Authorize() error = %v, want no role menus", err)
 	}
 }
 
@@ -81,7 +95,7 @@ func TestAuthorizeRejectsPermissionMismatch(t *testing.T) {
 		ID:      2,
 		IsStaff: true,
 		Roles: []rbac.Role{
-			{Enabled: true, Permissions: []string{"sys:user:view"}},
+			{Enabled: true, MenuCount: 1, Permissions: []string{"sys:user:view"}},
 		},
 	}
 
