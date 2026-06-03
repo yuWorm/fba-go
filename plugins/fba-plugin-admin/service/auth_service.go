@@ -514,9 +514,10 @@ func issueToken(prefix string, userID int, sessionUUID string, ttl time.Duration
 
 func (s *AuthService) parseBearerAccessToken(header string) (int, string, bool) {
 	token := strings.TrimSpace(header)
-	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
-		token = strings.TrimSpace(token[7:])
+	if !strings.HasPrefix(strings.ToLower(token), "bearer ") {
+		return 0, "", false
 	}
+	token = strings.TrimSpace(token[7:])
 	// Access tokens are JWTs in the Python service and must not fall back to
 	// the compatibility refresh-token format; otherwise forged access:* strings
 	// could authenticate whenever the referenced session exists.

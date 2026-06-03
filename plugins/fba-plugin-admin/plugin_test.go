@@ -607,6 +607,8 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	if current["username"] != "viewer" {
 		t.Fatalf("current username = %v, want viewer", current["username"])
 	}
+	resp, body = requestJSONWithAuthorization(t, app, "GET", "/api/v1/sys/users/me", "", viewerToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "Token 无效")
 
 	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"admin","password":"admin","uuid":"fixture-captcha","captcha":"1234"}`)
 	assertStatusOK(t, resp)
@@ -2143,6 +2145,11 @@ func requestJSON(t *testing.T, app *fiber.App, method string, path string, body 
 
 func requestJSONAuth(t *testing.T, app *fiber.App, method string, path string, body string, token string) (*http.Response, map[string]any) {
 	t.Helper()
+	return requestJSONWithAuthorization(t, app, method, path, body, "Bearer "+token)
+}
+
+func requestJSONWithAuthorization(t *testing.T, app *fiber.App, method string, path string, body string, authorization string) (*http.Response, map[string]any) {
+	t.Helper()
 	var reqBody io.Reader
 	if body != "" {
 		reqBody = strings.NewReader(body)
@@ -2151,7 +2158,7 @@ func requestJSONAuth(t *testing.T, app *fiber.App, method string, path string, b
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", authorization)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("%s %s error = %v", method, path, err)
