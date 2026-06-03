@@ -189,10 +189,15 @@ func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*
 	}
 	session, err := s.repo.GetSession(ctx, userID, sessionUUID)
 	if err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			// Python stores access tokens in Redis; a missing token key after JWT
+			// validation means the token has expired or was removed from the store.
+			return nil, authError("Token 已过期")
+		}
 		return nil, authError("未认证")
 	}
 	if !session.ExpireTime.IsZero() && time.Now().After(session.ExpireTime) {
-		return nil, authError("登录已过期")
+		return nil, authError("Token 已过期")
 	}
 	user, err := s.repo.GetUser(ctx, userID)
 	if err != nil {

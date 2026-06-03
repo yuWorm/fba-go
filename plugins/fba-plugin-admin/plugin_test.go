@@ -616,6 +616,9 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	expiredToken := expiredAccessToken(t, 2, "expired-session")
 	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", expiredToken)
 	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "Token 已过期")
+	missingSessionToken := accessTokenForSession(t, 2, "missing-session")
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", missingSessionToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "Token 已过期")
 
 	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"admin","password":"admin","uuid":"fixture-captcha","captcha":"1234"}`)
 	assertStatusOK(t, resp)
@@ -2237,9 +2240,19 @@ func loginForAccessToken(t *testing.T, app *fiber.App, username string, password
 
 func expiredAccessToken(t *testing.T, userID int64, sessionUUID string) string {
 	t.Helper()
+	return accessTokenWithIssuedAt(t, userID, sessionUUID, time.Now().Add(-2*time.Hour))
+}
+
+func accessTokenForSession(t *testing.T, userID int64, sessionUUID string) string {
+	t.Helper()
+	return accessTokenWithIssuedAt(t, userID, sessionUUID, time.Now())
+}
+
+func accessTokenWithIssuedAt(t *testing.T, userID int64, sessionUUID string, issuedAt time.Time) string {
+	t.Helper()
 	service := coreauth.NewJWTService(config.AuthOptions{AccessTokenTTL: time.Hour})
 	service.Now = func() time.Time {
-		return time.Now().Add(-2 * time.Hour)
+		return issuedAt
 	}
 	token, err := service.CreateAccessToken(context.Background(), userID, sessionUUID, nil)
 	if err != nil {
