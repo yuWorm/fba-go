@@ -186,6 +186,14 @@ func (s *AuthService) Logout(ctx context.Context, authorization string) error {
 	return s.repo.DeleteSession(ctx, userID, sessionUUID)
 }
 
+func (s *AuthService) AccessSessionUUID(authorization string) string {
+	_, sessionUUID, _, ok, _ := s.parseBearerAccessToken(authorization)
+	if !ok {
+		return ""
+	}
+	return sessionUUID
+}
+
 func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*rbac.CurrentUser, error) {
 	userID, sessionUUID, accessToken, ok, parseErr := s.parseBearerAccessToken(authorization)
 	if !ok {

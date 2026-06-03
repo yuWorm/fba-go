@@ -227,13 +227,14 @@ func (s *UserService) UpdateEmail(ctx context.Context, id int, captcha string, e
 	return s.repo.UpdateUserEmail(ctx, id, email)
 }
 
-func (s *UserService) UpdatePermission(ctx context.Context, id int, permissionType string, currentUserID int) error {
+func (s *UserService) UpdatePermission(ctx context.Context, id int, permissionType string, currentUserID int, currentSessionUUID string) error {
 	switch permissionType {
 	case "superuser", "staff", "status", "multi_login":
 	default:
 		return userBadRequest("权限类型不存在", nil)
 	}
-	if _, err := s.repo.GetUser(ctx, id); err != nil {
+	user, err := s.repo.GetUser(ctx, id)
+	if err != nil {
 		if stderrors.Is(err, repo.ErrNotFound) {
 			return userNotFound("用户不存在", err)
 		}
@@ -243,7 +244,17 @@ func (s *UserService) UpdatePermission(ctx context.Context, id int, permissionTy
 	if id == currentUserID && permissionType != "multi_login" {
 		return userForbidden("禁止修改自身权限", nil)
 	}
-	return s.repo.UpdateUserPermission(ctx, id, permissionType)
+	disableMultiLogin := permissionType == "multi_login" && user.IsMultiLogin
+	if err := s.repo.UpdateUserPermission(ctx, id, permissionType); err != nil {
+		return err
+	}
+	if !disableMultiLogin {
+		return nil
+	}
+	if id == currentUserID && currentSessionUUID != "" {
+		return s.clearUserSessionsExcept(ctx, user, currentSessionUUID)
+	}
+	return s.clearUserSessions(ctx, user)
 }
 
 func (s *UserService) Delete(ctx context.Context, id int) error {
@@ -266,6 +277,25 @@ func (s *UserService) clearUserSessions(ctx context.Context, user model.User) er
 	}
 	for _, session := range sessions {
 		if session.ID != user.ID {
+			continue
+		}
+		if err := s.repo.DeleteSession(ctx, session.ID, session.SessionUUID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *UserService) clearUserSessionsExcept(ctx context.Context, user model.User, keepSessionUUID string) error {
+	// When a user disables their own multi-login, Python deletes all access
+	// token Redis keys except the current session. Preserve that exact behavior
+	// by keeping the session_uuid parsed from the current access token.
+	sessions, err := s.repo.ListSessions(ctx, repo.SessionFilter{Username: user.Username})
+	if err != nil {
+		return err
+	}
+	for _, session := range sessions {
+		if session.ID != user.ID || session.SessionUUID == keepSessionUUID {
 			continue
 		}
 		if err := s.repo.DeleteSession(ctx, session.ID, session.SessionUUID); err != nil {

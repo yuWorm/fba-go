@@ -914,6 +914,51 @@ func TestRefreshRejectsOlderSingleLoginSessionLikePython(t *testing.T) {
 	assertEnvelopeMap(t, body)
 }
 
+func TestDisablingMultiLoginRevokesExistingSessionsLikePython(t *testing.T) {
+	app := newAdminRuntimeApp(t)
+	adminToken := loginForAccessToken(t, app, "admin", "admin")
+
+	resp, body := requestJSONAuth(t, app, "POST", "/api/v1/sys/users", `{"username":"multi_target","password":"secret","nickname":"Multi Target","email":null,"phone":null,"dept_id":1,"roles":[1]}`, adminToken)
+	assertStatusOK(t, resp)
+	user := assertEnvelopeMap(t, body)
+	userID := int(user["id"].(float64))
+
+	resp, body = requestJSONAuth(t, app, "PUT", "/api/v1/sys/users/"+itoa(userID)+"/permissions?type=multi_login", "", adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	firstLogin := loginForAccessData(t, app, "multi_target", "secret")
+	firstToken := firstLogin["access_token"].(string)
+	secondLogin := loginForAccessData(t, app, "multi_target", "secret")
+	secondToken := secondLogin["access_token"].(string)
+	if firstLogin["session_uuid"] == secondLogin["session_uuid"] {
+		t.Fatalf("multi-login session_uuid reused: %v", firstLogin["session_uuid"])
+	}
+
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/monitors/sessions?username=multi_target", "", adminToken)
+	assertStatusOK(t, resp)
+	sessions := assertEnvelopeSlice(t, body)
+	if len(sessions) != 2 {
+		t.Fatalf("sessions before disabling multi_login = %d, want 2", len(sessions))
+	}
+
+	resp, body = requestJSONAuth(t, app, "PUT", "/api/v1/sys/users/"+itoa(userID)+"/permissions?type=multi_login", "", adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", firstToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "Token 已过期")
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", secondToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "Token 已过期")
+
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/monitors/sessions?username=multi_target", "", adminToken)
+	assertStatusOK(t, resp)
+	sessions = assertEnvelopeSlice(t, body)
+	if len(sessions) != 0 {
+		t.Fatalf("sessions after disabling multi_login = %d, want 0", len(sessions))
+	}
+}
+
 func TestCurrentUserMatchesPythonSchema(t *testing.T) {
 	app := newAdminApp(t)
 	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/users/me", "")
