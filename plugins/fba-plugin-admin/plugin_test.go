@@ -472,6 +472,32 @@ func TestLoginCreatesSuccessAndFailureLogsLikePython(t *testing.T) {
 	}
 }
 
+func TestLoginFailureLockoutMatchesPythonSecurityPolicy(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"lockout_user","password":"secret","nickname":"Lockout User","email":null,"phone":null,"dept_id":1,"roles":[1]}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+
+	for attempt := 1; attempt <= 5; attempt++ {
+		resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"lockout_user","password":"wrong","uuid":"fixture-captcha","captcha":"1234"}`)
+		if attempt < 5 {
+			assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "用户名或密码有误")
+			continue
+		}
+		assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "登录失败次数过多，账号已被锁定")
+	}
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"lockout_user","password":"secret","uuid":"fixture-captcha","captcha":"1234"}`)
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("locked login status = %d, want 401; body = %v", resp.StatusCode, body)
+	}
+	msg, ok := body["msg"].(string)
+	if !ok || !strings.HasPrefix(msg, "账号已被锁定，请在 ") || !strings.HasSuffix(msg, " 分钟后重试") {
+		t.Fatalf("locked login msg = %v, want Python remaining-minute lockout message", body["msg"])
+	}
+}
+
 func TestAuthEndpointsAreStatefulAndValidateUsers(t *testing.T) {
 	app := newAdminApp(t)
 

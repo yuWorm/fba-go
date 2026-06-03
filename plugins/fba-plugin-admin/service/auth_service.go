@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	stderrors "errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,6 +30,8 @@ const (
 	loginLogFail       = 0
 	loginLogSuccess    = 1
 	loginSuccessMsg    = "登录成功"
+	userLockThreshold  = 5
+	userLockTTL        = 5 * time.Minute
 )
 
 type RequestMetadata struct {
@@ -43,10 +46,12 @@ type RequestMetadata struct {
 }
 
 type AuthService struct {
-	repo         repo.Repository
-	tokenService coreauth.TokenService
-	mu           sync.Mutex
-	captchas     map[string]string
+	repo          repo.Repository
+	tokenService  coreauth.TokenService
+	mu            sync.Mutex
+	captchas      map[string]string
+	loginFailures map[int]int
+	userLocks     map[int]time.Time
 }
 
 func NewAuthService(repository repo.Repository) *AuthService {
@@ -54,9 +59,11 @@ func NewAuthService(repository repo.Repository) *AuthService {
 		repository = repo.NewMemoryRepository(repo.SeedData())
 	}
 	return &AuthService{
-		repo:         repository,
-		tokenService: coreauth.NewJWTService(config.AuthOptions{AccessTokenTTL: accessTokenTTL}),
-		captchas:     map[string]string{},
+		repo:          repository,
+		tokenService:  coreauth.NewJWTService(config.AuthOptions{AccessTokenTTL: accessTokenTTL}),
+		captchas:      map[string]string{},
+		loginFailures: map[int]int{},
+		userLocks:     map[int]time.Time{},
 	}
 }
 
@@ -466,13 +473,70 @@ func (s *AuthService) verifyUser(ctx context.Context, username string, password 
 	if user.Status != 1 {
 		return model.User{}, authError("用户已被锁定, 请联系统管理员")
 	}
-	if user.Password != "" && user.Password != password {
+	if err := s.checkLoginLock(user.ID); err != nil {
+		return model.User{}, err
+	}
+	if !passwordMatches(user, password) {
+		if err := s.recordLoginFailure(user.ID); err != nil {
+			return model.User{}, err
+		}
 		return model.User{}, authError("用户名或密码有误")
 	}
-	if user.Password == "" && password != "" && password != "admin" {
-		return model.User{}, authError("用户名或密码有误")
-	}
+	s.resetLoginFailure(user.ID)
 	return user, nil
+}
+
+func passwordMatches(user model.User, password string) bool {
+	if user.Password != "" {
+		return user.Password == password
+	}
+	return password == "" || password == "admin"
+}
+
+func (s *AuthService) checkLoginLock(userID int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	lockedUntil, ok := s.userLocks[userID]
+	if !ok {
+		return nil
+	}
+	now := time.Now()
+	if !lockedUntil.After(now) {
+		delete(s.userLocks, userID)
+		delete(s.loginFailures, userID)
+		return nil
+	}
+	remaining := lockedUntil.Sub(now)
+	remainingMinutes := int((remaining + time.Minute - time.Nanosecond) / time.Minute)
+	if remainingMinutes < 1 {
+		remainingMinutes = 1
+	}
+	return authError(fmt.Sprintf("账号已被锁定，请在 %d 分钟后重试", remainingMinutes))
+}
+
+func (s *AuthService) recordLoginFailure(userID int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Python keeps both the failure counter and lock marker in Redis with a
+	// shared TTL. The Go module keeps equivalent process-local state until the
+	// core layer exposes a cross-process cache abstraction.
+	s.loginFailures[userID]++
+	if s.loginFailures[userID] < userLockThreshold {
+		return nil
+	}
+	s.userLocks[userID] = time.Now().Add(userLockTTL)
+	delete(s.loginFailures, userID)
+	return authError("登录失败次数过多，账号已被锁定")
+}
+
+func (s *AuthService) resetLoginFailure(userID int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.loginFailures, userID)
+	delete(s.userLocks, userID)
 }
 
 func (s *AuthService) verifyCaptcha(uuid string, captcha string) error {
