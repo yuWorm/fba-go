@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/config"
 	"github.com/yuWorm/fba-go/core/rbac"
 	"github.com/yuWorm/fba-go/core/response"
 	"github.com/yuWorm/fba-plugin-admin/dto"
@@ -36,6 +37,10 @@ func NewHandler() Handler {
 }
 
 func NewHandlerWithRepository(repository repo.Repository) Handler {
+	return NewHandlerWithOptions(repository, config.Options{})
+}
+
+func NewHandlerWithOptions(repository repo.Repository, opts config.Options) Handler {
 	if repository == nil {
 		repository = repo.NewMemoryRepository(repo.SeedData())
 	}
@@ -47,7 +52,7 @@ func NewHandlerWithRepository(repository repo.Repository) Handler {
 		depts:      service.NewDeptService(repository),
 		dataRules:  service.NewDataRuleService(repository),
 		dataScopes: service.NewDataScopeService(repository),
-		plugins:    service.NewPluginService(repository),
+		plugins:    service.NewPluginServiceWithConfig(repository, opts),
 		logs:       service.NewLogService(repository),
 		files:      service.NewFileService(),
 		monitors:   service.NewMonitorService(repository),

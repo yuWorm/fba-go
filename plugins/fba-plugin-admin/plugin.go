@@ -33,7 +33,7 @@ func (Module) Register(ctx plugin.Context) error {
 		}
 	}
 
-	handler := adminapi.NewHandlerWithRepository(repository)
+	handler := adminapi.NewHandlerWithOptions(repository, ctx.Config())
 	if err := ctx.Provide(func() plugin.Authenticator {
 		return handler
 	}); err != nil {

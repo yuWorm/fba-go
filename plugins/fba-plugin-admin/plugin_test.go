@@ -129,7 +129,7 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		{"PUT", "/api/v1/sys/data-scopes/1/rules", `{"rules":[1]}`},
 		{"DELETE", "/api/v1/sys/data-scopes", `{"pks":[999999]}`},
 		{"POST", "/api/v1/sys/plugins?type=git&repo_url=https://example.invalid/plugin.git", ""},
-		{"DELETE", "/api/v1/sys/plugins/dict", ""},
+		{"DELETE", "/api/v1/sys/plugins/plugin", ""},
 		{"PUT", "/api/v1/sys/plugins/dict/status", ""},
 		{"DELETE", "/api/v1/logs/login", `{"pks":[1]}`},
 		{"DELETE", "/api/v1/logs/login/all", ""},
@@ -1138,7 +1138,10 @@ func TestPluginEndpointsAreStatefulAndPythonCompatible(t *testing.T) {
 
 	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/plugins?type=git&repo_url=https://example.invalid/analytics.git", "")
 	assertStatusOK(t, resp)
-	assertEnvelopeNil(t, body)
+	assertSuccessDataNil(t, body)
+	if body["msg"] != "插件 analytics 安装成功，请根据插件说明（README.md）进行相关配置并重启服务" {
+		t.Fatalf("install plugin msg = %v, want Python success message", body["msg"])
+	}
 
 	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/plugins", "")
 	assertStatusOK(t, resp)
@@ -1160,7 +1163,10 @@ func TestPluginEndpointsAreStatefulAndPythonCompatible(t *testing.T) {
 
 	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/plugins/analytics", "")
 	assertStatusOK(t, resp)
-	assertEnvelopeNil(t, body)
+	assertSuccessDataNil(t, body)
+	if body["msg"] != "插件 analytics 卸载成功，请根据插件说明（README.md）移除相关配置并重启服务" {
+		t.Fatalf("uninstall plugin msg = %v, want Python success message", body["msg"])
+	}
 
 	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/plugins", "")
 	assertStatusOK(t, resp)
@@ -1179,6 +1185,9 @@ func TestPluginEndpointsApplyPythonGuards(t *testing.T) {
 	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/plugins?type=zip", "")
 	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "ZIP 压缩包不能为空")
 
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/plugins/dict", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "插件 dict 为必需插件，禁止卸载")
+
 	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/plugins/missing", "")
 	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "插件不存在")
 
@@ -1187,6 +1196,13 @@ func TestPluginEndpointsApplyPythonGuards(t *testing.T) {
 
 	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/plugins/missing", "")
 	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "插件不存在")
+
+	prodApp := newAdminAppWithConfig(t, config.Options{App: config.AppOptions{Environment: "prod"}})
+	resp, body = requestJSON(t, prodApp, "POST", "/api/v1/sys/plugins?type=git&repo_url=https://example.invalid/analytics.git", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "禁止在非开发环境下安装插件")
+
+	resp, body = requestJSON(t, prodApp, "DELETE", "/api/v1/sys/plugins/dict", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "禁止在非开发环境下卸载插件")
 }
 
 func TestLogEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
@@ -2125,8 +2141,13 @@ func TestRoleRelationEndpointsAreStateful(t *testing.T) {
 
 func newAdminApp(t *testing.T) *fiber.App {
 	t.Helper()
+	return newAdminAppWithConfig(t, config.Options{})
+}
+
+func newAdminAppWithConfig(t *testing.T, opts config.Options) *fiber.App {
+	t.Helper()
 	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler})
-	ctx := plugin.NewContext(plugin.ContextOptions{APIGroup: app.Group("/api/v1")})
+	ctx := plugin.NewContext(plugin.ContextOptions{APIGroup: app.Group("/api/v1"), Config: opts})
 	if err := admin.FBAPlugin().Register(ctx); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
@@ -2336,6 +2357,16 @@ func assertEnvelopeNil(t *testing.T, body map[string]any) {
 	}
 	if body["msg"] != "请求成功" {
 		t.Fatalf("msg = %v, want 请求成功", body["msg"])
+	}
+	if body["data"] != nil {
+		t.Fatalf("data = %v, want nil", body["data"])
+	}
+}
+
+func assertSuccessDataNil(t *testing.T, body map[string]any) {
+	t.Helper()
+	if body["code"] != float64(200) {
+		t.Fatalf("code = %v, want 200; body = %v", body["code"], body)
 	}
 	if body["data"] != nil {
 		t.Fatalf("data = %v, want nil", body["data"])

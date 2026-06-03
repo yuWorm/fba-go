@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
@@ -617,17 +618,27 @@ func (h Handler) PluginChanged(c fiber.Ctx) error {
 }
 
 func (h Handler) InstallPlugin(c fiber.Ctx) error {
-	if err := h.plugins.Install(c.RequestCtx(), c.Query("type"), c.Query("repo_url")); err != nil {
+	pluginName, err := h.plugins.Install(c.RequestCtx(), c.Query("type"), c.Query("repo_url"))
+	if err != nil {
 		return err
 	}
-	return c.JSON(response.Success[any](nil))
+	return c.JSON(response.Response[any]{
+		Code: 200,
+		Msg:  fmt.Sprintf("插件 %s 安装成功，请根据插件说明（README.md）进行相关配置并重启服务", pluginName),
+		Data: nil,
+	})
 }
 
 func (h Handler) UninstallPlugin(c fiber.Ctx) error {
-	if err := h.plugins.Uninstall(c.RequestCtx(), c.Params("plugin")); err != nil {
+	pluginName := c.Params("plugin")
+	if err := h.plugins.Uninstall(c.RequestCtx(), pluginName); err != nil {
 		return err
 	}
-	return c.JSON(response.Success[any](nil))
+	return c.JSON(response.Response[any]{
+		Code: 200,
+		Msg:  fmt.Sprintf("插件 %s 卸载成功，请根据插件说明（README.md）移除相关配置并重启服务", pluginName),
+		Data: nil,
+	})
 }
 
 func (h Handler) UpdatePluginStatus(c fiber.Ctx) error {
