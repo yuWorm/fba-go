@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/yuWorm/fba-go/core/db"
 	"github.com/yuWorm/fba-go/core/di"
+	"github.com/yuWorm/fba-go/core/middleware"
 	"github.com/yuWorm/fba-go/core/plugin"
 	dict "github.com/yuWorm/fba-plugin-dict"
 	"gorm.io/gorm"
@@ -161,9 +162,16 @@ func TestDictWriteEndpointsReturnPythonEnvelope(t *testing.T) {
 	}
 }
 
+func TestDictValidationErrorsMatchPython(t *testing.T) {
+	app := newDictApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/dict-types/not-int", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnprocessableEntity, "请求参数非法: pk 输入应为有效的整数，无法将字符串解析为整数，输入：not-int")
+}
+
 func newDictApp(t *testing.T) *fiber.App {
 	t.Helper()
-	app := fiber.New()
+	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler})
 	ctx := plugin.NewContext(plugin.ContextOptions{APIGroup: app.Group("/api/v1")})
 	if err := dict.FBAPlugin().Register(ctx); err != nil {
 		t.Fatalf("Register() error = %v", err)
@@ -239,6 +247,19 @@ func assertEnvelopeNull(t *testing.T, body map[string]any) {
 	}
 	if body["data"] != nil {
 		t.Fatalf("data = %v, want nil", body["data"])
+	}
+}
+
+func assertErrorEnvelope(t *testing.T, resp *http.Response, body map[string]any, status int, msg string) {
+	t.Helper()
+	if resp.StatusCode != status {
+		t.Fatalf("status = %d, want %d; body = %v", resp.StatusCode, status, body)
+	}
+	if body["code"] != float64(status) {
+		t.Fatalf("code = %v, want %d; body = %v", body["code"], status, body)
+	}
+	if body["msg"] != msg {
+		t.Fatalf("msg = %v, want %s", body["msg"], msg)
 	}
 }
 

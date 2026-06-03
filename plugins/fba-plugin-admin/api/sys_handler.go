@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
-	fbaerrors "github.com/yuWorm/fba-go/core/errors"
+	"github.com/yuWorm/fba-go/core/fiberx"
 	"github.com/yuWorm/fba-go/core/response"
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/repo"
@@ -593,7 +593,7 @@ func (h Handler) DeleteDataScopes(c fiber.Ctx) error {
 func (h Handler) UploadFile(c fiber.Ctx) error {
 	file, err := c.FormFile("file")
 	if err != nil {
-		return validationMissingFieldError("file")
+		return fiberx.ValidationMissingField("file")
 	}
 	uploaded, err := h.files.Upload(c.RequestCtx(), file.Filename, file.Size)
 	if err != nil {
@@ -757,23 +757,7 @@ func (h Handler) DeleteSession(c fiber.Ctx) error {
 }
 
 func parseID(raw string) (int, error) {
-	id, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, validationIntParsingError("pk", raw)
-	}
-	return id, nil
-}
-
-func validationMissingFieldError(field string) error {
-	return validationError(fmt.Sprintf("请求参数非法: %s 字段为必填项，输入：None", field))
-}
-
-func validationIntParsingError(field string, input string) error {
-	return validationError(fmt.Sprintf("请求参数非法: %s 输入应为有效的整数，无法将字符串解析为整数，输入：%s", field, input))
-}
-
-func validationError(message string) error {
-	return fbaerrors.New(fiber.StatusUnprocessableEntity, fiber.StatusUnprocessableEntity, message, nil)
+	return fiberx.ParseIntParam("pk", raw)
 }
 
 func pageParams(c fiber.Ctx) (int, int) {

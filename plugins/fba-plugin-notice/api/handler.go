@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/fiberx"
 	"github.com/yuWorm/fba-go/core/response"
 	"github.com/yuWorm/fba-plugin-notice/dto"
 	"github.com/yuWorm/fba-plugin-notice/repo"
@@ -84,11 +85,7 @@ func (h Handler) DeleteNotices(c fiber.Ctx) error {
 }
 
 func parseID(raw string) (int, error) {
-	id, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, fiber.NewError(fiber.StatusBadRequest, "invalid id")
-	}
-	return id, nil
+	return fiberx.ParseIntParam("pk", raw)
 }
 
 func pageParams(c fiber.Ctx) (int, int) {
