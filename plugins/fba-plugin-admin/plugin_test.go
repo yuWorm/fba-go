@@ -608,6 +608,13 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 		t.Fatalf("current username = %v, want viewer", current["username"])
 	}
 
+	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"admin","password":"admin","uuid":"fixture-captcha","captcha":"1234"}`)
+	assertStatusOK(t, resp)
+	adminLogin := assertEnvelopeMap(t, body)
+	forgedLegacyToken := "access:1:" + adminLogin["session_uuid"].(string) + ":9999999999:forged"
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", forgedLegacyToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "未认证")
+
 	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/users", `{"username":"code_viewer","password":"secret","nickname":"Code Viewer","email":null,"phone":null,"dept_id":1,"roles":[2]}`, adminToken)
 	assertStatusOK(t, resp)
 	assertEnvelopeMap(t, body)

@@ -517,6 +517,9 @@ func (s *AuthService) parseBearerAccessToken(header string) (int, string, bool) 
 	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
 		token = strings.TrimSpace(token[7:])
 	}
+	// Access tokens are JWTs in the Python service and must not fall back to
+	// the compatibility refresh-token format; otherwise forged access:* strings
+	// could authenticate whenever the referenced session exists.
 	claims, err := s.tokenService.ParseAccessToken(token)
 	if err == nil && claims.Subject != "" && claims.SessionUUID != "" {
 		userID, err := strconv.Atoi(claims.Subject)
@@ -524,7 +527,7 @@ func (s *AuthService) parseBearerAccessToken(header string) (int, string, bool) 
 			return userID, claims.SessionUUID, true
 		}
 	}
-	return parseToken(token, "access")
+	return 0, "", false
 }
 
 func (s *AuthService) currentUserRoles(ctx context.Context, userID int) ([]rbac.Role, error) {
