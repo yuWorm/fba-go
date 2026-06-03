@@ -232,6 +232,10 @@ func (r *GORMRepository) UpdateUserEmail(ctx context.Context, id int, email *str
 	return updateUserColumns(r.provider.Write().WithContext(ctx), id, map[string]any{"email": email})
 }
 
+func (r *GORMRepository) UpdateUserLoginTime(ctx context.Context, id int, loginTime time.Time) error {
+	return updateUserColumns(r.provider.Write().WithContext(ctx), id, map[string]any{"last_login_time": loginTime})
+}
+
 func (r *GORMRepository) ResetUserPassword(ctx context.Context, id int, password string) error {
 	return updateUserColumns(r.provider.Write().WithContext(ctx), id, map[string]any{"password": password})
 }

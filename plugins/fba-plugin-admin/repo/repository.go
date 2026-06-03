@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"time"
 
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/model"
@@ -60,6 +61,7 @@ type Repository interface {
 	UpdateUserNickname(ctx context.Context, id int, nickname string) error
 	UpdateUserAvatar(ctx context.Context, id int, avatar *string) error
 	UpdateUserEmail(ctx context.Context, id int, email *string) error
+	UpdateUserLoginTime(ctx context.Context, id int, loginTime time.Time) error
 	ResetUserPassword(ctx context.Context, id int, password string) error
 	UpdateUserPermission(ctx context.Context, id int, permissionType string) error
 	DeleteUser(ctx context.Context, id int) error

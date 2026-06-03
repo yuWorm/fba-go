@@ -84,6 +84,10 @@ func (s *AuthService) Login(ctx context.Context, param dto.AuthLoginParam, meta 
 		s.recordLoginLog(ctx, model.User{}, param.Username, loginLogFail, err.Error(), meta)
 		return dto.LoginToken{}, "", err
 	}
+	user, err = s.updateUserLoginTime(ctx, user)
+	if err != nil {
+		return dto.LoginToken{}, "", err
+	}
 	sessionUUID := "session-" + randomID()
 	token, refresh, err := s.issueLoginToken(ctx, user, sessionUUID)
 	if err != nil {
@@ -101,6 +105,10 @@ func (s *AuthService) SwaggerLogin(ctx context.Context, username string, passwor
 		password = "admin"
 	}
 	user, err := s.verifyUser(ctx, username, password)
+	if err != nil {
+		return dto.SwaggerToken{}, err
+	}
+	user, err = s.updateUserLoginTime(ctx, user)
 	if err != nil {
 		return dto.SwaggerToken{}, err
 	}
@@ -272,9 +280,25 @@ func (s *AuthService) upsertSession(ctx context.Context, user model.User, sessio
 		Browser:       "unknown",
 		Device:        "unknown",
 		Status:        user.Status,
-		LastLoginTime: time.Now().Format(dto.TimeLayout),
+		LastLoginTime: sessionLastLoginTime(user),
 		ExpireTime:    expiresAt,
 	})
+}
+
+func (s *AuthService) updateUserLoginTime(ctx context.Context, user model.User) (model.User, error) {
+	loginTime := time.Now()
+	if err := s.repo.UpdateUserLoginTime(ctx, user.ID, loginTime); err != nil {
+		return model.User{}, err
+	}
+	user.LastLoginTime = &loginTime
+	return user, nil
+}
+
+func sessionLastLoginTime(user model.User) string {
+	if user.LastLoginTime != nil {
+		return user.LastLoginTime.Format(dto.TimeLayout)
+	}
+	return time.Now().Format(dto.TimeLayout)
 }
 
 func (s *AuthService) replaceRefreshSession(ctx context.Context, user model.User, oldSessionUUID string, newSessionUUID string, expiresAt time.Time) error {

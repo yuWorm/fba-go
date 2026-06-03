@@ -485,7 +485,11 @@ func TestAuthEndpointsAreStatefulAndValidateUsers(t *testing.T) {
 
 	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"auth_user","password":"secret","nickname":"Auth User","email":null,"phone":null,"dept_id":1,"roles":[1]}`)
 	assertStatusOK(t, resp)
-	assertEnvelopeMap(t, body)
+	createdUser := assertEnvelopeMap(t, body)
+	if createdUser["last_login_time"] != nil {
+		t.Fatalf("new user last_login_time = %v, want nil before login", createdUser["last_login_time"])
+	}
+	userID := int(createdUser["id"].(float64))
 
 	loginBody := `{"username":"auth_user","password":"secret","uuid":"` + captcha["uuid"].(string) + `","captcha":"1234"}`
 	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", loginBody)
@@ -501,8 +505,18 @@ func TestAuthEndpointsAreStatefulAndValidateUsers(t *testing.T) {
 	if user["username"] != "auth_user" {
 		t.Fatalf("login user = %v, want auth_user", user["username"])
 	}
+	if user["last_login_time"] == nil || user["last_login_time"] == "" {
+		t.Fatalf("login user last_login_time = %v, want non-empty value", user["last_login_time"])
+	}
 	sessionUUID := data["session_uuid"].(string)
 	refreshCookie := requireCookie(t, resp.Header.Get("Set-Cookie"), "fba_refresh_token")
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/users/"+itoa(userID), "")
+	assertStatusOK(t, resp)
+	persistedUser := assertEnvelopeMap(t, body)
+	if persistedUser["last_login_time"] != user["last_login_time"] {
+		t.Fatalf("persisted last_login_time = %v, want %v", persistedUser["last_login_time"], user["last_login_time"])
+	}
 
 	resp, body = requestJSON(t, app, "GET", "/api/v1/monitors/sessions?username=auth_user", "")
 	assertStatusOK(t, resp)

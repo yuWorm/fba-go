@@ -277,6 +277,19 @@ func (r *MemoryRepository) UpdateUserEmail(_ context.Context, id int, email *str
 	return ErrNotFound
 }
 
+func (r *MemoryRepository) UpdateUserLoginTime(_ context.Context, id int, loginTime time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.users {
+		if r.users[i].ID == id && r.users[i].Deleted == 0 {
+			value := loginTime
+			r.users[i].LastLoginTime = &value
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
 func (r *MemoryRepository) ResetUserPassword(_ context.Context, id int, password string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
