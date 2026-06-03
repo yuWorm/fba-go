@@ -1291,6 +1291,16 @@ func TestUploadFileUsesMultipartFilenameLikePython(t *testing.T) {
 	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "此文件格式 txt 暂不支持")
 }
 
+func TestAdminValidationErrorsMatchPython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/users/not-int", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnprocessableEntity, "请求参数非法: pk 输入应为有效的整数，无法将字符串解析为整数，输入：not-int")
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/sys/files/upload", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnprocessableEntity, "请求参数非法: file 字段为必填项，输入：None")
+}
+
 func TestMonitorEndpointsUseServiceData(t *testing.T) {
 	app := newAdminApp(t)
 
