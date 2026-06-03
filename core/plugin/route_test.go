@@ -226,8 +226,15 @@ func TestMountRoutesAuthorizesWithAuthenticatorAndPermission(t *testing.T) {
 		t.Fatalf("DELETE /users error = %v", err)
 	}
 	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
 	if resp.StatusCode != fiber.StatusForbidden {
-		t.Fatalf("DELETE /users status = %d, want 403", resp.StatusCode)
+		t.Fatalf("DELETE /users status = %d, want 403; body = %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), `"msg":"Permission Denied"`) {
+		t.Fatalf("body = %s, want permission denied message", body)
 	}
 }
 
@@ -326,8 +333,15 @@ func TestMountRoutesRejectsSuperuserRouteForNonSuperuser(t *testing.T) {
 		t.Fatalf("GET /plugins error = %v", err)
 	}
 	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
 	if resp.StatusCode != fiber.StatusForbidden {
-		t.Fatalf("GET /plugins status = %d, want 403", resp.StatusCode)
+		t.Fatalf("GET /plugins status = %d, want 403; body = %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), `"msg":"Permission Denied"`) {
+		t.Fatalf("body = %s, want permission denied message", body)
 	}
 }
 

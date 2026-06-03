@@ -117,9 +117,9 @@ func authMessage(err error) string {
 	case errors.Is(err, rbac.ErrStaffRequired):
 		return "用户已被禁止后台管理操作，请联系系统管理员"
 	case errors.Is(err, rbac.ErrSuperuserRequired):
-		return "需要超级用户权限"
+		return "Permission Denied"
 	default:
-		return "无权限"
+		return "Permission Denied"
 	}
 }
 

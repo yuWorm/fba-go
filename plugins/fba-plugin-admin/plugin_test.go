@@ -670,15 +670,11 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	assertStatusOK(t, resp)
 	assertEnvelopeNil(t, body)
 	superNotStaffToken := loginForAccessToken(t, app, "super_not_staff", "secret")
-	resp, _ = requestRawAuth(t, app, "GET", "/api/v1/sys/plugins", "", superNotStaffToken)
-	if resp.StatusCode != fiber.StatusForbidden {
-		t.Fatalf("super_not_staff GET /sys/plugins status = %d, want 403", resp.StatusCode)
-	}
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/plugins", "", superNotStaffToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "Permission Denied")
 
-	resp, _ = requestRawAuth(t, app, "GET", "/api/v1/sys/plugins", "", viewerToken)
-	if resp.StatusCode != fiber.StatusForbidden {
-		t.Fatalf("viewer GET /sys/plugins status = %d, want 403", resp.StatusCode)
-	}
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/plugins", "", viewerToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "Permission Denied")
 }
 
 func TestAdminRuntimeDeptTreeAppliesPythonDataPermission(t *testing.T) {
