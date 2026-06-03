@@ -671,6 +671,17 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", roleLockedToken)
 	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户所属角色已被锁定，请联系系统管理员")
 
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/users", `{"username":"access_locked_user","password":"secret","nickname":"Access Locked","email":null,"phone":null,"dept_id":1,"roles":[1]}`, adminToken)
+	assertStatusOK(t, resp)
+	accessLocked := assertEnvelopeMap(t, body)
+	accessLockedID := int(accessLocked["id"].(float64))
+	accessLockedToken := loginForAccessToken(t, app, "access_locked_user", "secret")
+	resp, body = requestJSONAuth(t, app, "PUT", "/api/v1/sys/users/"+itoa(accessLockedID)+"/permissions?type=status", "", adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", accessLockedToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户已被锁定，请联系系统管理员")
+
 	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"Blocked","status":1,"is_filter_scopes":false,"remark":null}`, viewerToken)
 	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户已被禁止后台管理操作，请联系系统管理员")
 

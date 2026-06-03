@@ -204,7 +204,7 @@ func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*
 		return nil, authError("未认证")
 	}
 	if user.Status != 1 {
-		return nil, authError("用户已被锁定, 请联系统管理员")
+		return nil, authForbiddenError("用户已被锁定，请联系系统管理员")
 	}
 	if err := s.ensureUserDeptAllowed(ctx, user); err != nil {
 		return nil, err
