@@ -608,6 +608,23 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 		t.Fatalf("current username = %v, want viewer", current["username"])
 	}
 
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/users", `{"username":"code_viewer","password":"secret","nickname":"Code Viewer","email":null,"phone":null,"dept_id":1,"roles":[2]}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+	codeViewerToken := loginForAccessToken(t, app, "code_viewer", "secret")
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/auth/codes", "", codeViewerToken)
+	assertStatusOK(t, resp)
+	codeViewerCodes := assertEnvelopeSlice(t, body)
+	if len(codeViewerCodes) != 0 {
+		t.Fatalf("code_viewer codes = %v, want empty permissions", codeViewerCodes)
+	}
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/auth/codes", "", adminToken)
+	assertStatusOK(t, resp)
+	adminCodes := assertEnvelopeSlice(t, body)
+	if !hasString(adminCodes, "sys:user:del") {
+		t.Fatalf("admin codes = %v, want sys:user:del", adminCodes)
+	}
+
 	resp, _ = requestRawAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"Blocked","status":1,"is_filter_scopes":false,"remark":null}`, viewerToken)
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("viewer POST /sys/roles status = %d, want 403", resp.StatusCode)

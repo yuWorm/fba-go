@@ -217,18 +217,28 @@ func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*
 	}, nil
 }
 
-func (s *AuthService) Codes(ctx context.Context) ([]string, error) {
+func (s *AuthService) Codes(ctx context.Context, user *rbac.CurrentUser) ([]string, error) {
+	if user != nil && !user.IsSuperAdmin {
+		return permissionsFromCurrentUser(user), nil
+	}
+	// Runtime /auth/codes always has a current user from plugin.Auth(); nil is
+	// kept as an admin-style fallback for direct handler tests that mount routes
+	// without the auth middleware.
 	menus, err := s.repo.ListMenus(ctx, repo.MenuFilter{})
 	if err != nil {
 		return nil, err
 	}
+	return permissionsFromMenus(menus), nil
+}
+
+func permissionsFromCurrentUser(user *rbac.CurrentUser) []string {
 	seen := map[string]struct{}{}
 	codes := make([]string, 0)
-	for _, menu := range menus {
-		if menu.Status != 1 || menu.Perms == nil || *menu.Perms == "" {
+	for _, role := range user.Roles {
+		if !role.Enabled {
 			continue
 		}
-		for _, code := range strings.Split(*menu.Perms, ",") {
+		for _, code := range role.Permissions {
 			code = strings.TrimSpace(code)
 			if code == "" {
 				continue
@@ -240,7 +250,7 @@ func (s *AuthService) Codes(ctx context.Context) ([]string, error) {
 			codes = append(codes, code)
 		}
 	}
-	return codes, nil
+	return codes
 }
 
 func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sessionUUID string) (dto.LoginToken, string, error) {

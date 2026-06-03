@@ -119,7 +119,7 @@ func optionalString(value string) *string {
 }
 
 func (h Handler) Codes(c fiber.Ctx) error {
-	codes, err := h.auth.Codes(c.RequestCtx())
+	codes, err := h.auth.Codes(c.RequestCtx(), currentUser(c))
 	if err != nil {
 		return err
 	}
