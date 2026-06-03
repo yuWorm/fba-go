@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/yuWorm/fba-go/core/di"
+	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/middleware"
 	"github.com/yuWorm/fba-go/core/rbac"
 	"github.com/yuWorm/fba-go/core/response"
@@ -72,7 +73,7 @@ func authHandler(route Route, authenticator Authenticator) fiber.Handler {
 		}
 		user, err := authenticator.Authenticate(c)
 		if err != nil {
-			return authFailure(c, http.StatusUnauthorized, "未认证")
+			return authErrorFailure(c, err)
 		}
 		if err := rbac.Authorize(user, rbac.RouteAccess{
 			Method:            route.Method,
@@ -85,6 +86,14 @@ func authHandler(route Route, authenticator Authenticator) fiber.Handler {
 		c.Locals(CurrentUserLocalKey, user)
 		return route.Handler(c)
 	}
+}
+
+func authErrorFailure(c fiber.Ctx, err error) error {
+	var appErr *fbaerrors.AppError
+	if errors.As(err, &appErr) {
+		return authFailureWithCode(c, appErr.HTTPStatus(), appErr.Code(), appErr.PublicMessage())
+	}
+	return authFailure(c, http.StatusUnauthorized, "未认证")
 }
 
 func authStatus(err error) int {
@@ -110,5 +119,9 @@ func authMessage(err error) string {
 }
 
 func authFailure(c fiber.Ctx, status int, message string) error {
-	return c.Status(status).JSON(response.Error(status, message, middleware.RequestIDFromCtx(c)))
+	return authFailureWithCode(c, status, status, message)
+}
+
+func authFailureWithCode(c fiber.Ctx, status int, code int, message string) error {
+	return c.Status(status).JSON(response.Error(code, message, middleware.RequestIDFromCtx(c)))
 }

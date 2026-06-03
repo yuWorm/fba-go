@@ -625,6 +625,20 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 		t.Fatalf("admin codes = %v, want sys:user:del", adminCodes)
 	}
 
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/depts", `{"name":"LockedDept","parent_id":null,"sort":3,"leader":null,"phone":null,"email":null,"status":1}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	lockedDeptID := findDeptIDAuth(t, app, "LockedDept", adminToken)
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/users", `{"username":"dept_locked_user","password":"secret","nickname":"Dept Locked","email":null,"phone":null,"dept_id":`+itoa(lockedDeptID)+`,"roles":[1]}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+	deptLockedToken := loginForAccessToken(t, app, "dept_locked_user", "secret")
+	resp, body = requestJSONAuth(t, app, "PUT", "/api/v1/sys/depts/"+itoa(lockedDeptID), `{"name":"LockedDept","parent_id":null,"sort":3,"leader":null,"phone":null,"email":null,"status":0}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", deptLockedToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户所属部门已被锁定，请联系系统管理员")
+
 	resp, _ = requestRawAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"Blocked","status":1,"is_filter_scopes":false,"remark":null}`, viewerToken)
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("viewer POST /sys/roles status = %d, want 403", resp.StatusCode)
@@ -2320,6 +2334,19 @@ func findDeptID(t *testing.T, app *fiber.App, name string) int {
 	t.Helper()
 	escapedName := strings.ReplaceAll(name, " ", "%20")
 	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/depts?name="+escapedName, "")
+	assertStatusOK(t, resp)
+	items := assertEnvelopeSlice(t, body)
+	if len(items) != 1 {
+		t.Fatalf("dept %q lookup count = %d, want 1", name, len(items))
+	}
+	item := assertMap(t, items[0])
+	return int(item["id"].(float64))
+}
+
+func findDeptIDAuth(t *testing.T, app *fiber.App, name string, token string) int {
+	t.Helper()
+	escapedName := strings.ReplaceAll(name, " ", "%20")
+	resp, body := requestJSONAuth(t, app, "GET", "/api/v1/sys/depts?name="+escapedName, "", token)
 	assertStatusOK(t, resp)
 	items := assertEnvelopeSlice(t, body)
 	if len(items) != 1 {

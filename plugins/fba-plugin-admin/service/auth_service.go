@@ -198,6 +198,9 @@ func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*
 	if user.Status != 1 {
 		return nil, authError("用户已被锁定, 请联系统管理员")
 	}
+	if err := s.ensureUserDeptAllowed(ctx, user); err != nil {
+		return nil, err
+	}
 	roles, err := s.currentUserRoles(ctx, user.ID)
 	if err != nil {
 		return nil, err
@@ -251,6 +254,25 @@ func permissionsFromCurrentUser(user *rbac.CurrentUser) []string {
 		}
 	}
 	return codes
+}
+
+func (s *AuthService) ensureUserDeptAllowed(ctx context.Context, user model.User) error {
+	if user.DeptID == nil {
+		return nil
+	}
+	// Python get_current_user rejects tokens when the user's department is
+	// deleted or locked; keep that as an authentication-time guard here.
+	dept, err := s.repo.GetDept(ctx, *user.DeptID)
+	if err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return authForbiddenError("用户所属部门不存在或已被删除，请联系系统管理员")
+		}
+		return err
+	}
+	if dept.Status != 1 {
+		return authForbiddenError("用户所属部门已被锁定，请联系系统管理员")
+	}
+	return nil
 }
 
 func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sessionUUID string) (dto.LoginToken, string, error) {
@@ -554,6 +576,10 @@ func randomID() string {
 
 func authError(message string) error {
 	return fbaerrors.New(http.StatusUnauthorized, http.StatusUnauthorized, message, nil)
+}
+
+func authForbiddenError(message string) error {
+	return fbaerrors.New(http.StatusForbidden, http.StatusForbidden, message, nil)
 }
 
 func refreshRequestError(message string) error {

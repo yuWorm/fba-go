@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/middleware"
 	"github.com/yuWorm/fba-go/core/plugin"
 	"github.com/yuWorm/fba-go/core/rbac"
@@ -125,6 +126,36 @@ func TestMountRoutesAuthFailureIncludesTraceID(t *testing.T) {
 	}
 	if !strings.Contains(string(body), `"trace_id":"request-1"`) {
 		t.Fatalf("body = %s, want trace_id request-1", body)
+	}
+}
+
+func TestMountRoutesPreservesAuthenticatorAppError(t *testing.T) {
+	app := fiber.New()
+	authenticator := fakeAuthenticator{
+		err: fbaerrors.New(fiber.StatusForbidden, fiber.StatusForbidden, "用户所属部门已被锁定，请联系系统管理员", nil),
+	}
+	routes := []plugin.Route{
+		plugin.GET("/secure", "Secure", func(c fiber.Ctx) error {
+			return c.SendString("ok")
+		}, plugin.Auth()),
+	}
+
+	plugin.MountRoutes(app.Group("/api/v1"), routes, plugin.WithAuthenticator(authenticator))
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/v1/secure", nil))
+	if err != nil {
+		t.Fatalf("GET /secure error = %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body = %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), `"msg":"用户所属部门已被锁定，请联系系统管理员"`) {
+		t.Fatalf("body = %s, want authenticator message", body)
 	}
 }
 
