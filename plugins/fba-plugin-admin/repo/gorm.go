@@ -85,6 +85,9 @@ func (r *GORMRepository) Seed(ctx context.Context) error {
 		if err := seedIfEmpty(tx, &model.User{}, r.seed.Users); err != nil {
 			return err
 		}
+		if err := seedIfEmpty(tx, &model.UserPasswordHistory{}, r.seed.UserPasswordHistories); err != nil {
+			return err
+		}
 		if err := seedIfEmpty(tx, &model.Role{}, r.seed.Roles); err != nil {
 			return err
 		}
@@ -171,20 +174,22 @@ func (r *GORMRepository) CreateUser(ctx context.Context, param dto.UserCreatePar
 	if param.Nickname != nil && *param.Nickname != "" {
 		nickname = *param.Nickname
 	}
+	passwordChangedAt := time.Now()
 	user := model.User{
-		UUID:         "gorm-user-" + strconv.FormatInt(time.Now().UnixNano(), 10),
-		DeptID:       &param.DeptID,
-		Username:     param.Username,
-		Nickname:     nickname,
-		Password:     param.Password,
-		Email:        param.Email,
-		Phone:        param.Phone,
-		Status:       1,
-		IsSuperuser:  false,
-		IsStaff:      false,
-		IsMultiLogin: false,
-		Deleted:      0,
-		JoinTime:     time.Now(),
+		UUID:                    "gorm-user-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+		DeptID:                  &param.DeptID,
+		Username:                param.Username,
+		Nickname:                nickname,
+		Password:                param.Password,
+		Email:                   param.Email,
+		Phone:                   param.Phone,
+		Status:                  1,
+		IsSuperuser:             false,
+		IsStaff:                 false,
+		IsMultiLogin:            false,
+		Deleted:                 0,
+		JoinTime:                time.Now(),
+		LastPasswordChangedTime: &passwordChangedAt,
 	}
 	err := r.provider.Write().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&user).Error; err != nil {
@@ -237,7 +242,30 @@ func (r *GORMRepository) UpdateUserLoginTime(ctx context.Context, id int, loginT
 }
 
 func (r *GORMRepository) ResetUserPassword(ctx context.Context, id int, password string) error {
-	return updateUserColumns(r.provider.Write().WithContext(ctx), id, map[string]any{"password": password})
+	return updateUserColumns(r.provider.Write().WithContext(ctx), id, map[string]any{
+		"password":                   password,
+		"last_password_changed_time": time.Now(),
+	})
+}
+
+func (r *GORMRepository) ListUserPasswordHistories(ctx context.Context, userID int, limit int) ([]model.UserPasswordHistory, error) {
+	query := r.provider.Read().WithContext(ctx).Where("user_id = ?", userID).Order("id DESC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	var items []model.UserPasswordHistory
+	if err := query.Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *GORMRepository) CreateUserPasswordHistory(ctx context.Context, userID int, password string) error {
+	return r.provider.Write().WithContext(ctx).Create(&model.UserPasswordHistory{
+		UserID:      userID,
+		Password:    password,
+		CreatedTime: time.Now(),
+	}).Error
 }
 
 func (r *GORMRepository) UpdateUserPermission(ctx context.Context, id int, permissionType string) error {

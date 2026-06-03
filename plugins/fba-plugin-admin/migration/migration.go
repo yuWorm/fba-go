@@ -18,6 +18,7 @@ func AutoMigrate(provider db.Provider) coremigration.Migration {
 		Up: func(ctx context.Context) error {
 			return provider.Write().WithContext(ctx).AutoMigrate(
 				&model.User{},
+				&model.UserPasswordHistory{},
 				&model.Role{},
 				&model.Menu{},
 				&model.Dept{},
@@ -32,6 +33,21 @@ func AutoMigrate(provider db.Provider) coremigration.Migration {
 				&repo.RoleDataScope{},
 				&repo.DataScopeRule{},
 				&repo.PluginState{},
+			)
+		},
+	}
+}
+
+func PasswordSecurityMigration(provider db.Provider) coremigration.Migration {
+	return coremigration.Migration{
+		Scope:    "plugin:admin",
+		Version:  "0002",
+		Name:     "admin password security tables",
+		Checksum: "go:auto-migrate:admin:0002-password-security",
+		Up: func(ctx context.Context) error {
+			return provider.Write().WithContext(ctx).AutoMigrate(
+				&model.User{},
+				&model.UserPasswordHistory{},
 			)
 		},
 	}

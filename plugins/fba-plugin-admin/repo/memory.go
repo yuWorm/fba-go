@@ -18,6 +18,7 @@ var ErrNotFound = errors.New("not found")
 type MemoryRepository struct {
 	mu                              sync.RWMutex
 	users                           []model.User
+	userPasswordHistories           []model.UserPasswordHistory
 	roles                           []model.Role
 	menus                           []model.Menu
 	depts                           []model.Dept
@@ -40,6 +41,7 @@ type MemoryRepository struct {
 	nextRoleID                      int
 	nextMenuID                      int
 	nextDeptID                      int
+	nextUserPasswordHistoryID       int
 	nextDataRuleID                  int
 	nextDataScopeID                 int
 	nextLoginLogID                  int
@@ -70,6 +72,12 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 			nextDeptID = item.ID + 1
 		}
 	}
+	nextUserPasswordHistoryID := 1
+	for _, item := range seed.UserPasswordHistories {
+		if item.ID >= nextUserPasswordHistoryID {
+			nextUserPasswordHistoryID = item.ID + 1
+		}
+	}
 	nextDataRuleID := 1
 	for _, item := range seed.DataRules {
 		if item.ID >= nextDataRuleID {
@@ -90,6 +98,7 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 	}
 	return &MemoryRepository{
 		users:                           append([]model.User(nil), seed.Users...),
+		userPasswordHistories:           append([]model.UserPasswordHistory(nil), seed.UserPasswordHistories...),
 		roles:                           append([]model.Role(nil), seed.Roles...),
 		menus:                           append([]model.Menu(nil), seed.Menus...),
 		depts:                           append([]model.Dept(nil), seed.Depts...),
@@ -111,6 +120,7 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 		nextRoleID:                      nextRoleID,
 		nextMenuID:                      nextMenuID,
 		nextDeptID:                      nextDeptID,
+		nextUserPasswordHistoryID:       nextUserPasswordHistoryID,
 		nextDataRuleID:                  nextDataRuleID,
 		nextDataScopeID:                 nextDataScopeID,
 		nextLoginLogID:                  nextLoginLogID,
@@ -194,21 +204,23 @@ func (r *MemoryRepository) CreateUser(_ context.Context, param dto.UserCreatePar
 		nickname = *param.Nickname
 	}
 	id := r.nextUser()
+	passwordChangedAt := time.Now()
 	user := model.User{
-		ID:           id,
-		UUID:         "fixture-user-" + strconv.Itoa(id),
-		DeptID:       &deptID,
-		Username:     param.Username,
-		Nickname:     nickname,
-		Password:     param.Password,
-		Email:        param.Email,
-		Phone:        param.Phone,
-		Status:       1,
-		IsSuperuser:  false,
-		IsStaff:      false,
-		IsMultiLogin: false,
-		Deleted:      0,
-		JoinTime:     model.SeedData().Users[0].JoinTime,
+		ID:                      id,
+		UUID:                    "fixture-user-" + strconv.Itoa(id),
+		DeptID:                  &deptID,
+		Username:                param.Username,
+		Nickname:                nickname,
+		Password:                param.Password,
+		Email:                   param.Email,
+		Phone:                   param.Phone,
+		Status:                  1,
+		IsSuperuser:             false,
+		IsStaff:                 false,
+		IsMultiLogin:            false,
+		Deleted:                 0,
+		JoinTime:                model.SeedData().Users[0].JoinTime,
+		LastPasswordChangedTime: &passwordChangedAt,
 	}
 	r.users = append(r.users, user)
 	r.userRoles[id] = append([]int(nil), param.Roles...)
@@ -295,11 +307,46 @@ func (r *MemoryRepository) ResetUserPassword(_ context.Context, id int, password
 	defer r.mu.Unlock()
 	for i := range r.users {
 		if r.users[i].ID == id && r.users[i].Deleted == 0 {
+			now := time.Now()
 			r.users[i].Password = password
+			r.users[i].LastPasswordChangedTime = &now
 			return nil
 		}
 	}
 	return ErrNotFound
+}
+
+func (r *MemoryRepository) ListUserPasswordHistories(_ context.Context, userID int, limit int) ([]model.UserPasswordHistory, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]model.UserPasswordHistory, 0)
+	for i := len(r.userPasswordHistories) - 1; i >= 0; i-- {
+		item := r.userPasswordHistories[i]
+		if item.UserID != userID {
+			continue
+		}
+		items = append(items, item)
+		if limit > 0 && len(items) >= limit {
+			break
+		}
+	}
+	return items, nil
+}
+
+func (r *MemoryRepository) CreateUserPasswordHistory(_ context.Context, userID int, password string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !hasUser(r.users, userID) {
+		return ErrNotFound
+	}
+	r.userPasswordHistories = append(r.userPasswordHistories, model.UserPasswordHistory{
+		ID:          r.nextUserPasswordHistory(),
+		UserID:      userID,
+		Password:    password,
+		CreatedTime: time.Now(),
+	})
+	return nil
 }
 
 func (r *MemoryRepository) UpdateUserPermission(_ context.Context, id int, permissionType string) error {
@@ -1200,6 +1247,12 @@ func (r *MemoryRepository) nextRole() int {
 func (r *MemoryRepository) nextUser() int {
 	id := r.nextUserID
 	r.nextUserID++
+	return id
+}
+
+func (r *MemoryRepository) nextUserPasswordHistory() int {
+	id := r.nextUserPasswordHistoryID
+	r.nextUserPasswordHistoryID++
 	return id
 }
 

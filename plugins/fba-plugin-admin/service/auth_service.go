@@ -86,7 +86,7 @@ func (s *AuthService) Login(ctx context.Context, param dto.AuthLoginParam, meta 
 		s.recordLoginLog(ctx, model.User{}, param.Username, loginLogFail, err.Error(), meta)
 		return dto.LoginToken{}, "", err
 	}
-	user, err := s.verifyUser(ctx, param.Username, param.Password)
+	user, passwordExpireDaysRemaining, err := s.verifyUser(ctx, param.Username, param.Password)
 	if err != nil {
 		s.recordLoginLog(ctx, model.User{}, param.Username, loginLogFail, err.Error(), meta)
 		return dto.LoginToken{}, "", err
@@ -96,7 +96,7 @@ func (s *AuthService) Login(ctx context.Context, param dto.AuthLoginParam, meta 
 		return dto.LoginToken{}, "", err
 	}
 	sessionUUID := "session-" + randomID()
-	token, refresh, err := s.issueLoginToken(ctx, user, sessionUUID)
+	token, refresh, err := s.issueLoginToken(ctx, user, sessionUUID, passwordExpireDaysRemaining)
 	if err != nil {
 		return dto.LoginToken{}, "", err
 	}
@@ -111,7 +111,7 @@ func (s *AuthService) SwaggerLogin(ctx context.Context, username string, passwor
 	if password == "" {
 		password = "admin"
 	}
-	user, err := s.verifyUser(ctx, username, password)
+	user, _, err := s.verifyUser(ctx, username, password)
 	if err != nil {
 		return dto.SwaggerToken{}, err
 	}
@@ -315,7 +315,7 @@ func ensureUserRolesAllowed(roles []rbac.Role) error {
 	return authForbiddenError("用户所属角色已被锁定，请联系系统管理员")
 }
 
-func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sessionUUID string) (dto.LoginToken, string, error) {
+func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sessionUUID string, passwordExpireDaysRemaining *int) (dto.LoginToken, string, error) {
 	access, expiresAt, err := s.issueAccessToken(ctx, user.ID, sessionUUID)
 	if err != nil {
 		return dto.LoginToken{}, "", err
@@ -336,7 +336,7 @@ func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sess
 			AccessTokenExpireTime: expiresAt.Format(dto.TimeLayout),
 			SessionUUID:           sessionUUID,
 		},
-		PasswordExpireDaysRemaining: nil,
+		PasswordExpireDaysRemaining: passwordExpireDaysRemaining,
 		User:                        dto.UserFromModel(user),
 	}, refresh, nil
 }
@@ -465,32 +465,33 @@ func (s *AuthService) clearOtherSessions(ctx context.Context, user model.User, s
 	return nil
 }
 
-func (s *AuthService) verifyUser(ctx context.Context, username string, password string) (model.User, error) {
+func (s *AuthService) verifyUser(ctx context.Context, username string, password string) (model.User, *int, error) {
 	user, err := s.repo.GetUserByUsername(ctx, username)
 	if err != nil {
-		return model.User{}, authError("用户名或密码有误")
+		return model.User{}, nil, authError("用户名或密码有误")
 	}
 	if user.Status != 1 {
-		return model.User{}, authError("用户已被锁定, 请联系统管理员")
+		return model.User{}, nil, authError("用户已被锁定, 请联系统管理员")
 	}
 	if err := s.checkLoginLock(user.ID); err != nil {
-		return model.User{}, err
+		return model.User{}, nil, err
 	}
 	if !passwordMatches(user, password) {
 		if err := s.recordLoginFailure(user.ID); err != nil {
-			return model.User{}, err
+			return model.User{}, nil, err
 		}
-		return model.User{}, authError("用户名或密码有误")
+		return model.User{}, nil, authError("用户名或密码有误")
+	}
+	passwordExpireDaysRemaining, err := passwordExpiryDaysRemaining(user.LastPasswordChangedTime)
+	if err != nil {
+		return model.User{}, nil, err
 	}
 	s.resetLoginFailure(user.ID)
-	return user, nil
+	return user, passwordExpireDaysRemaining, nil
 }
 
 func passwordMatches(user model.User, password string) bool {
-	if user.Password != "" {
-		return user.Password == password
-	}
-	return password == "" || password == "admin"
+	return passwordMatchesStored(user.Password, password)
 }
 
 func (s *AuthService) checkLoginLock(userID int) error {

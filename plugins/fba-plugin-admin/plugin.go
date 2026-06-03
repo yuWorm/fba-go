@@ -31,6 +31,9 @@ func (Module) Register(ctx plugin.Context) error {
 		if err := ctx.Migration(adminmigration.AutoMigrate(provider)); err != nil {
 			return err
 		}
+		if err := ctx.Migration(adminmigration.PasswordSecurityMigration(provider)); err != nil {
+			return err
+		}
 	}
 
 	handler := adminapi.NewHandlerWithOptions(repository, ctx.Config())

@@ -92,6 +92,7 @@ func (DataScope) TableName() string {
 
 type Seed struct {
 	Users                           []User
+	UserPasswordHistories           []UserPasswordHistory
 	Roles                           []Role
 	Menus                           []Menu
 	Depts                           []Dept
@@ -1103,16 +1104,17 @@ func SeedData() Seed {
 	return Seed{
 		Users: []User{
 			{
-				ID:           1,
-				UUID:         "fixture-user",
-				DeptID:       intPtr(1),
-				Username:     "admin",
-				Nickname:     "Admin",
-				Status:       1,
-				IsSuperuser:  true,
-				IsStaff:      true,
-				IsMultiLogin: true,
-				JoinTime:     created,
+				ID:                      1,
+				UUID:                    "fixture-user",
+				DeptID:                  intPtr(1),
+				Username:                "admin",
+				Nickname:                "Admin",
+				Status:                  1,
+				IsSuperuser:             true,
+				IsStaff:                 true,
+				IsMultiLogin:            true,
+				JoinTime:                created,
+				LastPasswordChangedTime: &created,
 			},
 		},
 		Roles: []Role{

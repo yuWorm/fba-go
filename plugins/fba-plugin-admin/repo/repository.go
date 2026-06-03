@@ -63,6 +63,8 @@ type Repository interface {
 	UpdateUserEmail(ctx context.Context, id int, email *string) error
 	UpdateUserLoginTime(ctx context.Context, id int, loginTime time.Time) error
 	ResetUserPassword(ctx context.Context, id int, password string) error
+	ListUserPasswordHistories(ctx context.Context, userID int, limit int) ([]model.UserPasswordHistory, error)
+	CreateUserPasswordHistory(ctx context.Context, userID int, password string) error
 	UpdateUserPermission(ctx context.Context, id int, permissionType string) error
 	DeleteUser(ctx context.Context, id int) error
 	UserRoles(ctx context.Context, userID int) ([]model.Role, error)

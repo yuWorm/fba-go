@@ -157,17 +157,36 @@ func (s *UserService) UpdatePassword(ctx context.Context, id int, param dto.User
 	if param.NewPassword != param.ConfirmPassword {
 		return userBadRequest("两次密码输入不一致", nil)
 	}
-	return s.repo.ResetUserPassword(ctx, id, param.NewPassword)
+	if err := validateNewPassword(ctx, s.repo, id, param.NewPassword); err != nil {
+		return err
+	}
+	if err := s.repo.ResetUserPassword(ctx, id, param.NewPassword); err != nil {
+		return err
+	}
+	if err := s.repo.CreateUserPasswordHistory(ctx, id, user.Password); err != nil {
+		return err
+	}
+	return s.clearUserSessions(ctx, user)
 }
 
 func (s *UserService) ResetPassword(ctx context.Context, id int, password string) error {
-	if _, err := s.repo.GetUser(ctx, id); err != nil {
+	user, err := s.repo.GetUser(ctx, id)
+	if err != nil {
 		if stderrors.Is(err, repo.ErrNotFound) {
 			return userNotFound("用户不存在", err)
 		}
 		return err
 	}
-	return s.repo.ResetUserPassword(ctx, id, password)
+	if err := validateNewPassword(ctx, s.repo, id, password); err != nil {
+		return err
+	}
+	if err := s.repo.ResetUserPassword(ctx, id, password); err != nil {
+		return err
+	}
+	if err := s.repo.CreateUserPasswordHistory(ctx, id, user.Password); err != nil {
+		return err
+	}
+	return s.clearUserSessions(ctx, user)
 }
 
 func (s *UserService) UpdateNickname(ctx context.Context, id int, nickname string) error {
@@ -227,6 +246,25 @@ func (s *UserService) Delete(ctx context.Context, id int) error {
 		return err
 	}
 	return s.repo.DeleteUser(ctx, id)
+}
+
+func (s *UserService) clearUserSessions(ctx context.Context, user model.User) error {
+	// Python clears access and refresh token Redis keys after password changes.
+	// Go models those token keys as session rows, so all sessions for this user
+	// must be removed to force re-authentication.
+	sessions, err := s.repo.ListSessions(ctx, repo.SessionFilter{Username: user.Username})
+	if err != nil {
+		return err
+	}
+	for _, session := range sessions {
+		if session.ID != user.ID {
+			continue
+		}
+		if err := s.repo.DeleteSession(ctx, session.ID, session.SessionUUID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *UserService) Roles(ctx context.Context, id int) ([]dto.RoleDetail, error) {

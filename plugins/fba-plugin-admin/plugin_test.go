@@ -21,6 +21,9 @@ import (
 	"github.com/yuWorm/fba-go/core/middleware"
 	"github.com/yuWorm/fba-go/core/plugin"
 	admin "github.com/yuWorm/fba-plugin-admin"
+	adminapi "github.com/yuWorm/fba-plugin-admin/api"
+	adminmodel "github.com/yuWorm/fba-plugin-admin/model"
+	adminrepo "github.com/yuWorm/fba-plugin-admin/repo"
 	"gorm.io/gorm"
 )
 
@@ -104,8 +107,8 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		{"POST", "/api/v1/sys/users", `{"username":"contract_user","password":"Passw0rd!","nickname":"Contract User","email":null,"phone":null,"dept_id":1,"roles":[1]}`},
 		{"PUT", "/api/v1/sys/users/1", `{"dept_id":null,"username":"admin","nickname":"Admin","avatar":null,"email":null,"phone":null,"roles":[1]}`},
 		{"PUT", "/api/v1/sys/users/1/permissions?type=multi_login", ""},
-		{"PUT", "/api/v1/sys/users/me/password", `{"old_password":"admin","new_password":"new-password","confirm_password":"new-password"}`},
-		{"PUT", "/api/v1/sys/users/1/password", `{"password":"new-password"}`},
+		{"PUT", "/api/v1/sys/users/me/password", `{"old_password":"admin","new_password":"Newpass1","confirm_password":"Newpass1"}`},
+		{"PUT", "/api/v1/sys/users/1/password", `{"password":"Resetpass1"}`},
 		{"PUT", "/api/v1/sys/users/me/nickname", `{"nickname":"Admin"}`},
 		{"PUT", "/api/v1/sys/users/me/avatar", `{"avatar":"https://example.invalid/avatar.png"}`},
 		{"PUT", "/api/v1/sys/users/me/email", `{"captcha":"123456","email":"admin@example.com"}`},
@@ -182,11 +185,18 @@ func TestAdminPluginRegistersMigrationWhenDBProviderExists(t *testing.T) {
 	}
 
 	migrations := ctx.Migrations()
-	if len(migrations) != 1 {
-		t.Fatalf("migrations = %d, want 1", len(migrations))
+	if len(migrations) != 2 {
+		t.Fatalf("migrations = %d, want 2", len(migrations))
 	}
-	if migrations[0].Scope != "plugin:admin" {
-		t.Fatalf("migration scope = %q, want plugin:admin", migrations[0].Scope)
+	versions := map[string]bool{}
+	for _, migration := range migrations {
+		if migration.Scope != "plugin:admin" {
+			t.Fatalf("migration scope = %q, want plugin:admin", migration.Scope)
+		}
+		versions[migration.Version] = true
+	}
+	if !versions["0001"] || !versions["0002"] {
+		t.Fatalf("migration versions = %v, want 0001 and 0002", versions)
 	}
 }
 
@@ -1070,11 +1080,11 @@ func TestCurrentUserProfileEndpointsAreStateful(t *testing.T) {
 	assertStatusOK(t, resp)
 	assertEnvelopeNil(t, body)
 
-	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/1/password", `{"password":"reset-password"}`)
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/1/password", `{"password":"Resetpass1"}`)
 	assertStatusOK(t, resp)
 	assertEnvelopeNil(t, body)
 
-	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"reset-password","new_password":"new-password","confirm_password":"new-password"}`)
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"Resetpass1","new_password":"Newpass1","confirm_password":"Newpass1"}`)
 	assertStatusOK(t, resp)
 	assertEnvelopeNil(t, body)
 
@@ -1113,14 +1123,63 @@ func TestCurrentUserEmailUpdateAppliesPythonGuards(t *testing.T) {
 func TestUserPasswordEndpointsApplyPythonGuards(t *testing.T) {
 	app := newAdminApp(t)
 
-	resp, body := requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"wrong-password","new_password":"new-password","confirm_password":"new-password"}`)
+	resp, body := requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"wrong-password","new_password":"Newpass1","confirm_password":"Newpass1"}`)
 	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "原密码错误")
 
-	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"admin","new_password":"new-password","confirm_password":"different-password"}`)
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"admin","new_password":"Newpass1","confirm_password":"Different1"}`)
 	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "两次密码输入不一致")
 
-	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/999999/password", `{"password":"new-password"}`)
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"admin","new_password":"abc","confirm_password":"abc"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "密码长度不能少于 6 个字符")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"admin","new_password":"abcdef","confirm_password":"abcdef"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "密码必须包含数字")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/me/password", `{"old_password":"admin","new_password":"123456","confirm_password":"123456"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "密码必须包含字母")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/999999/password", `{"password":"Newpass1"}`)
 	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "用户不存在")
+}
+
+func TestUserPasswordHistoryPreventsRecentReuseLikePython(t *testing.T) {
+	app := newAdminApp(t)
+
+	resp, body := requestJSON(t, app, "PUT", "/api/v1/sys/users/1/password", `{"password":"Resetpass1"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/1/password", `{"password":"Nextpass1"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/1/password", `{"password":"Resetpass1"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "新密码不能与最近 3 次使用的密码相同")
+}
+
+func TestLoginPasswordExpiryMatchesPythonPolicy(t *testing.T) {
+	seed := adminrepo.SeedData()
+	expired := time.Now().AddDate(-1, 0, -1)
+	seed.Users[0].LastPasswordChangedTime = &expired
+	app := newAdminAppWithSeed(t, seed)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"admin","password":"admin","uuid":"fixture-captcha","captcha":"1234"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "密码已过期，请修改密码后重新登录")
+}
+
+func TestLoginPasswordExpiryReminderMatchesPythonPolicy(t *testing.T) {
+	seed := adminrepo.SeedData()
+	nearExpiry := time.Now().AddDate(0, 0, -358)
+	seed.Users[0].LastPasswordChangedTime = &nearExpiry
+	app := newAdminAppWithSeed(t, seed)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"admin","password":"admin","uuid":"fixture-captcha","captcha":"1234"}`)
+	assertStatusOK(t, resp)
+	data := assertEnvelopeMap(t, body)
+	days, ok := data["password_expire_days_remaining"].(float64)
+	if !ok || days < 0 || days > 7 {
+		t.Fatalf("password_expire_days_remaining = %v, want Python reminder value within 0..7", data["password_expire_days_remaining"])
+	}
 }
 
 func TestPluginEndpointsAreStatefulAndPythonCompatible(t *testing.T) {
@@ -2156,6 +2215,18 @@ func TestRoleRelationEndpointsAreStateful(t *testing.T) {
 func newAdminApp(t *testing.T) *fiber.App {
 	t.Helper()
 	return newAdminAppWithConfig(t, config.Options{})
+}
+
+func newAdminAppWithSeed(t *testing.T, seed adminmodel.Seed) *fiber.App {
+	t.Helper()
+	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler})
+	repository := adminrepo.NewMemoryRepository(seed)
+	handler := adminapi.NewHandlerWithOptions(repository, config.Options{})
+	registerRoutes(app.Group("/api/v1"), append(
+		adminapi.AuthRoutes(handler),
+		adminapi.UserRoutes(handler)...,
+	))
+	return app
 }
 
 func newAdminAppWithConfig(t *testing.T, opts config.Options) *fiber.App {
