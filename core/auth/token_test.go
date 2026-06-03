@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -62,6 +63,26 @@ func TestJWTServiceCreatesUniqueTokensForSameUserSession(t *testing.T) {
 
 	if first.Token == second.Token {
 		t.Fatal("tokens are equal, want unique token per issuance")
+	}
+}
+
+func TestJWTServiceReportsExpiredAccessToken(t *testing.T) {
+	service := auth.NewJWTService(config.AuthOptions{
+		JWTSecret:      "secret",
+		AccessTokenTTL: time.Hour,
+	})
+	issuedAt := time.Now().UTC().Truncate(time.Second).Add(-2 * time.Hour)
+	service.Now = func() time.Time {
+		return issuedAt
+	}
+	token, err := service.CreateAccessToken(context.Background(), 10001, "session-1", nil)
+	if err != nil {
+		t.Fatalf("CreateAccessToken() error = %v", err)
+	}
+
+	_, err = service.ParseAccessToken(token.Token)
+	if !errors.Is(err, auth.ErrAccessTokenExpired) {
+		t.Fatalf("ParseAccessToken() error = %v, want ErrAccessTokenExpired", err)
 	}
 }
 

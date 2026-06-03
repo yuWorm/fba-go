@@ -172,7 +172,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (dto.Acc
 }
 
 func (s *AuthService) Logout(ctx context.Context, authorization string) error {
-	userID, sessionUUID, ok := s.parseBearerAccessToken(authorization)
+	userID, sessionUUID, ok, _ := s.parseBearerAccessToken(authorization)
 	if !ok {
 		return nil
 	}
@@ -180,8 +180,11 @@ func (s *AuthService) Logout(ctx context.Context, authorization string) error {
 }
 
 func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*rbac.CurrentUser, error) {
-	userID, sessionUUID, ok := s.parseBearerAccessToken(authorization)
+	userID, sessionUUID, ok, parseErr := s.parseBearerAccessToken(authorization)
 	if !ok {
+		if stderrors.Is(parseErr, coreauth.ErrAccessTokenExpired) {
+			return nil, authError("Token 已过期")
+		}
 		return nil, authError(accessTokenFailureMessage(authorization))
 	}
 	session, err := s.repo.GetSession(ctx, userID, sessionUUID)
@@ -512,10 +515,10 @@ func issueToken(prefix string, userID int, sessionUUID string, ttl time.Duration
 	}, ":"), expiresAt, nil
 }
 
-func (s *AuthService) parseBearerAccessToken(header string) (int, string, bool) {
+func (s *AuthService) parseBearerAccessToken(header string) (int, string, bool, error) {
 	token := strings.TrimSpace(header)
 	if !strings.HasPrefix(strings.ToLower(token), "bearer ") {
-		return 0, "", false
+		return 0, "", false, nil
 	}
 	token = strings.TrimSpace(token[7:])
 	// Access tokens are JWTs in the Python service and must not fall back to
@@ -525,10 +528,10 @@ func (s *AuthService) parseBearerAccessToken(header string) (int, string, bool) 
 	if err == nil && claims.Subject != "" && claims.SessionUUID != "" {
 		userID, err := strconv.Atoi(claims.Subject)
 		if err == nil {
-			return userID, claims.SessionUUID, true
+			return userID, claims.SessionUUID, true, nil
 		}
 	}
-	return 0, "", false
+	return 0, "", false, err
 }
 
 func accessTokenFailureMessage(authorization string) string {

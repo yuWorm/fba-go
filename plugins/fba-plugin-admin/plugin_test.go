@@ -1,6 +1,7 @@
 package admin_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"maps"
@@ -10,8 +11,11 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
+	coreauth "github.com/yuWorm/fba-go/core/auth"
+	"github.com/yuWorm/fba-go/core/config"
 	"github.com/yuWorm/fba-go/core/db"
 	"github.com/yuWorm/fba-go/core/di"
 	"github.com/yuWorm/fba-go/core/middleware"
@@ -609,6 +613,9 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	}
 	resp, body = requestJSONWithAuthorization(t, app, "GET", "/api/v1/sys/users/me", "", viewerToken)
 	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "Token 无效")
+	expiredToken := expiredAccessToken(t, 2, "expired-session")
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", expiredToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "Token 已过期")
 
 	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"admin","password":"admin","uuid":"fixture-captcha","captcha":"1234"}`)
 	assertStatusOK(t, resp)
@@ -2226,6 +2233,19 @@ func loginForAccessToken(t *testing.T, app *fiber.App, username string, password
 		t.Fatalf("access_token = %v, want non-empty string", data["access_token"])
 	}
 	return token
+}
+
+func expiredAccessToken(t *testing.T, userID int64, sessionUUID string) string {
+	t.Helper()
+	service := coreauth.NewJWTService(config.AuthOptions{AccessTokenTTL: time.Hour})
+	service.Now = func() time.Time {
+		return time.Now().Add(-2 * time.Hour)
+	}
+	token, err := service.CreateAccessToken(context.Background(), userID, sessionUUID, nil)
+	if err != nil {
+		t.Fatalf("CreateAccessToken() error = %v", err)
+	}
+	return token.Token
 }
 
 func loginForRefreshCookie(t *testing.T, app *fiber.App, username string, password string) *http.Cookie {

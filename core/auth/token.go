@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -12,6 +13,8 @@ import (
 )
 
 const defaultAccessTokenTTL = 2 * time.Hour
+
+var ErrAccessTokenExpired = errors.New("access token expired")
 
 type TokenService interface {
 	CreateAccessToken(ctx context.Context, userID int64, sessionUUID string, extra map[string]any) (*AccessToken, error)
@@ -89,6 +92,9 @@ func (s *JWTService) ParseAccessToken(tokenString string) (*Claims, error) {
 		return s.secret, nil
 	})
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrAccessTokenExpired
+		}
 		return nil, err
 	}
 	claims, ok := token.Claims.(*Claims)
