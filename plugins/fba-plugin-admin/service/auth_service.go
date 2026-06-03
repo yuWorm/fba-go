@@ -182,7 +182,7 @@ func (s *AuthService) Logout(ctx context.Context, authorization string) error {
 func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*rbac.CurrentUser, error) {
 	userID, sessionUUID, ok := s.parseBearerAccessToken(authorization)
 	if !ok {
-		return nil, authError("未认证")
+		return nil, authError(accessTokenFailureMessage(authorization))
 	}
 	session, err := s.repo.GetSession(ctx, userID, sessionUUID)
 	if err != nil {
@@ -528,6 +528,15 @@ func (s *AuthService) parseBearerAccessToken(header string) (int, string, bool) 
 		}
 	}
 	return 0, "", false
+}
+
+func accessTokenFailureMessage(authorization string) string {
+	// Python's HTTPBearer handles missing credentials before jwt_decode, while a
+	// present but malformed token reaches jwt_decode and returns "Token 无效".
+	if strings.TrimSpace(authorization) == "" {
+		return "未认证"
+	}
+	return "Token 无效"
 }
 
 func (s *AuthService) currentUserRoles(ctx context.Context, userID int) ([]rbac.Role, error) {
