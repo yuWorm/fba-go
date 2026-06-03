@@ -205,6 +205,9 @@ func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureUserRolesAllowed(roles); err != nil {
+		return nil, err
+	}
 	var deptID *int64
 	if user.DeptID != nil {
 		value := int64(*user.DeptID)
@@ -273,6 +276,20 @@ func (s *AuthService) ensureUserDeptAllowed(ctx context.Context, user model.User
 		return authForbiddenError("用户所属部门已被锁定，请联系系统管理员")
 	}
 	return nil
+}
+
+func ensureUserRolesAllowed(roles []rbac.Role) error {
+	if len(roles) == 0 {
+		return nil
+	}
+	// Python get_current_user treats a user whose assigned roles are all locked
+	// as an authentication failure before route-level RBAC checks run.
+	for _, role := range roles {
+		if role.Enabled {
+			return nil
+		}
+	}
+	return authForbiddenError("用户所属角色已被锁定，请联系系统管理员")
 }
 
 func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sessionUUID string) (dto.LoginToken, string, error) {

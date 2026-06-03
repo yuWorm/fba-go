@@ -639,6 +639,17 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", deptLockedToken)
 	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户所属部门已被锁定，请联系系统管理员")
 
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"LockedRole","status":0,"is_filter_scopes":false,"remark":null}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	lockedRoleID := findRoleIDAuth(t, app, "LockedRole", adminToken)
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/users", `{"username":"role_locked_user","password":"secret","nickname":"Role Locked","email":null,"phone":null,"dept_id":1,"roles":[`+itoa(lockedRoleID)+`]}`, adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+	roleLockedToken := loginForAccessToken(t, app, "role_locked_user", "secret")
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", roleLockedToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户所属角色已被锁定，请联系系统管理员")
+
 	resp, _ = requestRawAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"Blocked","status":1,"is_filter_scopes":false,"remark":null}`, viewerToken)
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("viewer POST /sys/roles status = %d, want 403", resp.StatusCode)
@@ -2360,6 +2371,20 @@ func findRoleID(t *testing.T, app *fiber.App, name string) int {
 	t.Helper()
 	escapedName := strings.ReplaceAll(name, " ", "%20")
 	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/roles?name="+escapedName, "")
+	assertStatusOK(t, resp)
+	page := assertEnvelopeMap(t, body)
+	items := assertSlice(t, page["items"])
+	if len(items) != 1 {
+		t.Fatalf("role %q lookup count = %d, want 1", name, len(items))
+	}
+	item := assertMap(t, items[0])
+	return int(item["id"].(float64))
+}
+
+func findRoleIDAuth(t *testing.T, app *fiber.App, name string, token string) int {
+	t.Helper()
+	escapedName := strings.ReplaceAll(name, " ", "%20")
+	resp, body := requestJSONAuth(t, app, "GET", "/api/v1/sys/roles?name="+escapedName, "", token)
 	assertStatusOK(t, resp)
 	page := assertEnvelopeMap(t, body)
 	items := assertSlice(t, page["items"])
