@@ -659,10 +659,8 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", roleLockedToken)
 	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户所属角色已被锁定，请联系系统管理员")
 
-	resp, _ = requestRawAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"Blocked","status":1,"is_filter_scopes":false,"remark":null}`, viewerToken)
-	if resp.StatusCode != fiber.StatusForbidden {
-		t.Fatalf("viewer POST /sys/roles status = %d, want 403", resp.StatusCode)
-	}
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"Blocked","status":1,"is_filter_scopes":false,"remark":null}`, viewerToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户已被禁止后台管理操作，请联系系统管理员")
 
 	resp, _ = requestRawAuth(t, app, "GET", "/api/v1/sys/plugins", "", viewerToken)
 	if resp.StatusCode != fiber.StatusForbidden {

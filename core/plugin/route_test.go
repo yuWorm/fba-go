@@ -231,6 +231,77 @@ func TestMountRoutesAuthorizesWithAuthenticatorAndPermission(t *testing.T) {
 	}
 }
 
+func TestMountRoutesReportsPythonStaffGuardMessage(t *testing.T) {
+	app := fiber.New()
+	authenticator := fakeAuthenticator{
+		user: &rbac.CurrentUser{
+			ID: 2,
+			Roles: []rbac.Role{
+				{ID: 1, Enabled: true, MenuCount: 1, Permissions: []string{"sys:role:add"}},
+			},
+		},
+	}
+	routes := []plugin.Route{
+		plugin.POST("/roles", "Create role", func(c fiber.Ctx) error {
+			return c.SendString("ok")
+		}, plugin.Auth(), plugin.Perm("sys:role:add")),
+	}
+
+	plugin.MountRoutes(app.Group("/api/v1"), routes, plugin.WithAuthenticator(authenticator))
+
+	resp, err := app.Test(httptest.NewRequest("POST", "/api/v1/roles", nil))
+	if err != nil {
+		t.Fatalf("POST /roles error = %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("POST /roles status = %d, want 403; body = %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), `"msg":"用户已被禁止后台管理操作，请联系系统管理员"`) {
+		t.Fatalf("body = %s, want staff guard message", body)
+	}
+}
+
+func TestMountRoutesReportsPythonNoEnabledRoleMessage(t *testing.T) {
+	app := fiber.New()
+	authenticator := fakeAuthenticator{
+		user: &rbac.CurrentUser{
+			ID:      2,
+			IsStaff: true,
+			Roles: []rbac.Role{
+				{ID: 1, Enabled: false, MenuCount: 1, Permissions: []string{"sys:role:view"}},
+			},
+		},
+	}
+	routes := []plugin.Route{
+		plugin.GET("/roles", "List roles", func(c fiber.Ctx) error {
+			return c.SendString("ok")
+		}, plugin.Auth(), plugin.Perm("sys:role:view")),
+	}
+
+	plugin.MountRoutes(app.Group("/api/v1"), routes, plugin.WithAuthenticator(authenticator))
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/v1/roles", nil))
+	if err != nil {
+		t.Fatalf("GET /roles error = %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("GET /roles status = %d, want 403; body = %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), `"msg":"用户所属角色已被锁定，请联系系统管理员"`) {
+		t.Fatalf("body = %s, want no enabled role message", body)
+	}
+}
+
 func TestMountRoutesRejectsSuperuserRouteForNonSuperuser(t *testing.T) {
 	app := fiber.New()
 	authenticator := fakeAuthenticator{

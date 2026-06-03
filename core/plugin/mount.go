@@ -111,11 +111,11 @@ func authMessage(err error) string {
 	case errors.Is(err, rbac.ErrUnauthenticated):
 		return "未认证"
 	case errors.Is(err, rbac.ErrNoEnabledRole):
-		return "无可用角色"
+		return "用户所属角色已被锁定，请联系系统管理员"
 	case errors.Is(err, rbac.ErrNoRoleMenus):
 		return "用户未分配菜单，请联系系统管理员"
 	case errors.Is(err, rbac.ErrStaffRequired):
-		return "需要管理员权限"
+		return "用户已被禁止后台管理操作，请联系系统管理员"
 	case errors.Is(err, rbac.ErrSuperuserRequired):
 		return "需要超级用户权限"
 	default:
