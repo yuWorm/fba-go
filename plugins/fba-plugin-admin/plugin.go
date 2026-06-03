@@ -5,6 +5,7 @@ import (
 
 	"github.com/yuWorm/fba-go/core/db"
 	"github.com/yuWorm/fba-go/core/plugin"
+	"github.com/yuWorm/fba-go/core/realtime"
 	adminapi "github.com/yuWorm/fba-plugin-admin/api"
 	adminmigration "github.com/yuWorm/fba-plugin-admin/migration"
 	"github.com/yuWorm/fba-plugin-admin/repo"
@@ -43,6 +44,8 @@ func (Module) Register(ctx plugin.Context) error {
 	}
 	var redisClient service.RedisClient
 	_ = ctx.Container().Resolve(&redisClient)
+	var onlineStore realtime.OnlineStore
+	_ = ctx.Container().Resolve(&onlineStore)
 	if err := ctx.Provide(func() repo.Repository {
 		return repository
 	}); err != nil {
@@ -53,6 +56,7 @@ func (Module) Register(ctx plugin.Context) error {
 		Config:         ctx.Config(),
 		ConfigProvider: deferredAdminConfigProvider{resolver: ctx.Container()},
 		Redis:          redisClient,
+		Online:         onlineStore,
 	})
 	if err := ctx.Provide(func() plugin.Authenticator {
 		return handler

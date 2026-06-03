@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/yuWorm/fba-go/core/realtime"
 	coretask "github.com/yuWorm/fba-go/core/task"
 	"github.com/yuWorm/fba-plugin-task/dto"
 	"github.com/yuWorm/fba-plugin-task/repo"
@@ -80,6 +81,29 @@ func TestServiceExecuteSchedulerUsesExecutor(t *testing.T) {
 
 	if executor.executedTask != "task_demo" {
 		t.Fatalf("executed task = %q, want task_demo", executor.executedTask)
+	}
+}
+
+func TestServiceExecuteSchedulerEmitsTaskNotifications(t *testing.T) {
+	hub := realtime.NewMemoryHub(realtime.NewMemoryOnlineStore())
+	svc := service.New(repo.NewMemoryRepository(repo.SeedData()), nil, &fakeExecutor{}, &fakeLeader{acquire: true}, service.WithRealtimeHub(hub))
+
+	if err := svc.ExecuteScheduler(context.Background(), 1); err != nil {
+		t.Fatalf("ExecuteScheduler() error = %v", err)
+	}
+
+	events := hub.Events()
+	if len(events) != 2 {
+		t.Fatalf("events = %d, want 2", len(events))
+	}
+	if events[0].Event != "task_notification" || events[1].Event != "task_notification" {
+		t.Fatalf("events = %+v, want task_notification events", events)
+	}
+	if got := events[0].Data.(realtime.TaskNotification).Msg; got != "任务 task_demo 开始执行" {
+		t.Fatalf("first notification = %q", got)
+	}
+	if got := events[1].Data.(realtime.TaskNotification).Msg; got != "任务 task_demo 执行成功" {
+		t.Fatalf("second notification = %q", got)
 	}
 }
 

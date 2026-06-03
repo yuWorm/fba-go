@@ -6,6 +6,7 @@ import (
 
 	"github.com/yuWorm/fba-go/core/db"
 	"github.com/yuWorm/fba-go/core/plugin"
+	"github.com/yuWorm/fba-go/core/realtime"
 	"github.com/yuWorm/fba-go/core/redisx"
 	coretask "github.com/yuWorm/fba-go/core/task"
 	taskapi "github.com/yuWorm/fba-plugin-task/api"
@@ -46,6 +47,8 @@ func (Module) Register(ctx plugin.Context) error {
 
 	executor := service.Executor(service.NoopExecutor{})
 	_ = ctx.Container().Resolve(&executor)
+	var hub realtime.Hub
+	_ = ctx.Container().Resolve(&hub)
 
 	leader := service.LeaderLease(service.NoopLeaderLease{})
 	var redisClient redisx.RedisClient
@@ -61,6 +64,8 @@ func (Module) Register(ctx plugin.Context) error {
 		leader = service.NewRedisLeaderLease(redisClient, redisx.NewKeys(ctx.Config().Redis.KeyPrefix).SchedulerLeader(), nodeID, ttl)
 	}
 
-	handler := taskapi.NewHandler(service.New(repository, registry, executor, leader))
+	svc := service.New(repository, registry, executor, leader, service.WithRealtimeHub(hub))
+	svc.RegisterRealtimeHandlers(hub)
+	handler := taskapi.NewHandler(svc)
 	return plugin.RegisterRoutes(ctx, taskapi.Routes(handler))
 }

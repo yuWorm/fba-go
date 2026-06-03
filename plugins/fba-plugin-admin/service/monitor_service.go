@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yuWorm/fba-go/core/realtime"
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/repo"
 )
@@ -20,6 +21,7 @@ import (
 type MonitorService struct {
 	repo    repo.Repository
 	redis   RedisClient
+	online  realtime.OnlineStore
 	started time.Time
 }
 
@@ -28,10 +30,14 @@ func NewMonitorService(repository repo.Repository) *MonitorService {
 }
 
 func NewMonitorServiceWithRedis(repository repo.Repository, redisClient RedisClient) *MonitorService {
+	return NewMonitorServiceWithRealtime(repository, redisClient, nil)
+}
+
+func NewMonitorServiceWithRealtime(repository repo.Repository, redisClient RedisClient, online realtime.OnlineStore) *MonitorService {
 	if repository == nil {
 		repository = repo.NewMemoryRepository(repo.SeedData())
 	}
-	return &MonitorService{repo: repository, redis: redisClient, started: time.Now()}
+	return &MonitorService{repo: repository, redis: redisClient, online: online, started: time.Now()}
 }
 
 func (s *MonitorService) Server(context.Context) (dto.ServerMonitorInfo, error) {
@@ -131,7 +137,24 @@ func (s *MonitorService) Sessions(ctx context.Context, username string) ([]dto.S
 	if err != nil {
 		return nil, err
 	}
-	return dto.SessionsFromModel(items), nil
+	sessions := dto.SessionsFromModel(items)
+	if s.online == nil {
+		return sessions, nil
+	}
+	onlineSessions := make(map[string]struct{})
+	for _, sessionUUID := range s.online.Sessions() {
+		onlineSessions[sessionUUID] = struct{}{}
+	}
+	for i := range sessions {
+		// Python marks monitor session status from TOKEN_ONLINE_REDIS_PREFIX,
+		// which is maintained by Socket.IO connect/disconnect, not by login.
+		if _, ok := onlineSessions[sessions[i].SessionUUID]; ok {
+			sessions[i].Status = 1
+		} else {
+			sessions[i].Status = 0
+		}
+	}
+	return sessions, nil
 }
 
 func (s *MonitorService) DeleteSession(ctx context.Context, userID int, sessionUUID string) error {

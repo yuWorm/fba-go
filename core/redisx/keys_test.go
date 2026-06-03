@@ -12,6 +12,10 @@ func TestKeysUseCompatibleDefaultPrefix(t *testing.T) {
 
 	cases := map[string]string{
 		"access":           keys.AccessToken(10001, "session-1"),
+		"online":           keys.OnlineSet(),
+		"online_sid":       keys.OnlineSID("sid-1"),
+		"online_session":   keys.OnlineSession("session-1"),
+		"realtime_channel": keys.RealtimeBroadcastChannel(),
 		"refresh":          keys.RefreshToken(10001, "session-1"),
 		"user":             keys.User(10001),
 		"captcha":          keys.LoginCaptcha("uuid-1"),
@@ -22,6 +26,10 @@ func TestKeysUseCompatibleDefaultPrefix(t *testing.T) {
 
 	want := map[string]string{
 		"access":           "fba:token:10001:session-1",
+		"online":           "fba:token_online",
+		"online_sid":       "fba:token_online:sid:sid-1",
+		"online_session":   "fba:token_online:session:session-1",
+		"realtime_channel": "fba:realtime:broadcast",
 		"refresh":          "fba:refresh_token:10001:session-1",
 		"user":             "fba:user:10001",
 		"captcha":          "fba:login:captcha:uuid-1",

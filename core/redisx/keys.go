@@ -27,6 +27,18 @@ func (k Keys) OnlineSet() string {
 	return k.format("token_online")
 }
 
+func (k Keys) OnlineSID(sid string) string {
+	return k.format("token_online:sid:%s", sid)
+}
+
+func (k Keys) OnlineSession(sessionUUID string) string {
+	return k.format("token_online:session:%s", sessionUUID)
+}
+
+func (k Keys) RealtimeBroadcastChannel() string {
+	return k.format("realtime:broadcast")
+}
+
 func (k Keys) RefreshToken(userID int64, sessionUUID string) string {
 	return k.format("refresh_token:%d:%s", userID, sessionUUID)
 }

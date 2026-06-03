@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/yuWorm/fba-go/core/config"
 	"github.com/yuWorm/fba-go/core/rbac"
+	"github.com/yuWorm/fba-go/core/realtime"
 	"github.com/yuWorm/fba-go/core/response"
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/repo"
@@ -35,6 +36,7 @@ type HandlerOptions struct {
 	Config         config.Options
 	ConfigProvider service.AdminConfigProvider
 	Redis          service.RedisClient
+	Online         realtime.OnlineStore
 }
 
 func NewHandler() Handler {
@@ -72,7 +74,7 @@ func NewHandlerWithAdminOptions(repository repo.Repository, opts HandlerOptions)
 		plugins:    service.NewPluginServiceWithConfig(repository, opts.Config),
 		logs:       service.NewLogService(repository),
 		files:      service.NewFileService(),
-		monitors:   service.NewMonitorServiceWithRedis(repository, opts.Redis),
+		monitors:   service.NewMonitorServiceWithRealtime(repository, opts.Redis, opts.Online),
 	}
 }
 

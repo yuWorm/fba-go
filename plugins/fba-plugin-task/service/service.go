@@ -4,9 +4,11 @@ import (
 	"context"
 	stderrors "errors"
 	"net/http"
+	"os"
 
 	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/pagination"
+	"github.com/yuWorm/fba-go/core/realtime"
 	coretask "github.com/yuWorm/fba-go/core/task"
 	"github.com/yuWorm/fba-plugin-task/dto"
 	"github.com/yuWorm/fba-plugin-task/repo"
@@ -17,9 +19,18 @@ type Service struct {
 	registry *coretask.Registry
 	executor Executor
 	leader   LeaderLease
+	hub      realtime.Hub
 }
 
-func New(repository repo.Repository, registry *coretask.Registry, executor Executor, leader LeaderLease) *Service {
+type Option func(*Service)
+
+func WithRealtimeHub(hub realtime.Hub) Option {
+	return func(s *Service) {
+		s.hub = hub
+	}
+}
+
+func New(repository repo.Repository, registry *coretask.Registry, executor Executor, leader LeaderLease, opts ...Option) *Service {
 	if repository == nil {
 		repository = repo.NewMemoryRepository(repo.SeedData())
 	}
@@ -29,7 +40,11 @@ func New(repository repo.Repository, registry *coretask.Registry, executor Execu
 	if leader == nil {
 		leader = NoopLeaderLease{}
 	}
-	return &Service{repo: repository, registry: registry, executor: executor, leader: leader}
+	svc := &Service{repo: repository, registry: registry, executor: executor, leader: leader}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 func (s *Service) RegisteredTasks() []dto.RegisteredTask {
@@ -119,7 +134,42 @@ func (s *Service) ExecuteScheduler(ctx context.Context, id int) error {
 		return taskSchedulerNotFound(err)
 	}
 	detail := dto.SchedulerFromModel(scheduler)
-	return s.executor.Execute(ctx, detail.Task, detail.Args, detail.Kwargs)
+	s.notifyTask("任务 " + detail.Task + " 开始执行")
+	if err := s.executor.Execute(ctx, detail.Task, detail.Args, detail.Kwargs); err != nil {
+		s.notifyTask("任务 " + detail.Task + " 执行失败")
+		return err
+	}
+	s.notifyTask("任务 " + detail.Task + " 执行成功")
+	return nil
+}
+
+func (s *Service) RegisterRealtimeHandlers(hub realtime.Hub) {
+	if hub == nil {
+		hub = s.hub
+	}
+	if hub == nil {
+		return
+	}
+	hub.On(realtime.EventTaskWorkerStatus, func(payload realtime.EventPayload) {
+		_ = hub.EmitTo(payload.SocketID, realtime.EventTaskWorkerStatus, s.WorkerStatus())
+	})
+}
+
+func (s *Service) WorkerStatus() []map[string]string {
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "localhost"
+	}
+	return []map[string]string{{"fba-go@" + hostname: "pong"}}
+}
+
+func (s *Service) notifyTask(message string) {
+	if s.hub == nil {
+		return
+	}
+	// Realtime delivery mirrors Python's best-effort Socket.IO task hook:
+	// losing a browser notification must not change scheduler execution result.
+	_ = s.hub.Emit(realtime.EventTaskNotification, realtime.TaskNotification{Msg: message})
 }
 
 func (s *Service) GetTaskResult(ctx context.Context, id int) (dto.TaskResultDetail, error) {

@@ -14,6 +14,7 @@ type Options struct {
 	Database DatabaseOptions
 	Redis    RedisOptions
 	Auth     AuthOptions
+	Realtime RealtimeOptions
 	Task     TaskOptions
 	Pools    map[string]PoolOptions
 	Hooks    Hooks
@@ -94,6 +95,22 @@ type AuthOptions struct {
 	RefreshTokenTTL time.Duration
 }
 
+type RealtimeOptions struct {
+	Disabled       bool
+	Path           string
+	Namespace      string
+	NoAuthMarker   string
+	EnablePolling  bool
+	DisablePolling bool
+	MultiInstance  RealtimeMultiInstanceOptions
+}
+
+type RealtimeMultiInstanceOptions struct {
+	Enabled bool
+	NodeID  string
+	Channel string
+}
+
 type TaskOptions struct {
 	Enabled bool
 
@@ -126,6 +143,25 @@ func (o Options) WithDefaults() Options {
 	}
 	if o.App.Environment == "" {
 		o.App.Environment = "dev"
+	}
+	if o.Realtime.Path == "" {
+		o.Realtime.Path = "/ws/socket.io"
+	}
+	if o.Realtime.Namespace == "" {
+		o.Realtime.Namespace = "/ws"
+	}
+	if o.Realtime.NoAuthMarker == "" {
+		o.Realtime.NoAuthMarker = "internal"
+	}
+	if !o.Realtime.DisablePolling {
+		o.Realtime.EnablePolling = true
+	}
+	if o.Realtime.MultiInstance.Channel == "" {
+		prefix := o.Redis.KeyPrefix
+		if prefix == "" {
+			prefix = "fba"
+		}
+		o.Realtime.MultiInstance.Channel = prefix + ":realtime:broadcast"
 	}
 	return o
 }
