@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"strings"
 	"time"
 
+	coreauth "github.com/yuWorm/fba-go/core/auth"
 	"github.com/yuWorm/fba-plugin-admin/repo"
 )
 
@@ -14,6 +16,12 @@ const (
 	userPasswordExpiryDays        = 365
 	userPasswordReminderDays      = 7
 )
+
+var passwordHasher = coreauth.NewPasswordService(0)
+
+func hashPassword(password string) (string, error) {
+	return passwordHasher.Hash(password)
+}
 
 func validateNewPassword(ctx context.Context, repository repo.Repository, userID int, newPassword string) error {
 	if len(newPassword) < userPasswordMinLength {
@@ -60,12 +68,24 @@ func passwordExpiryDaysRemaining(changedAt *time.Time) (*int, error) {
 }
 
 func passwordMatchesStored(stored string, plain string) bool {
-	if stored != "" {
-		return stored == plain
-	}
 	// The seeded admin user intentionally keeps an empty password for fixture
 	// compatibility while Python treats the initial login password as "admin".
-	return plain == "" || plain == "admin"
+	if stored == "" {
+		return plain == "" || plain == "admin"
+	}
+	if looksLikeBcryptHash(stored) {
+		return passwordHasher.Verify(stored, plain)
+	}
+	// Keep compatibility with rows created before the Go migration adopted
+	// Python-style hashing, so existing deployments can still authenticate.
+	return stored == plain
+}
+
+func looksLikeBcryptHash(value string) bool {
+	return strings.HasPrefix(value, "$2a$") ||
+		strings.HasPrefix(value, "$2b$") ||
+		strings.HasPrefix(value, "$2x$") ||
+		strings.HasPrefix(value, "$2y$")
 }
 
 func hasASCIIDigit(value string) bool {

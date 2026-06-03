@@ -92,6 +92,11 @@ func (s *UserService) Create(ctx context.Context, param dto.UserCreateParam) (dt
 	if param.Password == "" {
 		return dto.UserWithRelationDetail{}, userBadRequest("密码不允许为空", nil)
 	}
+	hashedPassword, err := hashPassword(param.Password)
+	if err != nil {
+		return dto.UserWithRelationDetail{}, err
+	}
+	param.Password = hashedPassword
 	if err := s.ensureUserDept(ctx, param.DeptID); err != nil {
 		return dto.UserWithRelationDetail{}, err
 	}
@@ -146,12 +151,7 @@ func (s *UserService) UpdatePassword(ctx context.Context, id int, param dto.User
 		}
 		return err
 	}
-	password := user.Password
-	// Seed admin keeps an empty password and AuthService treats that as the fixture "admin" password.
-	if password == "" {
-		password = "admin"
-	}
-	if password != param.OldPassword {
+	if !passwordMatchesStored(user.Password, param.OldPassword) {
 		return userBadRequest("原密码错误", nil)
 	}
 	if param.NewPassword != param.ConfirmPassword {
@@ -160,7 +160,11 @@ func (s *UserService) UpdatePassword(ctx context.Context, id int, param dto.User
 	if err := validateNewPassword(ctx, s.repo, id, param.NewPassword); err != nil {
 		return err
 	}
-	if err := s.repo.ResetUserPassword(ctx, id, param.NewPassword); err != nil {
+	hashedPassword, err := hashPassword(param.NewPassword)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.ResetUserPassword(ctx, id, hashedPassword); err != nil {
 		return err
 	}
 	if err := s.repo.CreateUserPasswordHistory(ctx, id, user.Password); err != nil {
@@ -180,7 +184,11 @@ func (s *UserService) ResetPassword(ctx context.Context, id int, password string
 	if err := validateNewPassword(ctx, s.repo, id, password); err != nil {
 		return err
 	}
-	if err := s.repo.ResetUserPassword(ctx, id, password); err != nil {
+	hashedPassword, err := hashPassword(password)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.ResetUserPassword(ctx, id, hashedPassword); err != nil {
 		return err
 	}
 	if err := s.repo.CreateUserPasswordHistory(ctx, id, user.Password); err != nil {

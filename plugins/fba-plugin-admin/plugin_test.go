@@ -1157,6 +1157,68 @@ func TestUserPasswordHistoryPreventsRecentReuseLikePython(t *testing.T) {
 	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "新密码不能与最近 3 次使用的密码相同")
 }
 
+func TestUserPasswordsAreStoredAndVerifiedAsBcryptHashesLikePython(t *testing.T) {
+	repository := adminrepo.NewMemoryRepository(adminrepo.SeedData())
+	app := newAdminAppWithRepository(t, repository)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/sys/users", `{"username":"hashed_user","password":"Passw0rd1","nickname":"Hashed User","email":null,"phone":null,"dept_id":1,"roles":[1]}`)
+	assertStatusOK(t, resp)
+	created := assertEnvelopeMap(t, body)
+	userID := int(created["id"].(float64))
+
+	stored, err := repository.GetUserByUsername(context.Background(), "hashed_user")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(hashed_user) error = %v", err)
+	}
+	if stored.Password == "Passw0rd1" {
+		t.Fatal("stored password is plaintext, want bcrypt hash")
+	}
+	passwordService := coreauth.NewPasswordService(0)
+	if !passwordService.Verify(stored.Password, "Passw0rd1") {
+		t.Fatalf("stored password hash does not verify original password: %q", stored.Password)
+	}
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"hashed_user","password":"Passw0rd1","uuid":"fixture-captcha","captcha":"1234"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"hashed_user","password":"`+stored.Password+`","uuid":"fixture-captcha","captcha":"1234"}`)
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "用户名或密码有误")
+
+	resp, body = requestJSON(t, app, "PUT", "/api/v1/sys/users/"+itoa(userID)+"/password", `{"password":"Nextpass1"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+
+	updated, err := repository.GetUserByUsername(context.Background(), "hashed_user")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(hashed_user) after reset error = %v", err)
+	}
+	if updated.Password == "Nextpass1" || updated.Password == stored.Password {
+		t.Fatalf("updated stored password = %q, want new bcrypt hash", updated.Password)
+	}
+	if !passwordService.Verify(updated.Password, "Nextpass1") {
+		t.Fatalf("updated password hash does not verify new password: %q", updated.Password)
+	}
+
+	histories, err := repository.ListUserPasswordHistories(context.Background(), userID, 1)
+	if err != nil {
+		t.Fatalf("ListUserPasswordHistories() error = %v", err)
+	}
+	if len(histories) != 1 {
+		t.Fatalf("password history count = %d, want 1", len(histories))
+	}
+	if histories[0].Password == "Passw0rd1" {
+		t.Fatal("stored password history is plaintext, want previous bcrypt hash")
+	}
+	if !passwordService.Verify(histories[0].Password, "Passw0rd1") {
+		t.Fatalf("password history hash does not verify old password: %q", histories[0].Password)
+	}
+
+	resp, body = requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"hashed_user","password":"Nextpass1","uuid":"fixture-captcha","captcha":"1234"}`)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+}
+
 func TestLoginPasswordExpiryMatchesPythonPolicy(t *testing.T) {
 	seed := adminrepo.SeedData()
 	expired := time.Now().AddDate(-1, 0, -1)
@@ -2219,8 +2281,12 @@ func newAdminApp(t *testing.T) *fiber.App {
 
 func newAdminAppWithSeed(t *testing.T, seed adminmodel.Seed) *fiber.App {
 	t.Helper()
+	return newAdminAppWithRepository(t, adminrepo.NewMemoryRepository(seed))
+}
+
+func newAdminAppWithRepository(t *testing.T, repository adminrepo.Repository) *fiber.App {
+	t.Helper()
 	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler})
-	repository := adminrepo.NewMemoryRepository(seed)
 	handler := adminapi.NewHandlerWithOptions(repository, config.Options{})
 	registerRoutes(app.Group("/api/v1"), append(
 		adminapi.AuthRoutes(handler),
