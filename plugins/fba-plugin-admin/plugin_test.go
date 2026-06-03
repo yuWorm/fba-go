@@ -527,16 +527,32 @@ func TestAuthEndpointsAreStatefulAndValidateUsers(t *testing.T) {
 		t.Fatalf("decode refresh response: %v", err)
 	}
 	refreshed := assertEnvelopeMap(t, body)
-	if refreshed["session_uuid"] != sessionUUID {
-		t.Fatalf("refreshed session uuid = %v, want %s", refreshed["session_uuid"], sessionUUID)
+	refreshedSessionUUID, ok := refreshed["session_uuid"].(string)
+	if !ok || refreshedSessionUUID == "" {
+		t.Fatalf("refreshed session_uuid = %v, want non-empty string", refreshed["session_uuid"])
+	}
+	if refreshedSessionUUID == sessionUUID {
+		t.Fatalf("refreshed session uuid = %v, want rotated from %s", refreshedSessionUUID, sessionUUID)
 	}
 	if refreshed["access_token"] == data["access_token"] {
 		t.Fatal("refresh returned the same access token")
 	}
+	refreshedRefreshCookie := requireCookie(t, resp.Header.Get("Set-Cookie"), "fba_refresh_token")
+
+	resp, body = requestJSON(t, app, "GET", "/api/v1/monitors/sessions?username=auth_user", "")
+	assertStatusOK(t, resp)
+	sessions = assertEnvelopeSlice(t, body)
+	if len(sessions) != 1 {
+		t.Fatalf("auth_user sessions after refresh = %d, want 1", len(sessions))
+	}
+	session = assertMap(t, sessions[0])
+	if session["session_uuid"] != refreshedSessionUUID {
+		t.Fatalf("session uuid after refresh = %v, want %s", session["session_uuid"], refreshedSessionUUID)
+	}
 
 	req = httptest.NewRequest("POST", "/api/v1/auth/logout", nil)
 	req.Header.Set("Authorization", "Bearer "+refreshed["access_token"].(string))
-	req.AddCookie(refreshCookie)
+	req.AddCookie(refreshedRefreshCookie)
 	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatalf("POST /auth/logout error = %v", err)

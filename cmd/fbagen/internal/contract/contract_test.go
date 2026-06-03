@@ -637,6 +637,48 @@ func TestRunnerBootstrapsRefreshCookieForRefreshPriorityRoute(t *testing.T) {
 	}
 }
 
+func TestRunnerUsesSeparateRefreshBootstrapWhenAuthTokenIsNeeded(t *testing.T) {
+	transport := &isolatedRefreshBootstrapTransport{t: t}
+	loaded := contract.Contracts{
+		API: contract.APIContract{
+			BasePath: "/api/v1",
+			PriorityRoutes: []contract.Route{
+				{Method: "POST", Path: "/api/v1/auth/refresh"},
+				{Method: "GET", Path: "/api/v1/auth/codes"},
+			},
+		},
+		Response: contract.ResponseContract{
+			Success: contract.ResponseSuccess{
+				Envelope:       true,
+				RequiredFields: []string{"code", "msg", "data"},
+				Code:           200,
+				Msg:            "请求成功",
+			},
+		},
+	}
+
+	result, err := contract.Test(contract.TestOptions{
+		BaseURL:   "http://fba.test",
+		Contracts: loaded,
+		Client:    &http.Client{Transport: transport},
+	})
+	if err != nil {
+		t.Fatalf("Test() error = %v", err)
+	}
+	if !result.Passed {
+		t.Fatalf("Passed = false, failures = %+v", result.Failures)
+	}
+	if transport.loginCount != 2 {
+		t.Fatalf("login count = %d, want 2", transport.loginCount)
+	}
+	if !transport.refreshCalled {
+		t.Fatal("refresh route was not probed")
+	}
+	if !transport.codesCalled {
+		t.Fatal("authenticated route was not probed")
+	}
+}
+
 func TestRunnerChecksNegativeRouteWithoutAuth(t *testing.T) {
 	transport := &negativeNoAuthTransport{t: t}
 	loaded := contract.Contracts{
@@ -927,6 +969,48 @@ func (transport *refreshBootstrapTransport) RoundTrip(req *http.Request) (*http.
 		transport.t.Fatalf("unexpected path %s", req.URL.Path)
 		return nil, nil
 	}
+}
+
+type isolatedRefreshBootstrapTransport struct {
+	t             *testing.T
+	loginCount    int
+	refreshCalled bool
+	codesCalled   bool
+}
+
+func (transport *isolatedRefreshBootstrapTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	transport.t.Helper()
+	switch req.URL.Path {
+	case "/api/v1/auth/login":
+		transport.loginCount++
+		switch transport.loginCount {
+		case 1:
+			resp := jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":{"access_token":"primary-token"}}`)
+			resp.Header.Set("Set-Cookie", "fba_refresh_token=primary-refresh; Path=/; HttpOnly")
+			return resp, nil
+		case 2:
+			resp := jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":{"access_token":"refresh-token"}}`)
+			resp.Header.Set("Set-Cookie", "fba_refresh_token=refresh-only; Path=/; HttpOnly")
+			return resp, nil
+		default:
+			transport.t.Fatalf("unexpected login count %d", transport.loginCount)
+		}
+	case "/api/v1/auth/refresh":
+		transport.refreshCalled = true
+		if req.Header.Get("Cookie") != "fba_refresh_token=refresh-only" {
+			return jsonResponse(req, http.StatusUnauthorized, `{"code":401,"msg":"Refresh Token 已过期，请重新登录","data":null}`), nil
+		}
+		return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":{"access_token":"rotated-token","access_token_expire_time":"2026-06-02 00:00:00","session_uuid":"rotated-session"}}`), nil
+	case "/api/v1/auth/codes":
+		transport.codesCalled = true
+		if req.Header.Get("Authorization") != "Bearer primary-token" {
+			return jsonResponse(req, http.StatusUnauthorized, `{"code":401,"msg":"未认证","data":null,"trace_id":"trace-auth"}`), nil
+		}
+		return jsonResponse(req, http.StatusOK, `{"code":200,"msg":"请求成功","data":[]}`), nil
+	default:
+		transport.t.Fatalf("unexpected path %s", req.URL.Path)
+	}
+	return nil, nil
 }
 
 type negativeNoAuthTransport struct {

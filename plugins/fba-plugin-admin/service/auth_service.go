@@ -139,20 +139,27 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (dto.Acc
 	}
 	session, err := s.repo.GetSession(ctx, userID, sessionUUID)
 	if err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return dto.AccessTokenBase{}, "", authError("Refresh Token 已过期，请重新登录")
+		}
 		return dto.AccessTokenBase{}, "", err
 	}
-	access, expiresAt, err := s.issueAccessToken(ctx, session.ID, session.SessionUUID)
+	newSessionUUID := "session-" + randomID()
+	access, expiresAt, err := s.issueAccessToken(ctx, user.ID, newSessionUUID)
 	if err != nil {
 		return dto.AccessTokenBase{}, "", err
 	}
-	refresh, _, err := issueToken("refresh", session.ID, session.SessionUUID, refreshTokenTTL)
+	refresh, _, err := issueToken("refresh", user.ID, newSessionUUID, refreshTokenTTL)
 	if err != nil {
+		return dto.AccessTokenBase{}, "", err
+	}
+	if err := s.replaceRefreshSession(ctx, user, session.SessionUUID, newSessionUUID, expiresAt); err != nil {
 		return dto.AccessTokenBase{}, "", err
 	}
 	return dto.AccessTokenBase{
 		AccessToken:           access,
 		AccessTokenExpireTime: expiresAt.Format(dto.TimeLayout),
-		SessionUUID:           session.SessionUUID,
+		SessionUUID:           newSessionUUID,
 	}, refresh, nil
 }
 
@@ -268,6 +275,20 @@ func (s *AuthService) upsertSession(ctx context.Context, user model.User, sessio
 		LastLoginTime: time.Now().Format(dto.TimeLayout),
 		ExpireTime:    expiresAt,
 	})
+}
+
+func (s *AuthService) replaceRefreshSession(ctx context.Context, user model.User, oldSessionUUID string, newSessionUUID string, expiresAt time.Time) error {
+	// Python create_new_token deletes the current access/refresh Redis keys and
+	// then creates a fresh access token, whose create_access_token call always
+	// assigns a new session_uuid. The Go compatibility store models those token
+	// keys as online sessions, so refresh must replace the old session row.
+	if err := s.repo.DeleteSession(ctx, user.ID, oldSessionUUID); err != nil {
+		return err
+	}
+	if err := s.clearOtherSessions(ctx, user, newSessionUUID); err != nil {
+		return err
+	}
+	return s.upsertSession(ctx, user, newSessionUUID, expiresAt)
 }
 
 func (s *AuthService) issueAccessToken(ctx context.Context, userID int, sessionUUID string) (string, time.Time, error) {

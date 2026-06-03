@@ -45,18 +45,28 @@ func Test(opts TestOptions) (TestResult, error) {
 	}
 	authToken := opts.AuthToken
 	var refreshCookie *http.Cookie
-	// Refresh is public from an Authorization perspective, but the positive probe
-	// still needs a login-issued refresh cookie to match the real auth contract.
-	bootstrapNeeded := opts.Contracts.API.BasePath != "" &&
-		((authToken == "" && needsAdminToken(opts.Contracts.API.PriorityRoutes, opts.Contracts.API.NegativeRoutes)) ||
-			needsRefreshCookie(opts.Contracts.API.PriorityRoutes))
-	if bootstrapNeeded {
+	adminBootstrapNeeded := opts.Contracts.API.BasePath != "" &&
+		authToken == "" &&
+		needsAdminToken(opts.Contracts.API.PriorityRoutes, opts.Contracts.API.NegativeRoutes)
+	refreshBootstrapNeeded := opts.Contracts.API.BasePath != "" &&
+		needsRefreshCookie(opts.Contracts.API.PriorityRoutes)
+	if adminBootstrapNeeded {
 		auth, err := bootstrapAuthSession(client, opts.BaseURL, opts.Contracts.API.BasePath)
 		if err != nil {
 			return TestResult{}, err
 		}
-		if authToken == "" {
-			authToken = auth.AccessToken
+		authToken = auth.AccessToken
+		if !refreshBootstrapNeeded {
+			refreshCookie = auth.RefreshCookie
+		}
+	}
+	if refreshBootstrapNeeded {
+		// Python create_new_token invalidates the access token tied to the refresh
+		// cookie's session. Keep contract probing from invalidating the admin
+		// bootstrap token used by the remaining authenticated route checks.
+		auth, err := bootstrapAuthSession(client, opts.BaseURL, opts.Contracts.API.BasePath)
+		if err != nil {
+			return TestResult{}, err
 		}
 		refreshCookie = auth.RefreshCookie
 	}
