@@ -602,15 +602,21 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	adminToken := loginForAccessToken(t, app, "admin", "admin")
 	resp, body := requestJSONAuth(t, app, "POST", "/api/v1/sys/users", `{"username":"viewer","password":"secret","nickname":"Viewer","email":null,"phone":null,"dept_id":1,"roles":[1]}`, adminToken)
 	assertStatusOK(t, resp)
-	assertEnvelopeMap(t, body)
+	createdViewer := assertEnvelopeMap(t, body)
+	viewerID := int(createdViewer["id"].(float64))
 
-	viewerToken := loginForAccessToken(t, app, "viewer", "secret")
+	viewerLogin := loginForAccessData(t, app, "viewer", "secret")
+	viewerToken := viewerLogin["access_token"].(string)
+	viewerSessionUUID := viewerLogin["session_uuid"].(string)
 	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", viewerToken)
 	assertStatusOK(t, resp)
 	current := assertEnvelopeMap(t, body)
 	if current["username"] != "viewer" {
 		t.Fatalf("current username = %v, want viewer", current["username"])
 	}
+	reissuedViewerToken := accessTokenForSession(t, int64(viewerID), viewerSessionUUID)
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/sys/users/me", "", reissuedViewerToken)
+	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "Token 已失效")
 	resp, body = requestJSONWithAuthorization(t, app, "GET", "/api/v1/sys/users/me", "", viewerToken)
 	assertErrorEnvelope(t, resp, body, fiber.StatusUnauthorized, "Token 无效")
 	expiredToken := expiredAccessToken(t, 2, "expired-session")
@@ -2239,6 +2245,12 @@ func requestRawAuth(t *testing.T, app *fiber.App, method string, path string, bo
 
 func loginForAccessToken(t *testing.T, app *fiber.App, username string, password string) string {
 	t.Helper()
+	data := loginForAccessData(t, app, username, password)
+	return data["access_token"].(string)
+}
+
+func loginForAccessData(t *testing.T, app *fiber.App, username string, password string) map[string]any {
+	t.Helper()
 	resp, body := requestJSON(t, app, "POST", "/api/v1/auth/login", `{"username":"`+username+`","password":"`+password+`","uuid":"fixture-captcha","captcha":"1234"}`)
 	assertStatusOK(t, resp)
 	data := assertEnvelopeMap(t, body)
@@ -2246,7 +2258,11 @@ func loginForAccessToken(t *testing.T, app *fiber.App, username string, password
 	if !ok || token == "" {
 		t.Fatalf("access_token = %v, want non-empty string", data["access_token"])
 	}
-	return token
+	sessionUUID, ok := data["session_uuid"].(string)
+	if !ok || sessionUUID == "" {
+		t.Fatalf("session_uuid = %v, want non-empty string", data["session_uuid"])
+	}
+	return data
 }
 
 func expiredAccessToken(t *testing.T, userID int64, sessionUUID string) string {

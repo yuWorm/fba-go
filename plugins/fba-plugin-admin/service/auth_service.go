@@ -117,7 +117,7 @@ func (s *AuthService) SwaggerLogin(ctx context.Context, username string, passwor
 	if err != nil {
 		return dto.SwaggerToken{}, err
 	}
-	if err := s.upsertSession(ctx, user, sessionUUID, expiresAt); err != nil {
+	if err := s.upsertSession(ctx, user, sessionUUID, access, expiresAt); err != nil {
 		return dto.SwaggerToken{}, err
 	}
 	return dto.SwaggerToken{
@@ -161,7 +161,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (dto.Acc
 	if err != nil {
 		return dto.AccessTokenBase{}, "", err
 	}
-	if err := s.replaceRefreshSession(ctx, user, session.SessionUUID, newSessionUUID, expiresAt); err != nil {
+	if err := s.replaceRefreshSession(ctx, user, session.SessionUUID, newSessionUUID, access, expiresAt); err != nil {
 		return dto.AccessTokenBase{}, "", err
 	}
 	return dto.AccessTokenBase{
@@ -172,7 +172,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (dto.Acc
 }
 
 func (s *AuthService) Logout(ctx context.Context, authorization string) error {
-	userID, sessionUUID, ok, _ := s.parseBearerAccessToken(authorization)
+	userID, sessionUUID, _, ok, _ := s.parseBearerAccessToken(authorization)
 	if !ok {
 		return nil
 	}
@@ -180,7 +180,7 @@ func (s *AuthService) Logout(ctx context.Context, authorization string) error {
 }
 
 func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*rbac.CurrentUser, error) {
-	userID, sessionUUID, ok, parseErr := s.parseBearerAccessToken(authorization)
+	userID, sessionUUID, accessToken, ok, parseErr := s.parseBearerAccessToken(authorization)
 	if !ok {
 		if stderrors.Is(parseErr, coreauth.ErrAccessTokenExpired) {
 			return nil, authError("Token 已过期")
@@ -199,8 +199,16 @@ func (s *AuthService) Authenticate(ctx context.Context, authorization string) (*
 	if !session.ExpireTime.IsZero() && time.Now().After(session.ExpireTime) {
 		return nil, authError("Token 已过期")
 	}
+	if session.AccessToken != "" && session.AccessToken != accessToken {
+		// Python stores the exact access token in Redis and rejects any other
+		// JWT for the same session_uuid, even when its signature and expiry are valid.
+		return nil, authError("Token 已失效")
+	}
 	user, err := s.repo.GetUser(ctx, userID)
 	if err != nil {
+		if stderrors.Is(err, repo.ErrNotFound) {
+			return nil, authError("Token 无效")
+		}
 		return nil, authError("未认证")
 	}
 	if user.Status != 1 {
@@ -312,7 +320,7 @@ func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sess
 	if err := s.clearOtherSessions(ctx, user, sessionUUID); err != nil {
 		return dto.LoginToken{}, "", err
 	}
-	if err := s.upsertSession(ctx, user, sessionUUID, expiresAt); err != nil {
+	if err := s.upsertSession(ctx, user, sessionUUID, access, expiresAt); err != nil {
 		return dto.LoginToken{}, "", err
 	}
 	return dto.LoginToken{
@@ -326,10 +334,11 @@ func (s *AuthService) issueLoginToken(ctx context.Context, user model.User, sess
 	}, refresh, nil
 }
 
-func (s *AuthService) upsertSession(ctx context.Context, user model.User, sessionUUID string, expiresAt time.Time) error {
+func (s *AuthService) upsertSession(ctx context.Context, user model.User, sessionUUID string, accessToken string, expiresAt time.Time) error {
 	return s.repo.UpsertSession(ctx, model.Session{
 		ID:            user.ID,
 		SessionUUID:   sessionUUID,
+		AccessToken:   accessToken,
 		Username:      user.Username,
 		Nickname:      user.Nickname,
 		IP:            "127.0.0.1",
@@ -358,7 +367,7 @@ func sessionLastLoginTime(user model.User) string {
 	return time.Now().Format(dto.TimeLayout)
 }
 
-func (s *AuthService) replaceRefreshSession(ctx context.Context, user model.User, oldSessionUUID string, newSessionUUID string, expiresAt time.Time) error {
+func (s *AuthService) replaceRefreshSession(ctx context.Context, user model.User, oldSessionUUID string, newSessionUUID string, accessToken string, expiresAt time.Time) error {
 	// Python create_new_token deletes the current access/refresh Redis keys and
 	// then creates a fresh access token, whose create_access_token call always
 	// assigns a new session_uuid. The Go compatibility store models those token
@@ -369,7 +378,7 @@ func (s *AuthService) replaceRefreshSession(ctx context.Context, user model.User
 	if err := s.clearOtherSessions(ctx, user, newSessionUUID); err != nil {
 		return err
 	}
-	return s.upsertSession(ctx, user, newSessionUUID, expiresAt)
+	return s.upsertSession(ctx, user, newSessionUUID, accessToken, expiresAt)
 }
 
 func (s *AuthService) issueAccessToken(ctx context.Context, userID int, sessionUUID string) (string, time.Time, error) {
@@ -520,10 +529,10 @@ func issueToken(prefix string, userID int, sessionUUID string, ttl time.Duration
 	}, ":"), expiresAt, nil
 }
 
-func (s *AuthService) parseBearerAccessToken(header string) (int, string, bool, error) {
+func (s *AuthService) parseBearerAccessToken(header string) (int, string, string, bool, error) {
 	token := strings.TrimSpace(header)
 	if !strings.HasPrefix(strings.ToLower(token), "bearer ") {
-		return 0, "", false, nil
+		return 0, "", "", false, nil
 	}
 	token = strings.TrimSpace(token[7:])
 	// Access tokens are JWTs in the Python service and must not fall back to
@@ -533,10 +542,10 @@ func (s *AuthService) parseBearerAccessToken(header string) (int, string, bool, 
 	if err == nil && claims.Subject != "" && claims.SessionUUID != "" {
 		userID, err := strconv.Atoi(claims.Subject)
 		if err == nil {
-			return userID, claims.SessionUUID, true, nil
+			return userID, claims.SessionUUID, token, true, nil
 		}
 	}
-	return 0, "", false, err
+	return 0, "", "", false, err
 }
 
 func accessTokenFailureMessage(authorization string) string {

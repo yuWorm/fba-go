@@ -88,6 +88,7 @@ func TestGORMRepositoryPersistsSessions(t *testing.T) {
 	session := model.Session{
 		ID:            1,
 		SessionUUID:   "gorm-session",
+		AccessToken:   "initial-access-token",
 		Username:      "admin",
 		Nickname:      "Admin",
 		IP:            "127.0.0.1",
@@ -103,6 +104,7 @@ func TestGORMRepositoryPersistsSessions(t *testing.T) {
 		t.Fatalf("UpsertSession(insert) error = %v", err)
 	}
 	session.Nickname = "Updated Admin"
+	session.AccessToken = "updated-access-token"
 	if err := repository.UpsertSession(ctx, session); err != nil {
 		t.Fatalf("UpsertSession(update) error = %v", err)
 	}
@@ -111,8 +113,8 @@ func TestGORMRepositoryPersistsSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSession() error = %v", err)
 	}
-	if got.Nickname != "Updated Admin" || !got.ExpireTime.Equal(expires) {
-		t.Fatalf("session = %+v, want updated nickname and expire time %s", got, expires)
+	if got.Nickname != "Updated Admin" || got.AccessToken != "updated-access-token" || !got.ExpireTime.Equal(expires) {
+		t.Fatalf("session = %+v, want updated nickname, access token and expire time %s", got, expires)
 	}
 
 	if err := repository.DeleteSession(ctx, 1, "gorm-session"); err != nil {
