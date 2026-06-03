@@ -337,6 +337,7 @@ func TestMountRoutesAllowsSuperuserRouteForSuperAdmin(t *testing.T) {
 		user: &rbac.CurrentUser{
 			ID:           1,
 			IsSuperAdmin: true,
+			IsStaff:      true,
 		},
 	}
 	routes := []plugin.Route{

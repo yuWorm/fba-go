@@ -45,11 +45,20 @@ func TestAuthorizeRequiresSuperuserWhenRouteDemandsIt(t *testing.T) {
 }
 
 func TestAuthorizeAllowsSuperuserRouteForSuperAdminWithoutRoles(t *testing.T) {
-	user := &rbac.CurrentUser{ID: 1, IsSuperAdmin: true}
+	user := &rbac.CurrentUser{ID: 1, IsSuperAdmin: true, IsStaff: true}
 
 	err := rbac.Authorize(user, rbac.RouteAccess{Method: "GET", SuperuserRequired: true})
 	if err != nil {
 		t.Fatalf("Authorize() error = %v", err)
+	}
+}
+
+func TestAuthorizeRejectsSuperuserRouteForSuperAdminWithoutStaff(t *testing.T) {
+	user := &rbac.CurrentUser{ID: 1, IsSuperAdmin: true, IsStaff: false}
+
+	err := rbac.Authorize(user, rbac.RouteAccess{Method: "GET", SuperuserRequired: true})
+	if !errors.Is(err, rbac.ErrSuperuserRequired) {
+		t.Fatalf("Authorize() error = %v, want superuser required", err)
 	}
 }
 

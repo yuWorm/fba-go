@@ -662,6 +662,19 @@ func TestAdminRuntimeAuthUsesTokenUserAndRBAC(t *testing.T) {
 	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/roles", `{"name":"Blocked","status":1,"is_filter_scopes":false,"remark":null}`, viewerToken)
 	assertErrorEnvelope(t, resp, body, fiber.StatusForbidden, "用户已被禁止后台管理操作，请联系系统管理员")
 
+	resp, body = requestJSONAuth(t, app, "POST", "/api/v1/sys/users", `{"username":"super_not_staff","password":"secret","nickname":"Super Not Staff","email":null,"phone":null,"dept_id":1,"roles":[1]}`, adminToken)
+	assertStatusOK(t, resp)
+	superNotStaff := assertEnvelopeMap(t, body)
+	superNotStaffID := int(superNotStaff["id"].(float64))
+	resp, body = requestJSONAuth(t, app, "PUT", "/api/v1/sys/users/"+itoa(superNotStaffID)+"/permissions?type=superuser", "", adminToken)
+	assertStatusOK(t, resp)
+	assertEnvelopeNil(t, body)
+	superNotStaffToken := loginForAccessToken(t, app, "super_not_staff", "secret")
+	resp, _ = requestRawAuth(t, app, "GET", "/api/v1/sys/plugins", "", superNotStaffToken)
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("super_not_staff GET /sys/plugins status = %d, want 403", resp.StatusCode)
+	}
+
 	resp, _ = requestRawAuth(t, app, "GET", "/api/v1/sys/plugins", "", viewerToken)
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Fatalf("viewer GET /sys/plugins status = %d, want 403", resp.StatusCode)

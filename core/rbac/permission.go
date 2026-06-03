@@ -31,7 +31,9 @@ func Authorize(user *CurrentUser, route RouteAccess) error {
 	}
 	// Superuser-only routes are stricter than role permissions and do not depend on enabled roles.
 	if route.SuperuserRequired {
-		if user.IsSuperAdmin {
+		// Python's DependsSuperUser requires both is_superuser and is_staff.
+		// A non-staff superuser flag alone is not allowed into admin-only operations.
+		if user.IsSuperAdmin && user.IsStaff {
 			return nil
 		}
 		return ErrSuperuserRequired
