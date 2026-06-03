@@ -1,9 +1,11 @@
 package api
 
 import (
+	stderrors "errors"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
+	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/fiberx"
 	"github.com/yuWorm/fba-go/core/response"
 	"github.com/yuWorm/fba-plugin-dict/dto"
@@ -74,10 +76,7 @@ func (h Handler) UpdateDictType(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.service.UpdateType(c.RequestCtx(), id, param); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.service.UpdateType(c.RequestCtx(), id, param))
 }
 
 func (h Handler) DeleteDictTypes(c fiber.Ctx) error {
@@ -85,10 +84,7 @@ func (h Handler) DeleteDictTypes(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.service.DeleteTypes(c.RequestCtx(), param.PKs); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.service.DeleteTypes(c.RequestCtx(), param.PKs))
 }
 
 func (h Handler) GetAllDictData(c fiber.Ctx) error {
@@ -154,10 +150,7 @@ func (h Handler) UpdateDictData(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.service.UpdateData(c.RequestCtx(), id, param); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.service.UpdateData(c.RequestCtx(), id, param))
 }
 
 func (h Handler) DeleteDictData(c fiber.Ctx) error {
@@ -165,10 +158,26 @@ func (h Handler) DeleteDictData(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.service.DeleteData(c.RequestCtx(), param.PKs); err != nil {
-		return err
+	return mutationSuccess(c, h.service.DeleteData(c.RequestCtx(), param.PKs))
+}
+
+func mutationSuccess(c fiber.Ctx, err error) error {
+	if err == nil {
+		return c.JSON(response.Success[any](nil))
 	}
-	return c.JSON(response.Success[any](nil))
+	if isRawRepoNotFound(err) {
+		return c.JSON(response.Fail[any](nil))
+	}
+	return err
+}
+
+func isRawRepoNotFound(err error) bool {
+	var appErr *fbaerrors.AppError
+	// Wrapped service errors are Python-style 404 guards; only raw repo misses represent count == 0.
+	if stderrors.As(err, &appErr) {
+		return false
+	}
+	return stderrors.Is(err, repo.ErrNotFound)
 }
 
 func parseID(raw string) (int, error) {

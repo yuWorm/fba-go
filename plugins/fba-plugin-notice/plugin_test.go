@@ -113,6 +113,17 @@ func TestNoticeWriteEndpointsReturnPythonEnvelope(t *testing.T) {
 	}
 }
 
+func TestNoticeMissingMutationsMatchPython(t *testing.T) {
+	app := newNoticeApp(t)
+
+	resp, body := requestJSON(t, app, "PUT", "/api/v1/sys/notices/999999", noticeBody())
+	assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "通知公告不存在")
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/notices", `{"pks":[999999]}`)
+	assertStatusOK(t, resp)
+	assertBusinessFailEnvelope(t, body)
+}
+
 func TestNoticeValidationErrorsMatchPython(t *testing.T) {
 	app := newNoticeApp(t)
 
@@ -184,6 +195,19 @@ func assertEnvelopeNull(t *testing.T, body map[string]any) {
 	}
 	if body["msg"] != "请求成功" {
 		t.Fatalf("msg = %v, want 请求成功", body["msg"])
+	}
+	if body["data"] != nil {
+		t.Fatalf("data = %v, want nil", body["data"])
+	}
+}
+
+func assertBusinessFailEnvelope(t *testing.T, body map[string]any) {
+	t.Helper()
+	if body["code"] != float64(400) {
+		t.Fatalf("code = %v, want 400; body = %v", body["code"], body)
+	}
+	if body["msg"] != "请求错误" {
+		t.Fatalf("msg = %v, want 请求错误", body["msg"])
 	}
 	if body["data"] != nil {
 		t.Fatalf("data = %v, want nil", body["data"])

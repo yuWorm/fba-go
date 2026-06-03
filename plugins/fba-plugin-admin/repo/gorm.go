@@ -384,7 +384,7 @@ func (r *GORMRepository) DeleteRoles(ctx context.Context, ids []int) error {
 		if err := tx.Where("role_id IN ?", ids).Delete(&UserRole{}).Error; err != nil {
 			return err
 		}
-		return tx.Delete(&model.Role{}, ids).Error
+		return rowsError(tx.Delete(&model.Role{}, ids))
 	})
 }
 
@@ -535,7 +535,7 @@ func (r *GORMRepository) DeleteMenu(ctx context.Context, id int) error {
 		if err := tx.Where("menu_id = ?", id).Delete(&RoleMenu{}).Error; err != nil {
 			return err
 		}
-		return tx.Delete(&model.Menu{}, id).Error
+		return rowsError(tx.Delete(&model.Menu{}, id))
 	})
 }
 
@@ -699,7 +699,7 @@ func (r *GORMRepository) DeleteDataRules(ctx context.Context, ids []int) error {
 		if err := tx.Where("data_rule_id IN ?", ids).Delete(&DataScopeRule{}).Error; err != nil {
 			return err
 		}
-		return tx.Delete(&model.DataRule{}, ids).Error
+		return rowsError(tx.Delete(&model.DataRule{}, ids))
 	})
 }
 
@@ -788,7 +788,7 @@ func (r *GORMRepository) DeleteDataScopes(ctx context.Context, ids []int) error 
 		if err := tx.Where("data_scope_id IN ?", ids).Delete(&RoleDataScope{}).Error; err != nil {
 			return err
 		}
-		return tx.Delete(&model.DataScope{}, ids).Error
+		return rowsError(tx.Delete(&model.DataScope{}, ids))
 	})
 }
 
@@ -917,6 +917,17 @@ func (r *GORMRepository) DeleteLoginLogs(ctx context.Context, ids []int) (int, e
 
 func (r *GORMRepository) DeleteAllLoginLogs(ctx context.Context) error {
 	return r.provider.Write().WithContext(ctx).Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.LoginLog{}).Error
+}
+
+func (r *GORMRepository) CreateOperaLog(ctx context.Context, item model.OperaLog) error {
+	now := time.Now()
+	if item.OperaTime.IsZero() {
+		item.OperaTime = now
+	}
+	if item.CreatedTime.IsZero() {
+		item.CreatedTime = item.OperaTime
+	}
+	return r.provider.Write().WithContext(ctx).Create(&item).Error
 }
 
 func (r *GORMRepository) ListOperaLogs(ctx context.Context, filter LogFilter, page int, size int) ([]model.OperaLog, int64, error) {

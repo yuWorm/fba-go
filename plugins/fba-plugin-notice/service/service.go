@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	stderrors "errors"
+	"net/http"
 
+	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/pagination"
 	"github.com/yuWorm/fba-plugin-notice/dto"
 	"github.com/yuWorm/fba-plugin-notice/repo"
@@ -22,7 +25,7 @@ func New(repository repo.Repository) *Service {
 func (s *Service) Get(ctx context.Context, id int) (dto.NoticeDetail, error) {
 	item, err := s.repo.Get(ctx, id)
 	if err != nil {
-		return dto.NoticeDetail{}, err
+		return dto.NoticeDetail{}, noticeNotFound(err)
 	}
 	return dto.NoticeFromModel(item), nil
 }
@@ -40,9 +43,19 @@ func (s *Service) Create(ctx context.Context, param dto.NoticeParam) error {
 }
 
 func (s *Service) Update(ctx context.Context, id int, param dto.NoticeParam) error {
+	if _, err := s.repo.Get(ctx, id); err != nil {
+		return noticeNotFound(err)
+	}
 	return s.repo.Update(ctx, id, param)
 }
 
 func (s *Service) Delete(ctx context.Context, ids []int) error {
 	return s.repo.Delete(ctx, ids)
+}
+
+func noticeNotFound(err error) error {
+	if stderrors.Is(err, repo.ErrNotFound) {
+		return fbaerrors.New(http.StatusNotFound, http.StatusNotFound, "通知公告不存在", err)
+	}
+	return err
 }

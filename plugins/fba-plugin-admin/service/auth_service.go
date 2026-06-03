@@ -13,25 +13,26 @@ import (
 	"sync"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	coreauth "github.com/yuWorm/fba-go/core/auth"
 	"github.com/yuWorm/fba-go/core/config"
 	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/rbac"
+	"github.com/yuWorm/fba-go/core/redisx"
 	"github.com/yuWorm/fba-plugin-admin/dto"
 	"github.com/yuWorm/fba-plugin-admin/model"
 	"github.com/yuWorm/fba-plugin-admin/repo"
 )
 
 const (
-	defaultCaptchaCode = "1234"
-	defaultSessionUUID = "fixture-session"
-	accessTokenTTL     = 2 * time.Hour
-	refreshTokenTTL    = 7 * 24 * time.Hour
-	loginLogFail       = 0
-	loginLogSuccess    = 1
-	loginSuccessMsg    = "登录成功"
-	userLockThreshold  = 5
-	userLockTTL        = 5 * time.Minute
+	defaultCaptchaCode    = "1234"
+	defaultSessionUUID    = "fixture-session"
+	accessTokenTTL        = 2 * time.Hour
+	refreshTokenTTL       = 7 * 24 * time.Hour
+	loginLogFail          = 0
+	loginLogSuccess       = 1
+	loginSuccessMsg       = "登录成功"
+	oauth2LoginSuccessMsg = "OAuth2 登录成功"
 )
 
 type RequestMetadata struct {
@@ -46,35 +47,61 @@ type RequestMetadata struct {
 }
 
 type AuthService struct {
-	repo          repo.Repository
-	tokenService  coreauth.TokenService
-	mu            sync.Mutex
-	captchas      map[string]string
-	loginFailures map[int]int
-	userLocks     map[int]time.Time
+	repo           repo.Repository
+	tokenService   coreauth.TokenService
+	configProvider AdminConfigProvider
+	redis          RedisClient
+	keys           redisx.Keys
+	mu             sync.Mutex
+	captchas       map[string]string
+	loginFailures  map[int]int
+	userLocks      map[int]time.Time
+}
+
+type AuthServiceOptions struct {
+	ConfigProvider AdminConfigProvider
+	Redis          RedisClient
+	RedisKeyPrefix string
 }
 
 func NewAuthService(repository repo.Repository) *AuthService {
+	return NewAuthServiceWithOptions(repository, AuthServiceOptions{})
+}
+
+func NewAuthServiceWithOptions(repository repo.Repository, opts AuthServiceOptions) *AuthService {
 	if repository == nil {
 		repository = repo.NewMemoryRepository(repo.SeedData())
 	}
 	return &AuthService{
-		repo:          repository,
-		tokenService:  coreauth.NewJWTService(config.AuthOptions{AccessTokenTTL: accessTokenTTL}),
-		captchas:      map[string]string{},
-		loginFailures: map[int]int{},
-		userLocks:     map[int]time.Time{},
+		repo:           repository,
+		tokenService:   coreauth.NewJWTService(config.AuthOptions{AccessTokenTTL: accessTokenTTL}),
+		configProvider: adminConfigProvider(opts.ConfigProvider),
+		redis:          opts.Redis,
+		keys:           redisx.NewKeys(opts.RedisKeyPrefix),
+		captchas:       map[string]string{},
+		loginFailures:  map[int]int{},
+		userLocks:      map[int]time.Time{},
 	}
 }
 
-func (s *AuthService) Captcha(context.Context) (dto.CaptchaDetail, error) {
+func (s *AuthService) Captcha(ctx context.Context) (dto.CaptchaDetail, error) {
+	cfg, err := s.configProvider.LoginConfig(ctx)
+	if err != nil {
+		return dto.CaptchaDetail{}, err
+	}
 	uuid := "captcha-" + randomID()
-	s.mu.Lock()
-	s.captchas[uuid] = defaultCaptchaCode
-	s.mu.Unlock()
+	if s.redis != nil {
+		if err := s.redis.Set(ctx, s.keys.LoginCaptcha(uuid), defaultCaptchaCode, cfg.CaptchaExpire).Err(); err != nil {
+			return dto.CaptchaDetail{}, err
+		}
+	} else {
+		s.mu.Lock()
+		s.captchas[uuid] = defaultCaptchaCode
+		s.mu.Unlock()
+	}
 	return dto.CaptchaDetail{
-		IsEnabled:     true,
-		ExpireSeconds: 300,
+		IsEnabled:     cfg.CaptchaEnabled,
+		ExpireSeconds: int(cfg.CaptchaExpire.Seconds()),
 		UUID:          uuid,
 		Image:         "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte(defaultCaptchaCode)),
 	}, nil
@@ -82,7 +109,7 @@ func (s *AuthService) Captcha(context.Context) (dto.CaptchaDetail, error) {
 
 func (s *AuthService) Login(ctx context.Context, param dto.AuthLoginParam, meta RequestMetadata) (dto.LoginToken, string, error) {
 	param = defaultLoginParam(param)
-	if err := s.verifyCaptcha(param.UUID, param.Captcha); err != nil {
+	if err := s.verifyCaptcha(ctx, param.UUID, param.Captcha); err != nil {
 		s.recordLoginLog(ctx, model.User{}, param.Username, loginLogFail, err.Error(), meta)
 		return dto.LoginToken{}, "", err
 	}
@@ -132,6 +159,23 @@ func (s *AuthService) SwaggerLogin(ctx context.Context, username string, passwor
 		TokenType:   "Bearer",
 		User:        dto.UserFromModel(user),
 	}, nil
+}
+
+func (s *AuthService) OAuth2Login(ctx context.Context, user model.User, meta RequestMetadata) (dto.LoginToken, string, error) {
+	if user.Status != 1 {
+		return dto.LoginToken{}, "", authError("用户已被锁定, 请联系统管理员")
+	}
+	user, err := s.updateUserLoginTime(ctx, user)
+	if err != nil {
+		return dto.LoginToken{}, "", err
+	}
+	sessionUUID := "session-" + randomID()
+	token, refresh, err := s.issueLoginToken(ctx, user, sessionUUID, nil)
+	if err != nil {
+		return dto.LoginToken{}, "", err
+	}
+	s.recordLoginLog(ctx, user, user.Username, loginLogSuccess, oauth2LoginSuccessMsg, meta)
+	return token, refresh, nil
 }
 
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (dto.AccessTokenBase, string, error) {
@@ -481,20 +525,26 @@ func (s *AuthService) verifyUser(ctx context.Context, username string, password 
 	if user.Status != 1 {
 		return model.User{}, nil, authError("用户已被锁定, 请联系统管理员")
 	}
-	if err := s.checkLoginLock(user.ID); err != nil {
+	cfg, err := s.configProvider.UserSecurityConfig(ctx)
+	if err != nil {
+		return model.User{}, nil, err
+	}
+	if err := s.checkLoginLock(ctx, user.ID, cfg); err != nil {
 		return model.User{}, nil, err
 	}
 	if !passwordMatches(user, password) {
-		if err := s.recordLoginFailure(user.ID); err != nil {
+		if err := s.recordLoginFailure(ctx, user.ID, cfg); err != nil {
 			return model.User{}, nil, err
 		}
 		return model.User{}, nil, authError("用户名或密码有误")
 	}
-	passwordExpireDaysRemaining, err := passwordExpiryDaysRemaining(user.LastPasswordChangedTime)
+	passwordExpireDaysRemaining, err := passwordExpiryDaysRemaining(user.LastPasswordChangedTime, cfg)
 	if err != nil {
 		return model.User{}, nil, err
 	}
-	s.resetLoginFailure(user.ID)
+	if err := s.resetLoginFailure(ctx, user.ID); err != nil {
+		return model.User{}, nil, err
+	}
 	return user, passwordExpireDaysRemaining, nil
 }
 
@@ -502,7 +552,25 @@ func passwordMatches(user model.User, password string) bool {
 	return passwordMatchesStored(user.Password, password)
 }
 
-func (s *AuthService) checkLoginLock(userID int) error {
+func (s *AuthService) checkLoginLock(ctx context.Context, userID int, cfg UserSecurityConfig) error {
+	if cfg.LockThreshold == 0 {
+		return nil
+	}
+	if s.redis != nil {
+		raw, err := s.redis.Get(ctx, s.keys.UserLock(int64(userID))).Result()
+		if err == redis.Nil {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		lockedUntil, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			return authError("账号已被锁定，请稍后重试")
+		}
+		return loginLockError(lockedUntil)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -516,44 +584,87 @@ func (s *AuthService) checkLoginLock(userID int) error {
 		delete(s.loginFailures, userID)
 		return nil
 	}
-	remaining := lockedUntil.Sub(now)
-	remainingMinutes := int((remaining + time.Minute - time.Nanosecond) / time.Minute)
-	if remainingMinutes < 1 {
-		remainingMinutes = 1
-	}
-	return authError(fmt.Sprintf("账号已被锁定，请在 %d 分钟后重试", remainingMinutes))
+	return loginLockError(lockedUntil)
 }
 
-func (s *AuthService) recordLoginFailure(userID int) error {
+func (s *AuthService) recordLoginFailure(ctx context.Context, userID int, cfg UserSecurityConfig) error {
+	if cfg.LockThreshold == 0 {
+		return nil
+	}
+	if s.redis != nil {
+		failureKey := s.keys.LoginFailure(int64(userID))
+		count, err := s.redis.Incr(ctx, failureKey).Result()
+		if err != nil {
+			return err
+		}
+		if cfg.LockDuration > 0 {
+			if err := s.redis.Expire(ctx, failureKey, cfg.LockDuration).Err(); err != nil {
+				return err
+			}
+		}
+		if int(count) < cfg.LockThreshold {
+			return nil
+		}
+		lockedUntil := time.Now().Add(cfg.LockDuration)
+		if err := s.redis.Set(ctx, s.keys.UserLock(int64(userID)), lockedUntil.Format(time.RFC3339Nano), cfg.LockDuration).Err(); err != nil {
+			return err
+		}
+		if err := s.redis.Del(ctx, failureKey).Err(); err != nil {
+			return err
+		}
+		return authError("登录失败次数过多，账号已被锁定")
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Python keeps both the failure counter and lock marker in Redis with a
-	// shared TTL. The Go module keeps equivalent process-local state until the
-	// core layer exposes a cross-process cache abstraction.
 	s.loginFailures[userID]++
-	if s.loginFailures[userID] < userLockThreshold {
+	if s.loginFailures[userID] < cfg.LockThreshold {
 		return nil
 	}
-	s.userLocks[userID] = time.Now().Add(userLockTTL)
+	s.userLocks[userID] = time.Now().Add(cfg.LockDuration)
 	delete(s.loginFailures, userID)
 	return authError("登录失败次数过多，账号已被锁定")
 }
 
-func (s *AuthService) resetLoginFailure(userID int) {
+func (s *AuthService) resetLoginFailure(ctx context.Context, userID int) error {
+	if s.redis != nil {
+		return s.redis.Del(ctx, s.keys.LoginFailure(int64(userID)), s.keys.UserLock(int64(userID))).Err()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	delete(s.loginFailures, userID)
 	delete(s.userLocks, userID)
+	return nil
 }
 
-func (s *AuthService) verifyCaptcha(uuid string, captcha string) error {
+func (s *AuthService) verifyCaptcha(ctx context.Context, uuid string, captcha string) error {
+	cfg, err := s.configProvider.LoginConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if !cfg.CaptchaEnabled {
+		return nil
+	}
 	if uuid == "fixture-captcha" && strings.EqualFold(captcha, defaultCaptchaCode) {
 		return nil
 	}
 	if uuid == "" || captcha == "" {
 		return authError("验证码无效")
+	}
+	if s.redis != nil {
+		code, err := s.redis.Get(ctx, s.keys.LoginCaptcha(uuid)).Result()
+		if err == redis.Nil {
+			return authError("验证码已过期")
+		}
+		if err != nil {
+			return err
+		}
+		if !strings.EqualFold(code, captcha) {
+			return authError("验证码错误")
+		}
+		return s.redis.Del(ctx, s.keys.LoginCaptcha(uuid)).Err()
 	}
 	s.mu.Lock()
 	code, ok := s.captchas[uuid]
@@ -569,6 +680,19 @@ func (s *AuthService) verifyCaptcha(uuid string, captcha string) error {
 	delete(s.captchas, uuid)
 	s.mu.Unlock()
 	return nil
+}
+
+func loginLockError(lockedUntil time.Time) error {
+	now := time.Now()
+	if !lockedUntil.After(now) {
+		return nil
+	}
+	remaining := lockedUntil.Sub(now)
+	remainingMinutes := int((remaining + time.Minute - time.Nanosecond) / time.Minute)
+	if remainingMinutes < 1 {
+		remainingMinutes = 1
+	}
+	return authError(fmt.Sprintf("账号已被锁定，请在 %d 分钟后重试", remainingMinutes))
 }
 
 func defaultLoginParam(param dto.AuthLoginParam) dto.AuthLoginParam {

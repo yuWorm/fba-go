@@ -24,6 +24,7 @@ import (
 	adminapi "github.com/yuWorm/fba-plugin-admin/api"
 	adminmodel "github.com/yuWorm/fba-plugin-admin/model"
 	adminrepo "github.com/yuWorm/fba-plugin-admin/repo"
+	adminservice "github.com/yuWorm/fba-plugin-admin/service"
 	"gorm.io/gorm"
 )
 
@@ -77,7 +78,6 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 		{"GET", "/api/v1/sys/data-scopes"},
 		{"GET", "/api/v1/sys/plugins"},
 		{"GET", "/api/v1/sys/plugins/changed"},
-		{"GET", "/api/v1/sys/plugins/dict"},
 		{"GET", "/api/v1/logs/login"},
 		{"GET", "/api/v1/logs/opera"},
 		{"GET", "/api/v1/monitors/server"},
@@ -168,6 +168,36 @@ func TestAdminPluginRegistersPriorityEndpoints(t *testing.T) {
 	if resp.StatusCode != fiber.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("POST /api/v1/sys/files/upload status = %d body = %s", resp.StatusCode, body)
+	}
+}
+
+func TestAdminPluginResolvesConfigProviderAfterRegistration(t *testing.T) {
+	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler})
+	container := di.New()
+	ctx := plugin.NewContext(plugin.ContextOptions{
+		Container: container,
+		APIGroup:  app.Group("/api/v1"),
+	})
+	if err := admin.FBAPlugin().Register(ctx); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if err := container.Provide(func() adminservice.AdminConfigProvider {
+		return adminservice.StaticAdminConfigProvider{
+			Login: adminservice.LoginConfig{CaptchaEnabled: false, CaptchaExpire: 2 * time.Minute},
+		}
+	}); err != nil {
+		t.Fatalf("Provide(AdminConfigProvider) error = %v", err)
+	}
+	registerRoutes(ctx.APIGroup(), ctx.Routes())
+
+	resp, body := requestJSON(t, app, "GET", "/api/v1/auth/captcha", "")
+	assertStatusOK(t, resp)
+	data := assertEnvelopeMap(t, body)
+	if data["is_enabled"] != false {
+		t.Fatalf("captcha is_enabled = %v, want false from late config provider", data["is_enabled"])
+	}
+	if data["expire_seconds"] != float64(120) {
+		t.Fatalf("captcha expire_seconds = %v, want 120 from late config provider", data["expire_seconds"])
 	}
 }
 
@@ -1295,6 +1325,11 @@ func TestPluginEndpointsAreStatefulAndPythonCompatible(t *testing.T) {
 	resp, body := requestJSON(t, app, "GET", "/api/v1/sys/plugins", "")
 	assertStatusOK(t, resp)
 	plugins := assertEnvelopeSlice(t, body)
+	emailPlugin := assertMap(t, findPluginByName(t, plugins, "email"))
+	emailInfo := assertMap(t, emailPlugin["plugin"])
+	if emailInfo["summary"] != "电子邮件" || emailInfo["enable"] != "1" {
+		t.Fatalf("email plugin info = %v, want built-in enabled email plugin", emailInfo)
+	}
 	dictPlugin := assertMap(t, findPluginByName(t, plugins, "dict"))
 	dictInfo := assertMap(t, dictPlugin["plugin"])
 	if dictInfo["enable"] != "1" {
@@ -1336,14 +1371,8 @@ func TestPluginEndpointsAreStatefulAndPythonCompatible(t *testing.T) {
 		t.Fatal("analytics plugin present after unsupported install")
 	}
 
-	resp, raw := requestRaw(t, app, "GET", "/api/v1/sys/plugins/dict", "")
-	assertStatusOK(t, resp)
-	if strings.Contains(raw, `"code"`) {
-		t.Fatalf("download plugin response is enveloped JSON: %s", raw)
-	}
-	if !strings.Contains(raw, "dict") {
-		t.Fatalf("download plugin body = %q, want plugin name", raw)
-	}
+	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/plugins/dict", "")
+	assertErrorEnvelope(t, resp, body, fiber.StatusBadRequest, "Golang 不支持动态插件打包下载")
 }
 
 func TestPluginEndpointsApplyPythonGuards(t *testing.T) {
@@ -1428,6 +1457,42 @@ func TestLogEndpointsAreStatefulAndFilterLikePython(t *testing.T) {
 	items, ok = page["items"].([]any)
 	if !ok || len(items) != 0 {
 		t.Fatalf("deleted opera log items = %T len %d, want empty list", page["items"], len(items))
+	}
+}
+
+func TestAdminPluginAutoRecordsOperationLogsLikePython(t *testing.T) {
+	seed := adminrepo.SeedData()
+	seed.OperaLogs = nil
+	repository := adminrepo.NewMemoryRepository(seed)
+	app := newAdminRuntimeAppWithRepository(t, repository)
+	token := loginForAccessToken(t, app, "admin", "admin")
+
+	resp, body := requestJSONAuth(t, app, "POST", "/api/v1/sys/users", `{"username":"opera_capture","password":"Passw0rd1","nickname":"Opera Capture","email":null,"phone":null,"dept_id":1,"roles":[1]}`, token)
+	assertStatusOK(t, resp)
+	assertEnvelopeMap(t, body)
+
+	resp, body = requestJSONAuth(t, app, "GET", "/api/v1/logs/opera?username=admin", "", token)
+	assertStatusOK(t, resp)
+	page := assertEnvelopeMap(t, body)
+	items := assertSlice(t, page["items"])
+	var createdLog map[string]any
+	for _, raw := range items {
+		item := assertMap(t, raw)
+		if item["method"] == "POST" && item["path"] == "/api/v1/sys/users" {
+			createdLog = item
+			break
+		}
+	}
+	if createdLog == nil {
+		t.Fatalf("operation logs = %v, want POST /api/v1/sys/users entry", items)
+	}
+	if createdLog["username"] != "admin" || createdLog["title"] != "Create user" || createdLog["code"] != "200" {
+		t.Fatalf("created operation log = %v, want admin Create user 200", createdLog)
+	}
+	args := assertMap(t, createdLog["args"])
+	bodyArgs := assertMap(t, args["body"])
+	if bodyArgs["password"] != "******" {
+		t.Fatalf("operation log password arg = %v, want redacted", bodyArgs["password"])
 	}
 }
 
@@ -1587,6 +1652,12 @@ func TestSeedMenusIncludeOfficialPluginMenusAndPermissions(t *testing.T) {
 		perms    []string
 	}{
 		{
+			name:     "PluginConfig",
+			title:    "config.menu",
+			parentID: systemID,
+			perms:    []string{"sys:config:add", "sys:config:edit", "sys:config:del"},
+		},
+		{
 			name:     "PluginDict",
 			title:    "dict.menu",
 			parentID: systemID,
@@ -1627,14 +1698,14 @@ func TestSeedMenusIncludeOfficialPluginMenusAndPermissions(t *testing.T) {
 	resp, body = requestJSON(t, app, "GET", "/api/v1/sys/roles/1/menus", "")
 	assertStatusOK(t, resp)
 	roleMenus := assertEnvelopeSlice(t, body)
-	for _, name := range []string{"PluginDict", "PluginNotice", "Scheduler", "AddDictType", "AddNotice", "AddScheduler"} {
+	for _, name := range []string{"PluginConfig", "PluginDict", "PluginNotice", "Scheduler", "AddConfig", "AddDictType", "AddNotice", "AddScheduler"} {
 		assertFlatMenuContains(t, roleMenus, name)
 	}
 
 	resp, body = requestJSON(t, app, "GET", "/api/v1/auth/codes", "")
 	assertStatusOK(t, resp)
 	codes := assertEnvelopeSlice(t, body)
-	for _, perm := range []string{"dict:type:add", "dict:data:del", "sys:notice:add", "sys:task:add", "sys:task:exec", "sys:task:revoke"} {
+	for _, perm := range []string{"sys:config:add", "sys:config:edit", "sys.config.edits", "sys:config:del", "dict:type:add", "dict:data:del", "sys:notice:add", "sys:task:add", "sys:task:exec", "sys:task:revoke"} {
 		assertStringSliceContains(t, codes, perm)
 	}
 }
@@ -1822,6 +1893,25 @@ func TestMenuEndpointsApplyPythonCRUDGuards(t *testing.T) {
 	assertEnvelopeNil(t, body)
 	resp, body = requestJSON(t, app, "DELETE", "/api/v1/sys/menus/"+itoa(otherMenuID), "")
 	assertErrorEnvelope(t, resp, body, fiber.StatusConflict, "菜单下存在子菜单，无法删除")
+}
+
+func TestMutationNoRowsReturnPythonBusinessFail(t *testing.T) {
+	app := newAdminApp(t)
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{"DELETE", "/api/v1/sys/menus/999999", ""},
+		{"DELETE", "/api/v1/sys/roles", `{"pks":[999999]}`},
+		{"DELETE", "/api/v1/sys/data-rules", `{"pks":[999999]}`},
+		{"DELETE", "/api/v1/sys/data-scopes", `{"pks":[999999]}`},
+	} {
+		resp, body := requestJSON(t, app, tc.method, tc.path, tc.body)
+		assertStatusOK(t, resp)
+		assertBusinessFailEnvelope(t, body)
+	}
 }
 
 func TestMenuTreeAndSidebarReflectCreatedChildren(t *testing.T) {
@@ -2356,6 +2446,26 @@ func newAdminRuntimeApp(t *testing.T) *fiber.App {
 	app := fiber.New()
 	ctx := plugin.NewContext(plugin.ContextOptions{
 		Container: di.New(),
+		APIGroup:  app.Group("/api/v1"),
+	})
+	if err := admin.FBAPlugin().Register(ctx); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	plugin.MountRoutes(ctx.APIGroup(), ctx.Routes(), plugin.WithContainer(ctx.Container()))
+	return app
+}
+
+func newAdminRuntimeAppWithRepository(t *testing.T, repository adminrepo.Repository) *fiber.App {
+	t.Helper()
+	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler})
+	container := di.New()
+	if err := container.Provide(func() adminrepo.Repository {
+		return repository
+	}); err != nil {
+		t.Fatalf("Provide(repository) error = %v", err)
+	}
+	ctx := plugin.NewContext(plugin.ContextOptions{
+		Container: container,
 		APIGroup:  app.Group("/api/v1"),
 	})
 	if err := admin.FBAPlugin().Register(ctx); err != nil {

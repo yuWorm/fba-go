@@ -1,10 +1,12 @@
 package api
 
 import (
+	stderrors "errors"
 	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
+	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/fiberx"
 	"github.com/yuWorm/fba-go/core/response"
 	"github.com/yuWorm/fba-plugin-admin/dto"
@@ -70,10 +72,7 @@ func (h Handler) UpdateUser(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.users.Update(c.RequestCtx(), id, param); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.users.Update(c.RequestCtx(), id, param))
 }
 
 func (h Handler) UpdateUserPermission(c fiber.Ctx) error {
@@ -81,10 +80,7 @@ func (h Handler) UpdateUserPermission(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.users.UpdatePermission(c.RequestCtx(), id, c.Query("type"), currentUserID(c), h.auth.AccessSessionUUID(c.Get("Authorization"))); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.users.UpdatePermission(c.RequestCtx(), id, c.Query("type"), currentUserID(c), h.auth.AccessSessionUUID(c.Get("Authorization"))))
 }
 
 func (h Handler) UpdateCurrentUserPassword(c fiber.Ctx) error {
@@ -92,10 +88,7 @@ func (h Handler) UpdateCurrentUserPassword(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.users.UpdatePassword(c.RequestCtx(), currentUserID(c), param); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.users.UpdatePassword(c.RequestCtx(), currentUserID(c), param))
 }
 
 func (h Handler) ResetUserPassword(c fiber.Ctx) error {
@@ -107,10 +100,7 @@ func (h Handler) ResetUserPassword(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.users.ResetPassword(c.RequestCtx(), id, param.Password); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.users.ResetPassword(c.RequestCtx(), id, param.Password))
 }
 
 func (h Handler) UpdateCurrentUserNickname(c fiber.Ctx) error {
@@ -118,10 +108,7 @@ func (h Handler) UpdateCurrentUserNickname(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.users.UpdateNickname(c.RequestCtx(), currentUserID(c), param.Nickname); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.users.UpdateNickname(c.RequestCtx(), currentUserID(c), param.Nickname))
 }
 
 func (h Handler) UpdateCurrentUserAvatar(c fiber.Ctx) error {
@@ -129,10 +116,7 @@ func (h Handler) UpdateCurrentUserAvatar(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.users.UpdateAvatar(c.RequestCtx(), currentUserID(c), param.Avatar); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.users.UpdateAvatar(c.RequestCtx(), currentUserID(c), param.Avatar))
 }
 
 func (h Handler) UpdateCurrentUserEmail(c fiber.Ctx) error {
@@ -140,10 +124,7 @@ func (h Handler) UpdateCurrentUserEmail(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.users.UpdateEmail(c.RequestCtx(), currentUserID(c), param.Captcha, param.Email); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.users.UpdateEmailForIP(c.RequestCtx(), currentUserID(c), param.Captcha, param.Email, c.IP()))
 }
 
 func (h Handler) DeleteUser(c fiber.Ctx) error {
@@ -151,10 +132,7 @@ func (h Handler) DeleteUser(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.users.Delete(c.RequestCtx(), id); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.users.Delete(c.RequestCtx(), id))
 }
 
 func (h Handler) GetAllRoles(c fiber.Ctx) error {
@@ -233,10 +211,7 @@ func (h Handler) UpdateRole(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.roles.Update(c.RequestCtx(), id, param); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.roles.Update(c.RequestCtx(), id, param))
 }
 
 func (h Handler) UpdateRoleMenus(c fiber.Ctx) error {
@@ -248,10 +223,7 @@ func (h Handler) UpdateRoleMenus(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.roles.UpdateMenus(c.RequestCtx(), id, param.Menus); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.roles.UpdateMenus(c.RequestCtx(), id, param.Menus))
 }
 
 func (h Handler) UpdateRoleScopes(c fiber.Ctx) error {
@@ -263,10 +235,7 @@ func (h Handler) UpdateRoleScopes(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.roles.UpdateScopes(c.RequestCtx(), id, param.Scopes); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.roles.UpdateScopes(c.RequestCtx(), id, param.Scopes))
 }
 
 func (h Handler) DeleteRoles(c fiber.Ctx) error {
@@ -274,10 +243,7 @@ func (h Handler) DeleteRoles(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.roles.Delete(c.RequestCtx(), param.PKs); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.roles.Delete(c.RequestCtx(), param.PKs))
 }
 
 func (h Handler) GetMenu(c fiber.Ctx) error {
@@ -323,10 +289,7 @@ func (h Handler) UpdateMenu(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.menus.Update(c.RequestCtx(), id, param); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.menus.Update(c.RequestCtx(), id, param))
 }
 
 func (h Handler) DeleteMenu(c fiber.Ctx) error {
@@ -334,10 +297,7 @@ func (h Handler) DeleteMenu(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.menus.Delete(c.RequestCtx(), id); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.menus.Delete(c.RequestCtx(), id))
 }
 
 func (h Handler) GetDept(c fiber.Ctx) error {
@@ -385,10 +345,7 @@ func (h Handler) UpdateDept(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.depts.Update(c.RequestCtx(), id, param); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.depts.Update(c.RequestCtx(), id, param))
 }
 
 func (h Handler) DeleteDept(c fiber.Ctx) error {
@@ -396,10 +353,7 @@ func (h Handler) DeleteDept(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.depts.Delete(c.RequestCtx(), id); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.depts.Delete(c.RequestCtx(), id))
 }
 
 func (h Handler) DataRuleModels(c fiber.Ctx) error {
@@ -477,10 +431,7 @@ func (h Handler) UpdateDataRule(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.dataRules.Update(c.RequestCtx(), id, param); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.dataRules.Update(c.RequestCtx(), id, param))
 }
 
 func (h Handler) DeleteDataRules(c fiber.Ctx) error {
@@ -488,10 +439,7 @@ func (h Handler) DeleteDataRules(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.dataRules.Delete(c.RequestCtx(), param.PKs); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.dataRules.Delete(c.RequestCtx(), param.PKs))
 }
 
 func (h Handler) GetAllDataScopes(c fiber.Ctx) error {
@@ -558,10 +506,7 @@ func (h Handler) UpdateDataScope(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.dataScopes.Update(c.RequestCtx(), id, param); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.dataScopes.Update(c.RequestCtx(), id, param))
 }
 
 func (h Handler) UpdateDataScopeRules(c fiber.Ctx) error {
@@ -573,10 +518,7 @@ func (h Handler) UpdateDataScopeRules(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.dataScopes.UpdateRules(c.RequestCtx(), id, param.Rules); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.dataScopes.UpdateRules(c.RequestCtx(), id, param.Rules))
 }
 
 func (h Handler) DeleteDataScopes(c fiber.Ctx) error {
@@ -584,10 +526,7 @@ func (h Handler) DeleteDataScopes(c fiber.Ctx) error {
 	if err := c.Bind().Body(&param); err != nil {
 		return err
 	}
-	if err := h.dataScopes.Delete(c.RequestCtx(), param.PKs); err != nil {
-		return err
-	}
-	return c.JSON(response.Success[any](nil))
+	return mutationSuccess(c, h.dataScopes.Delete(c.RequestCtx(), param.PKs))
 }
 
 func (h Handler) UploadFile(c fiber.Ctx) error {
@@ -754,6 +693,26 @@ func (h Handler) DeleteSession(c fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(response.Success[any](nil))
+}
+
+func mutationSuccess(c fiber.Ctx, err error) error {
+	if err == nil {
+		return c.JSON(response.Success[any](nil))
+	}
+	if isRawRepoNotFound(err) {
+		return c.JSON(response.Fail[any](nil))
+	}
+	return err
+}
+
+func isRawRepoNotFound(err error) bool {
+	var appErr *fbaerrors.AppError
+	// Python only returns response_base.fail() after a DAO mutation reports count == 0.
+	// Service-layer 404 guards wrap the same repository sentinel, so keep wrapped AppError values as real errors.
+	if stderrors.As(err, &appErr) {
+		return false
+	}
+	return stderrors.Is(err, repo.ErrNotFound)
 }
 
 func parseID(raw string) (int, error) {

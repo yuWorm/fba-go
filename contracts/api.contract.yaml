@@ -15,6 +15,47 @@ negative_routes:
     permission: dict:type:add
     request:
       body: '{"name":"Denied Type","code":"denied_type","remark":null}'
+  - method: POST
+    path: /api/v1/sys/configs
+    owner: plugin:config
+    auth: limited
+    expected_status: 403
+    permission: sys:config:add
+    request:
+      body: '{"name":"Denied Config","type":"LOGIN","key":"DENIED_CONFIG","value":"true","is_frontend":false,"remark":null}'
+  - method: POST
+    path: /api/v1/sys/configs
+    owner: plugin:config
+    auth: admin
+    expected_status: 409
+    permission: sys:config:add
+    request:
+      body: '{"name":"Duplicate Config","type":"LOGIN","key":"LOGIN_CAPTCHA_ENABLED","value":"true","is_frontend":false,"remark":null}'
+  - method: POST
+    path: /api/v1/sys/plugins
+    sample_path: "/api/v1/sys/plugins?type=git&repo_url=https://example.invalid/plugin.git"
+    owner: plugin:admin
+    auth: admin
+    expected_status: 400
+  - method: DELETE
+    path: /api/v1/sys/plugins/{plugin}
+    sample_path: /api/v1/sys/plugins/dict
+    owner: plugin:admin
+    auth: admin
+    expected_status: 400
+  - method: GET
+    path: /api/v1/sys/plugins/{plugin}
+    sample_path: /api/v1/sys/plugins/dict
+    owner: plugin:admin
+    auth: admin
+    expected_status: 400
+  - method: PUT
+    path: /api/v1/sys/users/me/password
+    owner: plugin:admin
+    auth: admin
+    expected_status: 400
+    request:
+      body: '{"old_password":"wrong-password","new_password":"Newpass1","confirm_password":"Newpass1"}'
 
 priority_routes:
   - method: POST
@@ -68,14 +109,15 @@ priority_routes:
   - method: PUT
     path: /api/v1/sys/users/me/password
     owner: plugin:admin
+    response_envelope: false
     request:
-      body: '{"old_password":"admin","new_password":"new-password","confirm_password":"new-password"}'
+      body: '{"old_password":"wrong-password","new_password":"Newpass1","confirm_password":"Newpass1"}'
   - method: PUT
     path: /api/v1/sys/users/{pk}/password
-    sample_path: /api/v1/sys/users/1/password
+    sample_path: /api/v1/sys/users/3/password
     owner: plugin:admin
     request:
-      body: '{"password":"new-password"}'
+      body: '{"password":"Resetpass1"}'
   - method: PUT
     path: /api/v1/sys/users/me/nickname
     owner: plugin:admin
@@ -144,6 +186,8 @@ priority_routes:
     path: /api/v1/sys/roles
     owner: plugin:admin
     permission: sys:role:del
+    expected_code: 400
+    expected_msg: 请求错误
     request:
       body: '{"pks":[999999]}'
   - method: GET
@@ -174,6 +218,8 @@ priority_routes:
     sample_path: /api/v1/sys/menus/999999
     owner: plugin:admin
     permission: sys:menu:del
+    expected_code: 400
+    expected_msg: 请求错误
   - method: GET
     path: /api/v1/sys/depts/{pk}
     sample_path: /api/v1/sys/depts/1
@@ -233,6 +279,8 @@ priority_routes:
     path: /api/v1/sys/data-rules
     owner: plugin:admin
     permission: data:rule:del
+    expected_code: 400
+    expected_msg: 请求错误
     request:
       body: '{"pks":[999999]}'
   - method: GET
@@ -273,6 +321,8 @@ priority_routes:
     path: /api/v1/sys/data-scopes
     owner: plugin:admin
     permission: data:scope:del
+    expected_code: 400
+    expected_msg: 请求错误
     request:
       body: '{"pks":[999999]}'
   - method: POST
@@ -297,10 +347,12 @@ priority_routes:
     path: /api/v1/sys/plugins
     sample_path: "/api/v1/sys/plugins?type=git&repo_url=https://example.invalid/plugin.git"
     owner: plugin:admin
+    response_envelope: false
   - method: DELETE
     path: /api/v1/sys/plugins/{plugin}
     sample_path: /api/v1/sys/plugins/dict
     owner: plugin:admin
+    response_envelope: false
   - method: PUT
     path: /api/v1/sys/plugins/{plugin}/status
     sample_path: /api/v1/sys/plugins/dict/status
@@ -368,8 +420,53 @@ priority_routes:
     path: /api/v1/sys/notices
     owner: plugin:notice
     permission: sys:notice:del
+    expected_code: 400
+    expected_msg: 请求错误
     request:
       body: '{"pks":[999999]}'
+  - method: GET
+    path: /api/v1/sys/configs/all
+    owner: plugin:config
+  - method: GET
+    path: /api/v1/sys/configs/{pk}
+    sample_path: /api/v1/sys/configs/17
+    owner: plugin:config
+  - method: GET
+    path: /api/v1/sys/configs
+    owner: plugin:config
+  - method: POST
+    path: /api/v1/sys/configs
+    owner: plugin:config
+    permission: sys:config:add
+    response_envelope: false
+    request:
+      body: '{"name":"Duplicate Config","type":"LOGIN","key":"LOGIN_CAPTCHA_ENABLED","value":"true","is_frontend":false,"remark":null}'
+  - method: PUT
+    path: /api/v1/sys/configs
+    owner: plugin:config
+    permission: sys.config.edits
+    request:
+      body: '[{"id":17,"name":"验证码开关","type":"LOGIN","key":"LOGIN_CAPTCHA_ENABLED","value":"true","is_frontend":false,"remark":"是否启用登录验证码"}]'
+  - method: PUT
+    path: /api/v1/sys/configs/{pk}
+    sample_path: /api/v1/sys/configs/17
+    owner: plugin:config
+    permission: sys:config:edit
+    request:
+      body: '{"name":"验证码开关","type":"LOGIN","key":"LOGIN_CAPTCHA_ENABLED","value":"true","is_frontend":false,"remark":"是否启用登录验证码"}'
+  - method: DELETE
+    path: /api/v1/sys/configs
+    owner: plugin:config
+    permission: sys:config:del
+    expected_code: 400
+    expected_msg: 请求错误
+    request:
+      body: '[999999]'
+  - method: POST
+    path: /api/v1/emails/captcha
+    owner: plugin:email
+    request:
+      body: '{"recipients":"contract@example.com"}'
   - method: GET
     path: /api/v1/dict-types/all
     owner: plugin:dict
@@ -397,6 +494,8 @@ priority_routes:
     path: /api/v1/dict-types
     owner: plugin:dict
     permission: dict:type:del
+    expected_code: 400
+    expected_msg: 请求错误
     request:
       body: '{"pks":[999999]}'
   - method: GET
@@ -430,6 +529,8 @@ priority_routes:
     path: /api/v1/dict-datas
     owner: plugin:dict
     permission: dict:data:del
+    expected_code: 400
+    expected_msg: 请求错误
     request:
       body: '{"pks":[999999]}'
   - method: GET
@@ -449,6 +550,8 @@ priority_routes:
   - method: DELETE
     path: /api/v1/task-results
     owner: plugin:task
+    expected_code: 400
+    expected_msg: 请求错误
     request:
       body: '{"pks":[999999]}'
   - method: GET
@@ -484,6 +587,34 @@ priority_routes:
     path: /api/v1/schedulers/{pk}
     sample_path: /api/v1/schedulers/1
     owner: plugin:task
+  - method: GET
+    path: /api/v1/oauth2/github
+    owner: plugin:oauth2
+  - method: GET
+    path: /api/v1/oauth2/github/callback
+    sample_path: /api/v1/oauth2/github/callback?code=fixture-code&state=missing-state
+    owner: plugin:oauth2
+    response_envelope: false
+  - method: GET
+    path: /api/v1/oauth2/google
+    owner: plugin:oauth2
+  - method: GET
+    path: /api/v1/oauth2/google/callback
+    sample_path: /api/v1/oauth2/google/callback?code=fixture-code&state=missing-state
+    owner: plugin:oauth2
+    response_envelope: false
+  - method: GET
+    path: /api/v1/oauth2/me/bindings
+    owner: plugin:oauth2
+  - method: GET
+    path: /api/v1/oauth2/me/binding
+    sample_path: /api/v1/oauth2/me/binding?source=Github
+    owner: plugin:oauth2
+  - method: DELETE
+    path: /api/v1/oauth2/me/unbinding
+    sample_path: /api/v1/oauth2/me/unbinding?source=Unknown
+    owner: plugin:oauth2
+    response_envelope: false
 
 routes:
   - method: POST
@@ -761,6 +892,36 @@ routes:
     permission: sys:notice:del
 
   - method: GET
+    path: /api/v1/sys/configs/all
+    owner: plugin:config
+  - method: GET
+    path: /api/v1/sys/configs/{pk}
+    owner: plugin:config
+  - method: GET
+    path: /api/v1/sys/configs
+    owner: plugin:config
+  - method: POST
+    path: /api/v1/sys/configs
+    owner: plugin:config
+    permission: sys:config:add
+  - method: PUT
+    path: /api/v1/sys/configs
+    owner: plugin:config
+    permission: sys.config.edits
+  - method: PUT
+    path: /api/v1/sys/configs/{pk}
+    owner: plugin:config
+    permission: sys:config:edit
+  - method: DELETE
+    path: /api/v1/sys/configs
+    owner: plugin:config
+    permission: sys:config:del
+
+  - method: POST
+    path: /api/v1/emails/captcha
+    owner: plugin:email
+
+  - method: GET
     path: /api/v1/tasks/registered
     owner: plugin:task
   - method: DELETE
@@ -846,6 +1007,30 @@ routes:
     path: /api/v1/dict-datas
     owner: plugin:dict
     permission: dict:data:del
+
+  - method: GET
+    path: /api/v1/oauth2/github
+    owner: plugin:oauth2
+  - method: GET
+    path: /api/v1/oauth2/github/callback
+    owner: plugin:oauth2
+    response_envelope: false
+  - method: GET
+    path: /api/v1/oauth2/google
+    owner: plugin:oauth2
+  - method: GET
+    path: /api/v1/oauth2/google/callback
+    owner: plugin:oauth2
+    response_envelope: false
+  - method: GET
+    path: /api/v1/oauth2/me/bindings
+    owner: plugin:oauth2
+  - method: GET
+    path: /api/v1/oauth2/me/binding
+    owner: plugin:oauth2
+  - method: DELETE
+    path: /api/v1/oauth2/me/unbinding
+    owner: plugin:oauth2
 
 headers:
   access_token:

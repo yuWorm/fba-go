@@ -2,11 +2,20 @@ plugins:
   - id: admin
     module: github.com/yuWorm/fba-plugin-admin
     mode: auto
+  - id: config
+    module: github.com/yuWorm/fba-plugin-config
+    mode: auto
   - id: dict
     module: github.com/yuWorm/fba-plugin-dict
     mode: auto
+  - id: email
+    module: github.com/yuWorm/fba-plugin-email
+    mode: auto
   - id: notice
     module: github.com/yuWorm/fba-plugin-notice
+    mode: auto
+  - id: oauth2
+    module: github.com/yuWorm/fba-plugin-oauth2
     mode: auto
   - id: task
     module: github.com/yuWorm/fba-plugin-task

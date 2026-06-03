@@ -3,11 +3,14 @@ package generated
 
 import (
 	plugin "github.com/yuWorm/fba-go/core/plugin"
-	plugin3 "github.com/yuWorm/fba-go/internal/testplugin/order"
+	plugin6 "github.com/yuWorm/fba-go/internal/testplugin/order"
 	plugin0 "github.com/yuWorm/fba-plugin-admin"
-	plugin1 "github.com/yuWorm/fba-plugin-dict"
-	plugin2 "github.com/yuWorm/fba-plugin-notice"
-	plugin4 "github.com/yuWorm/fba-plugin-task"
+	plugin1 "github.com/yuWorm/fba-plugin-config"
+	plugin2 "github.com/yuWorm/fba-plugin-dict"
+	plugin3 "github.com/yuWorm/fba-plugin-email"
+	plugin4 "github.com/yuWorm/fba-plugin-notice"
+	plugin5 "github.com/yuWorm/fba-plugin-oauth2"
+	plugin7 "github.com/yuWorm/fba-plugin-task"
 )
 
 func RegisterPlugins(reg *plugin.Registry) error {
@@ -24,6 +27,15 @@ func RegisterPlugins(reg *plugin.Registry) error {
 		return err
 	}
 	if err := reg.Add(plugin4.FBAPlugin(), plugin.ModeAuto); err != nil {
+		return err
+	}
+	if err := reg.Add(plugin5.FBAPlugin(), plugin.ModeAuto); err != nil {
+		return err
+	}
+	if err := reg.Add(plugin6.FBAPlugin(), plugin.ModeAuto); err != nil {
+		return err
+	}
+	if err := reg.Add(plugin7.FBAPlugin(), plugin.ModeAuto); err != nil {
 		return err
 	}
 	return nil

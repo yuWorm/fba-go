@@ -63,7 +63,14 @@ func (r *GORMRepository) Update(ctx context.Context, id int, param dto.NoticePar
 }
 
 func (r *GORMRepository) Delete(ctx context.Context, ids []int) error {
-	return r.provider.Write().WithContext(ctx).Delete(&model.Notice{}, ids).Error
+	result := r.provider.Write().WithContext(ctx).Delete(&model.Notice{}, ids)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func paginate[T any](query *gorm.DB, page int, size int) ([]T, int64, error) {

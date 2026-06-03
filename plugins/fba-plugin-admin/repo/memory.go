@@ -45,6 +45,7 @@ type MemoryRepository struct {
 	nextDataRuleID                  int
 	nextDataScopeID                 int
 	nextLoginLogID                  int
+	nextOperaLogID                  int
 }
 
 func NewMemoryRepository(seed model.Seed) *MemoryRepository {
@@ -96,6 +97,12 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 			nextLoginLogID = item.ID + 1
 		}
 	}
+	nextOperaLogID := 1
+	for _, item := range seed.OperaLogs {
+		if item.ID >= nextOperaLogID {
+			nextOperaLogID = item.ID + 1
+		}
+	}
 	return &MemoryRepository{
 		users:                           append([]model.User(nil), seed.Users...),
 		userPasswordHistories:           append([]model.UserPasswordHistory(nil), seed.UserPasswordHistories...),
@@ -124,6 +131,7 @@ func NewMemoryRepository(seed model.Seed) *MemoryRepository {
 		nextDataRuleID:                  nextDataRuleID,
 		nextDataScopeID:                 nextDataScopeID,
 		nextLoginLogID:                  nextLoginLogID,
+		nextOperaLogID:                  nextOperaLogID,
 	}
 }
 
@@ -477,7 +485,11 @@ func (r *MemoryRepository) UpdateRole(_ context.Context, id int, param dto.RoleP
 func (r *MemoryRepository) DeleteRoles(_ context.Context, ids []int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	before := len(r.roles)
 	r.roles = deleteByIDs(r.roles, ids, func(item model.Role) int { return item.ID })
+	if before == len(r.roles) {
+		return ErrNotFound
+	}
 	for _, id := range ids {
 		delete(r.roleMenus, id)
 		delete(r.roleScopes, id)
@@ -646,7 +658,11 @@ func (r *MemoryRepository) UpdateMenu(_ context.Context, id int, param dto.MenuP
 func (r *MemoryRepository) DeleteMenu(_ context.Context, id int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	before := len(r.menus)
 	r.menus = deleteByIDs(r.menus, []int{id}, func(item model.Menu) int { return item.ID })
+	if before == len(r.menus) {
+		return ErrNotFound
+	}
 	for roleID, menuIDs := range r.roleMenus {
 		r.roleMenus[roleID] = deleteInt(menuIDs, id)
 	}
@@ -899,7 +915,11 @@ func (r *MemoryRepository) UpdateDataRule(_ context.Context, id int, param dto.D
 func (r *MemoryRepository) DeleteDataRules(_ context.Context, ids []int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	before := len(r.dataRules)
 	r.dataRules = deleteByIDs(r.dataRules, ids, func(item model.DataRule) int { return item.ID })
+	if before == len(r.dataRules) {
+		return ErrNotFound
+	}
 	return nil
 }
 
@@ -1005,7 +1025,11 @@ func (r *MemoryRepository) UpdateDataScopeRules(_ context.Context, id int, ruleI
 func (r *MemoryRepository) DeleteDataScopes(_ context.Context, ids []int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	before := len(r.scopes)
 	r.scopes = deleteByIDs(r.scopes, ids, func(item model.DataScope) int { return item.ID })
+	if before == len(r.scopes) {
+		return ErrNotFound
+	}
 	for _, id := range ids {
 		delete(r.scopeRules, id)
 		for roleID, scopeIDs := range r.roleScopes {
@@ -1149,6 +1173,25 @@ func (r *MemoryRepository) DeleteAllLoginLogs(context.Context) error {
 	return nil
 }
 
+func (r *MemoryRepository) CreateOperaLog(_ context.Context, item model.OperaLog) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	if item.ID == 0 {
+		item.ID = r.nextOperaLog()
+	} else if item.ID >= r.nextOperaLogID {
+		r.nextOperaLogID = item.ID + 1
+	}
+	if item.OperaTime.IsZero() {
+		item.OperaTime = now
+	}
+	if item.CreatedTime.IsZero() {
+		item.CreatedTime = item.OperaTime
+	}
+	r.operaLogs = append(r.operaLogs, cloneOperaLog(item))
+	return nil
+}
+
 func (r *MemoryRepository) ListOperaLogs(_ context.Context, filter LogFilter, page int, size int) ([]model.OperaLog, int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -1283,6 +1326,12 @@ func (r *MemoryRepository) nextDataScope() int {
 func (r *MemoryRepository) nextLoginLog() int {
 	id := r.nextLoginLogID
 	r.nextLoginLogID++
+	return id
+}
+
+func (r *MemoryRepository) nextOperaLog() int {
+	id := r.nextOperaLogID
+	r.nextOperaLogID++
 	return id
 }
 

@@ -162,6 +162,34 @@ func TestDictWriteEndpointsReturnPythonEnvelope(t *testing.T) {
 	}
 }
 
+func TestDictMissingMutationsMatchPython(t *testing.T) {
+	app := newDictApp(t)
+
+	for _, tc := range []struct {
+		path string
+		body string
+		msg  string
+	}{
+		{"/api/v1/dict-types/999999", `{"name":"missing","code":"missing","remark":null}`, "字典类型不存在"},
+		{"/api/v1/dict-datas/999999", `{"type_id":1,"label":"missing","value":"missing","color":null,"sort":0,"status":1,"remark":null}`, "字典数据不存在"},
+	} {
+		resp, body := requestJSON(t, app, "PUT", tc.path, tc.body)
+		assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, tc.msg)
+	}
+
+	for _, tc := range []struct {
+		path string
+		body string
+	}{
+		{"/api/v1/dict-types", `{"pks":[999999]}`},
+		{"/api/v1/dict-datas", `{"pks":[999999]}`},
+	} {
+		resp, body := requestJSON(t, app, "DELETE", tc.path, tc.body)
+		assertStatusOK(t, resp)
+		assertBusinessFailEnvelope(t, body)
+	}
+}
+
 func TestDictValidationErrorsMatchPython(t *testing.T) {
 	app := newDictApp(t)
 
@@ -244,6 +272,19 @@ func assertEnvelopeNull(t *testing.T, body map[string]any) {
 	}
 	if body["msg"] != "请求成功" {
 		t.Fatalf("msg = %v, want 请求成功", body["msg"])
+	}
+	if body["data"] != nil {
+		t.Fatalf("data = %v, want nil", body["data"])
+	}
+}
+
+func assertBusinessFailEnvelope(t *testing.T, body map[string]any) {
+	t.Helper()
+	if body["code"] != float64(400) {
+		t.Fatalf("code = %v, want 400; body = %v", body["code"], body)
+	}
+	if body["msg"] != "请求错误" {
+		t.Fatalf("msg = %v, want 请求错误", body["msg"])
 	}
 	if body["data"] != nil {
 		t.Fatalf("data = %v, want nil", body["data"])

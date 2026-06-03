@@ -88,14 +88,15 @@ func (s *PluginService) ToggleStatus(ctx context.Context, name string) error {
 }
 
 func (s *PluginService) Download(ctx context.Context, name string) (string, error) {
-	item, err := s.repo.GetPlugin(ctx, name)
-	if err != nil {
+	if _, err := s.repo.GetPlugin(ctx, name); err != nil {
 		if stderrors.Is(err, repo.ErrNotFound) {
 			return "", pluginNotFound("插件不存在", err)
 		}
 		return "", err
 	}
-	return "plugin " + item.ID + " package", nil
+	// Python can build a zip from plugin source on disk. Go module plugins are
+	// compiled into the host binary, so keep the route but do not fake a package.
+	return "", pluginBadRequest("Golang 不支持动态插件打包下载", nil)
 }
 
 func pluginBadRequest(message string, cause error) error {

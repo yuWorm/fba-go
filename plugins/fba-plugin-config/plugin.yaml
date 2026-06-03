@@ -1,0 +1,11 @@
+id: config
+name: Config Plugin
+version: 0.0.2
+description: System config plugin
+author: wu-clan
+tags:
+  - other
+depends_on:
+  - id: admin
+    optional: true
+auto_inject_default: true

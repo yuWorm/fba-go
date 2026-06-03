@@ -13,8 +13,10 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/yuWorm/fba-go/core/db"
 	adminmodel "github.com/yuWorm/fba-plugin-admin/model"
+	configmodel "github.com/yuWorm/fba-plugin-config/model"
 	dictmodel "github.com/yuWorm/fba-plugin-dict/model"
 	noticemodel "github.com/yuWorm/fba-plugin-notice/model"
+	oauth2model "github.com/yuWorm/fba-plugin-oauth2/model"
 	taskmodel "github.com/yuWorm/fba-plugin-task/model"
 )
 
@@ -49,14 +51,24 @@ func TestCompatHostRegistersOfficialPlugins(t *testing.T) {
 	for _, tc := range []struct {
 		method string
 		path   string
+		body   string
 	}{
-		{"GET", "/api/v1/auth/captcha"},
-		{"POST", "/api/v1/auth/login/swagger"},
-		{"GET", "/api/v1/dict-datas/type-codes/sys_status"},
-		{"GET", "/api/v1/tasks/registered"},
-		{"GET", "/api/v1/schedulers"},
+		{"GET", "/api/v1/auth/captcha", ""},
+		{"POST", "/api/v1/auth/login/swagger", ""},
+		{"POST", "/api/v1/emails/captcha", `{"recipients":"admin@example.com"}`},
+		{"GET", "/api/v1/sys/configs/all", ""},
+		{"GET", "/api/v1/dict-datas/type-codes/sys_status", ""},
+		{"GET", "/api/v1/tasks/registered", ""},
+		{"GET", "/api/v1/schedulers", ""},
 	} {
-		req := httptest.NewRequest(tc.method, tc.path, nil)
+		var body io.Reader
+		if tc.body != "" {
+			body = strings.NewReader(tc.body)
+		}
+		req := httptest.NewRequest(tc.method, tc.path, body)
+		if tc.body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := app.HTTP().Test(req)
 		if err != nil {
@@ -127,9 +139,11 @@ func TestCompatHostSQLiteModeRunsPluginMigrationsAndSeeds(t *testing.T) {
 	assertCompatTableCount(t, provider, &adminmodel.User{}, len(adminSeed.Users))
 	assertCompatTableCount(t, provider, &adminmodel.Role{}, len(adminSeed.Roles))
 	assertCompatTableCount(t, provider, &adminmodel.Plugin{}, len(adminSeed.Plugins))
+	assertCompatTableCount(t, provider, &configmodel.Config{}, len(configmodel.SeedConfigs()))
 	assertCompatTableCount(t, provider, &dictmodel.DictType{}, len(dictmodel.SeedDictTypes()))
 	assertCompatTableCount(t, provider, &dictmodel.DictData{}, len(dictmodel.SeedDictData()))
 	assertCompatTableCount(t, provider, &noticemodel.Notice{}, len(noticemodel.SeedNotices()))
+	assertCompatTableCount(t, provider, &oauth2model.UserSocial{}, 0)
 	assertCompatTableCount(t, provider, &taskmodel.TaskScheduler{}, len(taskmodel.SeedSchedulers()))
 	assertCompatTableCount(t, provider, &taskmodel.TaskResult{}, len(taskmodel.SeedTaskResults()))
 

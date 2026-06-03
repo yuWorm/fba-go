@@ -31,6 +31,12 @@ type Handler struct {
 	monitors   *service.MonitorService
 }
 
+type HandlerOptions struct {
+	Config         config.Options
+	ConfigProvider service.AdminConfigProvider
+	Redis          service.RedisClient
+}
+
 func NewHandler() Handler {
 	repository := repo.NewMemoryRepository(repo.SeedData())
 	return NewHandlerWithRepository(repository)
@@ -41,21 +47,32 @@ func NewHandlerWithRepository(repository repo.Repository) Handler {
 }
 
 func NewHandlerWithOptions(repository repo.Repository, opts config.Options) Handler {
+	return NewHandlerWithAdminOptions(repository, HandlerOptions{Config: opts})
+}
+
+func NewHandlerWithAdminOptions(repository repo.Repository, opts HandlerOptions) Handler {
 	if repository == nil {
 		repository = repo.NewMemoryRepository(repo.SeedData())
 	}
 	return Handler{
-		auth:       service.NewAuthService(repository),
-		users:      service.NewUserService(repository),
+		auth: service.NewAuthServiceWithOptions(repository, service.AuthServiceOptions{
+			ConfigProvider: opts.ConfigProvider,
+			Redis:          opts.Redis,
+			RedisKeyPrefix: opts.Config.Redis.KeyPrefix,
+		}),
+		users: service.NewUserServiceWithOptions(repository, service.UserServiceOptions{
+			ConfigProvider: opts.ConfigProvider,
+			Redis:          opts.Redis,
+		}),
 		roles:      service.NewRoleService(repository),
 		menus:      service.NewMenuService(repository),
 		depts:      service.NewDeptService(repository),
 		dataRules:  service.NewDataRuleService(repository),
 		dataScopes: service.NewDataScopeService(repository),
-		plugins:    service.NewPluginServiceWithConfig(repository, opts),
+		plugins:    service.NewPluginServiceWithConfig(repository, opts.Config),
 		logs:       service.NewLogService(repository),
 		files:      service.NewFileService(),
-		monitors:   service.NewMonitorService(repository),
+		monitors:   service.NewMonitorServiceWithRedis(repository, opts.Redis),
 	}
 }
 

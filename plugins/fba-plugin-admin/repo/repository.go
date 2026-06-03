@@ -125,6 +125,7 @@ type Repository interface {
 	ListLoginLogs(ctx context.Context, filter LogFilter, page int, size int) ([]model.LoginLog, int64, error)
 	DeleteLoginLogs(ctx context.Context, ids []int) (int, error)
 	DeleteAllLoginLogs(ctx context.Context) error
+	CreateOperaLog(ctx context.Context, item model.OperaLog) error
 	ListOperaLogs(ctx context.Context, filter LogFilter, page int, size int) ([]model.OperaLog, int64, error)
 	DeleteOperaLogs(ctx context.Context, ids []int) (int, error)
 	DeleteAllOperaLogs(ctx context.Context) error

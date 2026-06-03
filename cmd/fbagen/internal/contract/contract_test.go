@@ -77,6 +77,7 @@ func TestLoadIncludesAuthNegativeRoutes(t *testing.T) {
 	}{
 		{"GET", "/api/v1/dict-types/all", "none", http.StatusUnauthorized},
 		{"POST", "/api/v1/dict-types", "limited", http.StatusForbidden},
+		{"GET", "/api/v1/sys/plugins/{plugin}", "admin", http.StatusBadRequest},
 	} {
 		route := findNegativeRoute(loaded.API.NegativeRoutes, tc.method, tc.path)
 		if route == nil {
@@ -210,6 +211,36 @@ func TestLoadIncludesWriteMethodParityPriorityRoutes(t *testing.T) {
 	}
 }
 
+func TestLoadIncludesPythonBusinessFailPriorityRoutes(t *testing.T) {
+	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{"DELETE", "/api/v1/sys/roles"},
+		{"DELETE", "/api/v1/sys/menus/{pk}"},
+		{"DELETE", "/api/v1/sys/data-rules"},
+		{"DELETE", "/api/v1/sys/data-scopes"},
+		{"DELETE", "/api/v1/sys/notices"},
+		{"DELETE", "/api/v1/sys/configs"},
+		{"DELETE", "/api/v1/dict-types"},
+		{"DELETE", "/api/v1/dict-datas"},
+		{"DELETE", "/api/v1/task-results"},
+	} {
+		route := findPriorityRoute(loaded.API.PriorityRoutes, tc.method, tc.path)
+		if route == nil {
+			t.Fatalf("missing priority route %s %s", tc.method, tc.path)
+		}
+		if route.ExpectedCode != http.StatusBadRequest || route.ExpectedMsg != "请求错误" {
+			t.Fatalf("%s %s expected envelope = (%d,%q), want (400,请求错误)", tc.method, tc.path, route.ExpectedCode, route.ExpectedMsg)
+		}
+	}
+}
+
 func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
 	if err != nil {
@@ -227,7 +258,7 @@ func TestLoadIncludesAdminWriteParityPriorityRoutes(t *testing.T) {
 		{"PUT", "/api/v1/sys/users/{pk}", "/api/v1/sys/users/1", true, ""},
 		{"PUT", "/api/v1/sys/users/{pk}/permissions", "/api/v1/sys/users/1/permissions?type=multi_login", false, ""},
 		{"PUT", "/api/v1/sys/users/me/password", "", true, ""},
-		{"PUT", "/api/v1/sys/users/{pk}/password", "/api/v1/sys/users/1/password", true, ""},
+		{"PUT", "/api/v1/sys/users/{pk}/password", "/api/v1/sys/users/3/password", true, ""},
 		{"PUT", "/api/v1/sys/users/me/nickname", "", true, ""},
 		{"PUT", "/api/v1/sys/users/me/avatar", "", true, ""},
 		{"PUT", "/api/v1/sys/users/me/email", "", true, ""},
@@ -315,6 +346,41 @@ func TestLoadIncludesNoticePluginPriorityRoutes(t *testing.T) {
 		}
 		if route.Permission != tc.permission {
 			t.Fatalf("%s %s permission = %q, want %q", tc.method, tc.path, route.Permission, tc.permission)
+		}
+	}
+}
+
+func TestLoadIncludesOAuth2PluginPriorityRoutes(t *testing.T) {
+	loaded, err := contract.Load(filepath.Join("..", "..", "..", "..", "contracts"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		method           string
+		path             string
+		samplePath       string
+		responseEnvelope *bool
+	}{
+		{"GET", "/api/v1/oauth2/github", "", nil},
+		{"GET", "/api/v1/oauth2/github/callback", "/api/v1/oauth2/github/callback?code=fixture-code&state=missing-state", boolPtr(false)},
+		{"GET", "/api/v1/oauth2/google", "", nil},
+		{"GET", "/api/v1/oauth2/google/callback", "/api/v1/oauth2/google/callback?code=fixture-code&state=missing-state", boolPtr(false)},
+		{"GET", "/api/v1/oauth2/me/bindings", "", nil},
+		{"GET", "/api/v1/oauth2/me/binding", "/api/v1/oauth2/me/binding?source=Github", nil},
+		{"DELETE", "/api/v1/oauth2/me/unbinding", "/api/v1/oauth2/me/unbinding?source=Unknown", boolPtr(false)},
+	} {
+		route := findPriorityRoute(loaded.API.PriorityRoutes, tc.method, tc.path)
+		if route == nil {
+			t.Fatalf("missing priority route %s %s", tc.method, tc.path)
+		}
+		if route.SamplePath != tc.samplePath {
+			t.Fatalf("%s %s sample_path = %q, want %q", tc.method, tc.path, route.SamplePath, tc.samplePath)
+		}
+		if tc.responseEnvelope != nil {
+			if route.ResponseEnvelope == nil || *route.ResponseEnvelope != *tc.responseEnvelope {
+				t.Fatalf("%s %s response_envelope = %v, want %v", tc.method, tc.path, route.ResponseEnvelope, *tc.responseEnvelope)
+			}
 		}
 	}
 }

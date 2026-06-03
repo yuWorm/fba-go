@@ -421,11 +421,19 @@ func validateResponseEnvelope(body []byte, route Route, response ResponseContrac
 			return fmt.Errorf("missing response envelope field %q", field)
 		}
 	}
-	if response.Success.Code != 0 && !jsonNumberEquals(payload["code"], response.Success.Code) {
-		return fmt.Errorf("unexpected response code %v, want %d", payload["code"], response.Success.Code)
+	expectedCode := response.Success.Code
+	if route.ExpectedCode != 0 {
+		expectedCode = route.ExpectedCode
 	}
-	if response.Success.Msg != "" && payload["msg"] != response.Success.Msg {
-		return fmt.Errorf("unexpected response msg %v, want %q", payload["msg"], response.Success.Msg)
+	if expectedCode != 0 && !jsonNumberEquals(payload["code"], expectedCode) {
+		return fmt.Errorf("unexpected response code %v, want %d", payload["code"], expectedCode)
+	}
+	expectedMsg := response.Success.Msg
+	if route.ExpectedMsg != "" {
+		expectedMsg = route.ExpectedMsg
+	}
+	if expectedMsg != "" && payload["msg"] != expectedMsg {
+		return fmt.Errorf("unexpected response msg %v, want %q", payload["msg"], expectedMsg)
 	}
 	return nil
 }

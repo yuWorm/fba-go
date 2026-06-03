@@ -64,7 +64,14 @@ func (r *GORMRepository) UpdateType(ctx context.Context, id int, param dto.DictT
 }
 
 func (r *GORMRepository) DeleteTypes(ctx context.Context, ids []int) error {
-	return r.provider.Write().WithContext(ctx).Delete(&model.DictType{}, ids).Error
+	result := r.provider.Write().WithContext(ctx).Delete(&model.DictType{}, ids)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *GORMRepository) AllData(ctx context.Context) ([]model.DictData, error) {
@@ -153,7 +160,14 @@ func (r *GORMRepository) UpdateData(ctx context.Context, id int, param dto.DictD
 }
 
 func (r *GORMRepository) DeleteData(ctx context.Context, ids []int) error {
-	return r.provider.Write().WithContext(ctx).Delete(&model.DictData{}, ids).Error
+	result := r.provider.Write().WithContext(ctx).Delete(&model.DictData{}, ids)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func paginate[T any](query *gorm.DB, page int, size int) ([]T, int64, error) {

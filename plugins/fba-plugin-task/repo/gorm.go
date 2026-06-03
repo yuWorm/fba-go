@@ -118,7 +118,14 @@ func (r *GORMRepository) ListTaskResults(ctx context.Context, filter ResultFilte
 }
 
 func (r *GORMRepository) DeleteTaskResults(ctx context.Context, ids []int) error {
-	return r.provider.Write().WithContext(ctx).Delete(&model.TaskResult{}, ids).Error
+	result := r.provider.Write().WithContext(ctx).Delete(&model.TaskResult{}, ids)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func paginate[T any](query *gorm.DB, page int, size int) ([]T, int64, error) {

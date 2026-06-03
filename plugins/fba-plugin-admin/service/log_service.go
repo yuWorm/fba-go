@@ -11,6 +11,7 @@ import (
 	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/pagination"
 	"github.com/yuWorm/fba-plugin-admin/dto"
+	"github.com/yuWorm/fba-plugin-admin/model"
 	"github.com/yuWorm/fba-plugin-admin/repo"
 )
 
@@ -51,6 +52,10 @@ func (s *LogService) ListOpera(ctx context.Context, filter repo.LogFilter, page 
 
 func (s *LogService) DeleteOpera(ctx context.Context, ids []int) (int, error) {
 	return s.repo.DeleteOperaLogs(ctx, ids)
+}
+
+func (s *LogService) CreateOpera(ctx context.Context, item model.OperaLog) error {
+	return s.repo.CreateOperaLog(ctx, item)
 }
 
 func (s *LogService) ClearOpera(ctx context.Context) error {

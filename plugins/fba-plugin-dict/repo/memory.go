@@ -102,7 +102,11 @@ func (r *MemoryRepository) UpdateType(_ context.Context, id int, param dto.DictT
 func (r *MemoryRepository) DeleteTypes(_ context.Context, ids []int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	before := len(r.types)
 	r.types = deleteByIDs(r.types, ids, func(item model.DictType) int { return item.ID })
+	if before == len(r.types) {
+		return ErrNotFound
+	}
 	return nil
 }
 
@@ -212,7 +216,11 @@ func (r *MemoryRepository) UpdateData(_ context.Context, id int, param dto.DictD
 func (r *MemoryRepository) DeleteData(_ context.Context, ids []int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	before := len(r.data)
 	r.data = deleteByIDs(r.data, ids, func(item model.DictData) int { return item.ID })
+	if before == len(r.data) {
+		return ErrNotFound
+	}
 	return nil
 }
 

@@ -4,7 +4,10 @@ use (
 	.
 	./examples/compat-host
 	./plugins/fba-plugin-admin
+	./plugins/fba-plugin-config
 	./plugins/fba-plugin-dict
+	./plugins/fba-plugin-email
 	./plugins/fba-plugin-notice
+	./plugins/fba-plugin-oauth2
 	./plugins/fba-plugin-task
 )

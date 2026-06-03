@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	stderrors "errors"
+	"net/http"
 
+	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/pagination"
 	coretask "github.com/yuWorm/fba-go/core/task"
 	"github.com/yuWorm/fba-plugin-task/dto"
@@ -60,7 +63,7 @@ func (s *Service) AllSchedulers(ctx context.Context) ([]dto.SchedulerDetail, err
 func (s *Service) GetScheduler(ctx context.Context, id int) (dto.SchedulerDetail, error) {
 	item, err := s.repo.GetScheduler(ctx, id)
 	if err != nil {
-		return dto.SchedulerDetail{}, err
+		return dto.SchedulerDetail{}, taskSchedulerNotFound(err)
 	}
 	return dto.SchedulerFromModel(item), nil
 }
@@ -81,6 +84,9 @@ func (s *Service) CreateScheduler(ctx context.Context, param dto.SchedulerParam)
 }
 
 func (s *Service) UpdateScheduler(ctx context.Context, id int, param dto.SchedulerParam) error {
+	if _, err := s.repo.GetScheduler(ctx, id); err != nil {
+		return taskSchedulerNotFound(err)
+	}
 	if err := s.repo.UpdateScheduler(ctx, id, param); err != nil {
 		return err
 	}
@@ -88,6 +94,9 @@ func (s *Service) UpdateScheduler(ctx context.Context, id int, param dto.Schedul
 }
 
 func (s *Service) ToggleSchedulerStatus(ctx context.Context, id int) error {
+	if _, err := s.repo.GetScheduler(ctx, id); err != nil {
+		return taskSchedulerNotFound(err)
+	}
 	if err := s.repo.ToggleSchedulerStatus(ctx, id); err != nil {
 		return err
 	}
@@ -95,6 +104,9 @@ func (s *Service) ToggleSchedulerStatus(ctx context.Context, id int) error {
 }
 
 func (s *Service) DeleteScheduler(ctx context.Context, id int) error {
+	if _, err := s.repo.GetScheduler(ctx, id); err != nil {
+		return taskSchedulerNotFound(err)
+	}
 	if err := s.repo.DeleteScheduler(ctx, id); err != nil {
 		return err
 	}
@@ -104,7 +116,7 @@ func (s *Service) DeleteScheduler(ctx context.Context, id int) error {
 func (s *Service) ExecuteScheduler(ctx context.Context, id int) error {
 	scheduler, err := s.repo.GetScheduler(ctx, id)
 	if err != nil {
-		return err
+		return taskSchedulerNotFound(err)
 	}
 	detail := dto.SchedulerFromModel(scheduler)
 	return s.executor.Execute(ctx, detail.Task, detail.Args, detail.Kwargs)
@@ -113,7 +125,7 @@ func (s *Service) ExecuteScheduler(ctx context.Context, id int) error {
 func (s *Service) GetTaskResult(ctx context.Context, id int) (dto.TaskResultDetail, error) {
 	item, err := s.repo.GetTaskResult(ctx, id)
 	if err != nil {
-		return dto.TaskResultDetail{}, err
+		return dto.TaskResultDetail{}, taskResultNotFound(err)
 	}
 	return dto.TaskResultFromModel(item), nil
 }
@@ -139,4 +151,18 @@ func (s *Service) reloadIfLeader(ctx context.Context) error {
 		_ = s.leader.Release(ctx)
 	}()
 	return s.executor.Reload(ctx)
+}
+
+func taskSchedulerNotFound(err error) error {
+	if stderrors.Is(err, repo.ErrNotFound) {
+		return fbaerrors.New(http.StatusNotFound, http.StatusNotFound, "任务调度不存在", err)
+	}
+	return err
+}
+
+func taskResultNotFound(err error) error {
+	if stderrors.Is(err, repo.ErrNotFound) {
+		return fbaerrors.New(http.StatusNotFound, http.StatusNotFound, "任务结果不存在", err)
+	}
+	return err
 }

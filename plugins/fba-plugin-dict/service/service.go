@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	stderrors "errors"
+	"net/http"
 
+	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/pagination"
 	"github.com/yuWorm/fba-plugin-dict/dto"
 	"github.com/yuWorm/fba-plugin-dict/repo"
@@ -37,7 +40,7 @@ func (s *Service) AllTypes(ctx context.Context) ([]dto.DictTypeDetail, error) {
 func (s *Service) GetType(ctx context.Context, id int) (dto.DictTypeDetail, error) {
 	item, err := s.repo.GetType(ctx, id)
 	if err != nil {
-		return dto.DictTypeDetail{}, err
+		return dto.DictTypeDetail{}, mapNotFound(err, "字典类型不存在")
 	}
 	return dto.DictTypeFromModel(item), nil
 }
@@ -58,6 +61,9 @@ func (s *Service) CreateType(ctx context.Context, param dto.DictTypeParam) error
 }
 
 func (s *Service) UpdateType(ctx context.Context, id int, param dto.DictTypeParam) error {
+	if _, err := s.repo.GetType(ctx, id); err != nil {
+		return mapNotFound(err, "字典类型不存在")
+	}
 	if err := s.repo.UpdateType(ctx, id, param); err != nil {
 		return err
 	}
@@ -82,7 +88,7 @@ func (s *Service) AllData(ctx context.Context) ([]dto.DictDataDetail, error) {
 func (s *Service) GetData(ctx context.Context, id int) (dto.DictDataDetail, error) {
 	item, err := s.repo.GetData(ctx, id)
 	if err != nil {
-		return dto.DictDataDetail{}, err
+		return dto.DictDataDetail{}, mapNotFound(err, "字典数据不存在")
 	}
 	return dto.DictDataFromModel(item), nil
 }
@@ -90,7 +96,7 @@ func (s *Service) GetData(ctx context.Context, id int) (dto.DictDataDetail, erro
 func (s *Service) GetDataByTypeCode(ctx context.Context, code string) ([]dto.DictDataDetail, error) {
 	items, err := s.repo.DataByTypeCode(ctx, code)
 	if err != nil {
-		return nil, err
+		return nil, mapNotFound(err, "字典数据不存在")
 	}
 	return dto.DictDataListFromModel(items), nil
 }
@@ -105,12 +111,18 @@ func (s *Service) ListData(ctx context.Context, filter repo.DictDataFilter, page
 
 func (s *Service) CreateData(ctx context.Context, param dto.DictDataParam) error {
 	if err := s.repo.CreateData(ctx, param); err != nil {
-		return err
+		return mapNotFound(err, "字典类型不存在")
 	}
 	return s.invalidator.InvalidateDict(ctx)
 }
 
 func (s *Service) UpdateData(ctx context.Context, id int, param dto.DictDataParam) error {
+	if _, err := s.repo.GetData(ctx, id); err != nil {
+		return mapNotFound(err, "字典数据不存在")
+	}
+	if _, err := s.repo.GetType(ctx, param.TypeID); err != nil {
+		return mapNotFound(err, "字典类型不存在")
+	}
 	if err := s.repo.UpdateData(ctx, id, param); err != nil {
 		return err
 	}
@@ -122,4 +134,11 @@ func (s *Service) DeleteData(ctx context.Context, ids []int) error {
 		return err
 	}
 	return s.invalidator.InvalidateDict(ctx)
+}
+
+func mapNotFound(err error, message string) error {
+	if stderrors.Is(err, repo.ErrNotFound) {
+		return fbaerrors.New(http.StatusNotFound, http.StatusNotFound, message, err)
+	}
+	return err
 }

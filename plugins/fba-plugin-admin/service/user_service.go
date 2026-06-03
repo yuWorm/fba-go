@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/redis/go-redis/v9"
 	fbaerrors "github.com/yuWorm/fba-go/core/errors"
 	"github.com/yuWorm/fba-go/core/pagination"
 	"github.com/yuWorm/fba-plugin-admin/dto"
@@ -14,16 +15,31 @@ import (
 )
 
 type UserService struct {
-	repo repo.Repository
+	repo           repo.Repository
+	configProvider AdminConfigProvider
+	redis          RedisClient
 }
 
 const defaultEmailCaptchaCode = "123456"
 
+type UserServiceOptions struct {
+	ConfigProvider AdminConfigProvider
+	Redis          RedisClient
+}
+
 func NewUserService(repository repo.Repository) *UserService {
+	return NewUserServiceWithOptions(repository, UserServiceOptions{})
+}
+
+func NewUserServiceWithOptions(repository repo.Repository, opts UserServiceOptions) *UserService {
 	if repository == nil {
 		repository = repo.NewMemoryRepository(repo.SeedData())
 	}
-	return &UserService{repo: repository}
+	return &UserService{
+		repo:           repository,
+		configProvider: adminConfigProvider(opts.ConfigProvider),
+		redis:          opts.Redis,
+	}
 }
 
 func (s *UserService) Get(ctx context.Context, id int) (dto.UserWithRelationDetail, error) {
@@ -157,7 +173,11 @@ func (s *UserService) UpdatePassword(ctx context.Context, id int, param dto.User
 	if param.NewPassword != param.ConfirmPassword {
 		return userBadRequest("两次密码输入不一致", nil)
 	}
-	if err := validateNewPassword(ctx, s.repo, id, param.NewPassword); err != nil {
+	cfg, err := s.configProvider.UserSecurityConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if err := validateNewPassword(ctx, s.repo, id, param.NewPassword, cfg); err != nil {
 		return err
 	}
 	hashedPassword, err := hashPassword(param.NewPassword)
@@ -181,7 +201,11 @@ func (s *UserService) ResetPassword(ctx context.Context, id int, password string
 		}
 		return err
 	}
-	if err := validateNewPassword(ctx, s.repo, id, password); err != nil {
+	cfg, err := s.configProvider.UserSecurityConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if err := validateNewPassword(ctx, s.repo, id, password, cfg); err != nil {
 		return err
 	}
 	hashedPassword, err := hashPassword(password)
@@ -206,14 +230,34 @@ func (s *UserService) UpdateAvatar(ctx context.Context, id int, avatar *string) 
 }
 
 func (s *UserService) UpdateEmail(ctx context.Context, id int, captcha string, email *string) error {
+	return s.UpdateEmailForIP(ctx, id, captcha, email, "127.0.0.1")
+}
+
+func (s *UserService) UpdateEmailForIP(ctx context.Context, id int, captcha string, email *string, ip string) error {
 	captcha = strings.TrimSpace(captcha)
 	if captcha == "" {
 		return userBadRequest("验证码已失效，请重新获取", nil)
 	}
-	// The Python version validates this against a Redis key produced by the email plugin.
-	// Until that plugin is migrated, keep the existing contract fixture as the local code.
-	if !strings.EqualFold(captcha, defaultEmailCaptchaCode) {
-		return userBadRequest("验证码错误", nil)
+	var captchaKey string
+	if s.redis != nil {
+		key := emailCaptchaKey(ip)
+		code, err := s.redis.Get(ctx, key).Result()
+		if err == redis.Nil {
+			return userBadRequest("验证码已失效，请重新获取", nil)
+		}
+		if err != nil {
+			return err
+		}
+		if !strings.EqualFold(captcha, code) {
+			return userBadRequest("验证码错误", nil)
+		}
+		captchaKey = key
+	} else {
+		// The Go email plugin is not migrated yet. Keep the fixture code only for
+		// local contracts and direct handler tests when no Redis email captcha exists.
+		if !strings.EqualFold(captcha, defaultEmailCaptchaCode) {
+			return userBadRequest("验证码错误", nil)
+		}
 	}
 	if email != nil && *email != "" {
 		user, err := s.repo.GetUserByEmail(ctx, *email)
@@ -221,6 +265,11 @@ func (s *UserService) UpdateEmail(ctx context.Context, id int, captcha string, e
 			return userConflict("邮箱已被绑定", nil)
 		}
 		if err != nil && !stderrors.Is(err, repo.ErrNotFound) {
+			return err
+		}
+	}
+	if captchaKey != "" {
+		if err := s.redis.Del(ctx, captchaKey).Err(); err != nil {
 			return err
 		}
 	}
@@ -258,13 +307,17 @@ func (s *UserService) UpdatePermission(ctx context.Context, id int, permissionTy
 }
 
 func (s *UserService) Delete(ctx context.Context, id int) error {
-	if _, err := s.repo.GetUser(ctx, id); err != nil {
+	user, err := s.repo.GetUser(ctx, id)
+	if err != nil {
 		if stderrors.Is(err, repo.ErrNotFound) {
 			return userNotFound("用户不存在", err)
 		}
 		return err
 	}
-	return s.repo.DeleteUser(ctx, id)
+	if err := s.repo.DeleteUser(ctx, id); err != nil {
+		return err
+	}
+	return s.clearUserSessions(ctx, user)
 }
 
 func (s *UserService) clearUserSessions(ctx context.Context, user model.User) error {
@@ -284,6 +337,14 @@ func (s *UserService) clearUserSessions(ctx context.Context, user model.User) er
 		}
 	}
 	return nil
+}
+
+func emailCaptchaKey(ip string) string {
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		ip = "127.0.0.1"
+	}
+	return defaultEmailCaptchaKeyPrefix + ":" + ip
 }
 
 func (s *UserService) clearUserSessionsExcept(ctx context.Context, user model.User, keepSessionUUID string) error {

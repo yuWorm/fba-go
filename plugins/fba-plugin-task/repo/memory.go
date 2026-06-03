@@ -140,17 +140,23 @@ func (r *MemoryRepository) ListTaskResults(_ context.Context, filter ResultFilte
 func (r *MemoryRepository) DeleteTaskResults(_ context.Context, ids []int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	deleted := 0
 	idSet := make(map[int]struct{}, len(ids))
 	for _, id := range ids {
 		idSet[id] = struct{}{}
 	}
 	results := r.results[:0]
 	for _, item := range r.results {
-		if _, ok := idSet[item.ID]; !ok {
+		if _, ok := idSet[item.ID]; ok {
+			deleted++
+		} else {
 			results = append(results, item)
 		}
 	}
 	r.results = results
+	if deleted == 0 {
+		return ErrNotFound
+	}
 	return nil
 }
 

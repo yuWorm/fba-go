@@ -7,7 +7,9 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,14 +19,19 @@ import (
 
 type MonitorService struct {
 	repo    repo.Repository
+	redis   RedisClient
 	started time.Time
 }
 
 func NewMonitorService(repository repo.Repository) *MonitorService {
+	return NewMonitorServiceWithRedis(repository, nil)
+}
+
+func NewMonitorServiceWithRedis(repository repo.Repository, redisClient RedisClient) *MonitorService {
 	if repository == nil {
 		repository = repo.NewMemoryRepository(repo.SeedData())
 	}
-	return &MonitorService{repo: repository, started: time.Now()}
+	return &MonitorService{repo: repository, redis: redisClient, started: time.Now()}
 }
 
 func (s *MonitorService) Server(context.Context) (dto.ServerMonitorInfo, error) {
@@ -83,9 +90,18 @@ func (s *MonitorService) Server(context.Context) (dto.ServerMonitorInfo, error) 
 	}, nil
 }
 
-func (s *MonitorService) Redis(context.Context) (dto.RedisMonitorInfo, error) {
-	// Until the Go module wires a real Redis provider, expose a schema-compatible
-	// local fallback instead of leaking empty fixture strings to the frontend.
+func (s *MonitorService) Redis(ctx context.Context) (dto.RedisMonitorInfo, error) {
+	if s.redis == nil {
+		return fallbackRedisMonitor(), nil
+	}
+	raw, err := s.redis.Info(ctx, "server", "clients", "memory", "stats", "commandstats", "keyspace").Result()
+	if err != nil {
+		return dto.RedisMonitorInfo{}, err
+	}
+	return redisMonitorFromInfo(raw), nil
+}
+
+func fallbackRedisMonitor() dto.RedisMonitorInfo {
 	return dto.RedisMonitorInfo{
 		Info: dto.RedisServerInfo{
 			RedisVersion:          "unavailable",
@@ -107,7 +123,7 @@ func (s *MonitorService) Redis(context.Context) (dto.RedisMonitorInfo, error) {
 		Stats: []dto.RedisCommandStat{
 			{Name: "ping", Value: "0"},
 		},
-	}, nil
+	}
 }
 
 func (s *MonitorService) Sessions(ctx context.Context, username string) ([]dto.SessionDetail, error) {
@@ -147,6 +163,108 @@ func diskInfo() []dto.DiskInfo {
 			Usage:  fmt.Sprintf("%.2f%%", usage),
 		},
 	}
+}
+
+func redisMonitorFromInfo(raw string) dto.RedisMonitorInfo {
+	values := parseRedisInfo(raw)
+	stats := redisCommandStats(values)
+	if len(stats) == 0 {
+		stats = []dto.RedisCommandStat{{Name: "ping", Value: "0"}}
+	}
+	return dto.RedisMonitorInfo{
+		Info: dto.RedisServerInfo{
+			RedisVersion:          values["redis_version"],
+			RedisMode:             defaultString(values["redis_mode"], "standalone"),
+			Role:                  defaultString(values["role"], "master"),
+			TCPPort:               defaultString(values["tcp_port"], "6379"),
+			Uptime:                formatRedisUptime(values["uptime_in_seconds"]),
+			ConnectedClients:      defaultString(values["connected_clients"], "0"),
+			BlockedClients:        defaultString(values["blocked_clients"], "0"),
+			UsedMemoryHuman:       defaultString(values["used_memory_human"], "0B"),
+			UsedMemoryRSSHuman:    defaultString(values["used_memory_rss_human"], "0B"),
+			MaxMemoryHuman:        defaultString(values["maxmemory_human"], "0B"),
+			MemFragmentationRatio: defaultString(values["mem_fragmentation_ratio"], "0"),
+			InstantaneousOps:      defaultString(values["instantaneous_ops_per_sec"], "0"),
+			TotalCommands:         defaultString(values["total_commands_processed"], "0"),
+			RejectedConnections:   defaultString(values["rejected_connections"], "0"),
+			KeysNum:               redisKeysNum(values),
+		},
+		Stats: stats,
+	}
+}
+
+func parseRedisInfo(raw string) map[string]string {
+	values := map[string]string{}
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		values[key] = value
+	}
+	return values
+}
+
+func redisCommandStats(values map[string]string) []dto.RedisCommandStat {
+	stats := make([]dto.RedisCommandStat, 0)
+	for key, value := range values {
+		if !strings.HasPrefix(key, "cmdstat_") {
+			continue
+		}
+		command := strings.TrimPrefix(key, "cmdstat_")
+		calls := "0"
+		for _, part := range strings.Split(value, ",") {
+			name, raw, ok := strings.Cut(part, "=")
+			if ok && name == "calls" {
+				calls = raw
+				break
+			}
+		}
+		stats = append(stats, dto.RedisCommandStat{Name: command, Value: calls})
+	}
+	sort.Slice(stats, func(i, j int) bool {
+		return stats[i].Name < stats[j].Name
+	})
+	return stats
+}
+
+func redisKeysNum(values map[string]string) string {
+	total := 0
+	for key, value := range values {
+		if !strings.HasPrefix(key, "db") {
+			continue
+		}
+		for _, part := range strings.Split(value, ",") {
+			name, raw, ok := strings.Cut(part, "=")
+			if !ok || name != "keys" {
+				continue
+			}
+			count, err := strconv.Atoi(raw)
+			if err == nil {
+				total += count
+			}
+		}
+	}
+	return strconv.Itoa(total)
+}
+
+func formatRedisUptime(raw string) string {
+	seconds, err := strconv.Atoi(raw)
+	if err != nil || seconds <= 0 {
+		return "0s"
+	}
+	return formatDuration(time.Duration(seconds) * time.Second)
+}
+
+func defaultString(value string, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func localIP() string {

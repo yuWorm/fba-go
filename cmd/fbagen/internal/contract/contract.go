@@ -30,6 +30,8 @@ type Route struct {
 	Permission       string         `yaml:"permission,omitempty" json:"permission,omitempty"`
 	Auth             string         `yaml:"auth,omitempty" json:"auth,omitempty"`
 	ExpectedStatus   int            `yaml:"expected_status,omitempty" json:"expected_status,omitempty"`
+	ExpectedCode     int            `yaml:"expected_code,omitempty" json:"expected_code,omitempty"`
+	ExpectedMsg      string         `yaml:"expected_msg,omitempty" json:"expected_msg,omitempty"`
 	ResponseEnvelope *bool          `yaml:"response_envelope,omitempty" json:"response_envelope,omitempty"`
 }
 

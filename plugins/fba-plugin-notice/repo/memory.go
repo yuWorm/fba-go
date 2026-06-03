@@ -94,7 +94,11 @@ func (r *MemoryRepository) Update(_ context.Context, id int, param dto.NoticePar
 func (r *MemoryRepository) Delete(_ context.Context, ids []int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	before := len(r.notices)
 	r.notices = deleteByIDs(r.notices, ids, func(item model.Notice) int { return item.ID })
+	if before == len(r.notices) {
+		return ErrNotFound
+	}
 	return nil
 }
 

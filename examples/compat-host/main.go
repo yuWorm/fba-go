@@ -14,8 +14,10 @@ import (
 	"github.com/yuWorm/fba-go/core/plugin"
 	"github.com/yuWorm/fba-go/examples/compat-host/internal/generated"
 	adminrepo "github.com/yuWorm/fba-plugin-admin/repo"
+	configmodel "github.com/yuWorm/fba-plugin-config/model"
 	dictmodel "github.com/yuWorm/fba-plugin-dict/model"
 	noticemodel "github.com/yuWorm/fba-plugin-notice/model"
+	oauth2model "github.com/yuWorm/fba-plugin-oauth2/model"
 	taskmodel "github.com/yuWorm/fba-plugin-task/model"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -128,8 +130,14 @@ func seedCompatDB(ctx context.Context, provider db.Provider) error {
 		if err := seedCompatIfEmpty(tx, &dictmodel.DictData{}, dictmodel.SeedDictData()); err != nil {
 			return fmt.Errorf("seed dict data: %w", err)
 		}
+		if err := seedCompatIfEmpty(tx, &configmodel.Config{}, configmodel.SeedConfigs()); err != nil {
+			return fmt.Errorf("seed configs: %w", err)
+		}
 		if err := seedCompatIfEmpty(tx, &noticemodel.Notice{}, noticemodel.SeedNotices()); err != nil {
 			return fmt.Errorf("seed notices: %w", err)
+		}
+		if err := seedCompatIfEmpty(tx, &oauth2model.UserSocial{}, []oauth2model.UserSocial{}); err != nil {
+			return fmt.Errorf("seed oauth2 user socials: %w", err)
 		}
 		if err := seedCompatIfEmpty(tx, &taskmodel.TaskScheduler{}, taskmodel.SeedSchedulers()); err != nil {
 			return fmt.Errorf("seed task schedulers: %w", err)

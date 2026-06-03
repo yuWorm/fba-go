@@ -38,7 +38,7 @@ func TestGORMRepositoryPersistsCoreAdminRelations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RoleMenus(admin) error = %v", err)
 	}
-	for _, name := range []string{"Dashboard", "System", "PluginDict", "PluginNotice", "Scheduler", "AddDictType", "AddNotice", "AddScheduler"} {
+	for _, name := range []string{"Dashboard", "System", "PluginConfig", "PluginDict", "PluginNotice", "Scheduler", "AddConfig", "AddDictType", "AddNotice", "AddScheduler"} {
 		if !hasMenuName(menus, name) {
 			t.Fatalf("admin role menus = %+v, want menu %s", menus, name)
 		}

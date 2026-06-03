@@ -178,6 +178,27 @@ func TestTaskControlWriteEndpointsReturnPythonEnvelope(t *testing.T) {
 	assertEnvelopeNull(t, body)
 }
 
+func TestTaskMissingMutationsMatchPython(t *testing.T) {
+	app := newTaskApp(t, nil)
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{"PUT", "/api/v1/schedulers/999999", schedulerBody()},
+		{"PUT", "/api/v1/schedulers/999999/status", ""},
+		{"DELETE", "/api/v1/schedulers/999999", ""},
+	} {
+		resp, body := requestJSON(t, app, tc.method, tc.path, tc.body)
+		assertErrorEnvelope(t, resp, body, fiber.StatusNotFound, "任务调度不存在")
+	}
+
+	resp, body := requestJSON(t, app, "DELETE", "/api/v1/task-results", `{"pks":[999999]}`)
+	assertStatusOK(t, resp)
+	assertBusinessFailEnvelope(t, body)
+}
+
 func TestTaskValidationErrorsMatchPython(t *testing.T) {
 	app := newTaskApp(t, nil)
 
@@ -273,6 +294,19 @@ func assertEnvelopeNull(t *testing.T, body map[string]any) {
 	}
 	if body["msg"] != "请求成功" {
 		t.Fatalf("msg = %v, want 请求成功", body["msg"])
+	}
+	if body["data"] != nil {
+		t.Fatalf("data = %v, want nil", body["data"])
+	}
+}
+
+func assertBusinessFailEnvelope(t *testing.T, body map[string]any) {
+	t.Helper()
+	if body["code"] != float64(400) {
+		t.Fatalf("code = %v, want 400; body = %v", body["code"], body)
+	}
+	if body["msg"] != "请求错误" {
+		t.Fatalf("msg = %v, want 请求错误", body["msg"])
 	}
 	if body["data"] != nil {
 		t.Fatalf("data = %v, want nil", body["data"])
