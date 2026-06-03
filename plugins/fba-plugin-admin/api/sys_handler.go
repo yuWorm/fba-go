@@ -618,15 +618,7 @@ func (h Handler) PluginChanged(c fiber.Ctx) error {
 }
 
 func (h Handler) InstallPlugin(c fiber.Ctx) error {
-	pluginName, err := h.plugins.Install(c.RequestCtx(), c.Query("type"), c.Query("repo_url"))
-	if err != nil {
-		return err
-	}
-	return c.JSON(response.Response[any]{
-		Code: 200,
-		Msg:  fmt.Sprintf("插件 %s 安装成功，请根据插件说明（README.md）进行相关配置并重启服务", pluginName),
-		Data: nil,
-	})
+	return h.plugins.Install(c.RequestCtx(), c.Query("type"), c.Query("repo_url"))
 }
 
 func (h Handler) UninstallPlugin(c fiber.Ctx) error {

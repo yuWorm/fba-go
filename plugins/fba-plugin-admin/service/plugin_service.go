@@ -5,8 +5,6 @@ import (
 	stderrors "errors"
 	"fmt"
 	"net/http"
-	"net/url"
-	"path"
 	"strings"
 
 	"github.com/yuWorm/fba-go/core/config"
@@ -44,26 +42,10 @@ func (s *PluginService) Changed(ctx context.Context) (bool, error) {
 	return s.repo.PluginsChanged(ctx)
 }
 
-func (s *PluginService) Install(ctx context.Context, pluginType string, repoURL string) (string, error) {
-	if !s.isDevelopment() {
-		return "", pluginBadRequest("禁止在非开发环境下安装插件", nil)
-	}
-	if pluginType == "zip" {
-		// The Go compatibility host does not accept multipart plugin uploads yet; preserve Python's empty-file guard.
-		return "", pluginBadRequest("ZIP 压缩包不能为空", nil)
-	}
-	if repoURL == "" {
-		return "", pluginBadRequest("Git 仓库地址不能为空", nil)
-	}
-	item, err := s.repo.InstallPlugin(ctx, dto.PluginInstallParam{
-		Type:    pluginType,
-		RepoURL: repoURL,
-		Name:    pluginNameFromRepoURL(repoURL),
-	})
-	if err != nil {
-		return "", err
-	}
-	return item.ID, nil
+func (s *PluginService) Install(context.Context, string, string) error {
+	// Go module plugins are compiled into the host binary. Keep the Python API
+	// route for frontend compatibility, but make the unsupported runtime behavior explicit.
+	return pluginBadRequest("Golang 不支持动态插件安装", nil)
 }
 
 func (s *PluginService) Uninstall(ctx context.Context, name string) error {
@@ -122,20 +104,4 @@ func pluginBadRequest(message string, cause error) error {
 
 func pluginNotFound(message string, cause error) error {
 	return fbaerrors.New(http.StatusNotFound, http.StatusNotFound, message, cause)
-}
-
-func pluginNameFromRepoURL(raw string) string {
-	if raw == "" {
-		return "plugin"
-	}
-	parsed, err := url.Parse(raw)
-	source := raw
-	if err == nil && parsed.Path != "" {
-		source = parsed.Path
-	}
-	name := strings.TrimSuffix(path.Base(strings.TrimRight(source, "/")), ".git")
-	if name == "." || name == "/" || name == "" {
-		return "plugin"
-	}
-	return name
 }
