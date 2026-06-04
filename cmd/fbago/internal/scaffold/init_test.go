@@ -21,6 +21,8 @@ func TestInitWritesBackendScaffoldWithModuleName(t *testing.T) {
 	}
 
 	assertFileContains(t, filepath.Join(dir, "go.mod"), "module github.com/acme/backend")
+	assertFileContains(t, filepath.Join(dir, "go.mod"), "require github.com/yuWorm/fba-go v0.0.0")
+	assertFileContains(t, filepath.Join(dir, "go.mod"), "replace github.com/yuWorm/fba-go => ")
 	assertFileContains(t, filepath.Join(dir, "cmd/api/main.go"), `"github.com/acme/backend/internal/app"`)
 	assertFileContains(t, filepath.Join(dir, "internal/app/register.go"), `"github.com/acme/backend/internal/app/health"`)
 	assertFileContains(t, filepath.Join(dir, "internal/app/health/module.go"), `ID:          "health"`)
@@ -30,6 +32,20 @@ func TestInitWritesBackendScaffoldWithModuleName(t *testing.T) {
 	assertFileContains(t, filepath.Join(dir, "Makefile"), "run ./cmd/api")
 	assertFileContains(t, filepath.Join(dir, "Makefile"), "test ./...")
 	assertFileContains(t, filepath.Join(dir, "README.md"), "fbago init github.com/acme/backend")
+}
+
+func TestInitUsesExplicitCoreReplaceInBasicTemplate(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := scaffold.Init(scaffold.InitOptions{
+		Dir:         dir,
+		Module:      "github.com/acme/backend",
+		CoreReplace: "../fba-go",
+	}); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	assertFileContains(t, filepath.Join(dir, "go.mod"), "replace github.com/yuWorm/fba-go => ../fba-go")
 }
 
 func TestListTemplatesIncludesBasic(t *testing.T) {

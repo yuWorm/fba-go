@@ -16,7 +16,7 @@ import (
 
 var stdout io.Writer = os.Stdout
 
-const initUsage = "usage: fbago init <module> [--template TEMPLATE] [--dir DIR]"
+const initUsage = "usage: fbago init <module> [--template TEMPLATE] [--dir DIR] [--core-replace PATH]"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -99,6 +99,12 @@ func parseInitArgs(args []string) (scaffold.InitOptions, error) {
 				return opts, fmt.Errorf("missing value for %s", arg)
 			}
 			opts.Template = args[i]
+		case "--core-replace", "-core-replace":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("missing value for %s", arg)
+			}
+			opts.CoreReplace = args[i]
 		default:
 			if strings.HasPrefix(arg, "-") {
 				return opts, fmt.Errorf("unknown init flag %s", arg)

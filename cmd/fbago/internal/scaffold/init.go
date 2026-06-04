@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"text/template"
@@ -21,12 +23,14 @@ import (
 var templateFS embed.FS
 
 const defaultTemplate = "basic"
+const coreModulePath = "github.com/yuWorm/fba-go"
 
 type InitOptions struct {
-	Dir      string
-	Module   string
-	Template string
-	Force    bool
+	Dir         string
+	Module      string
+	Template    string
+	CoreReplace string
+	Force       bool
 }
 
 type scaffoldFile struct {
@@ -50,6 +54,7 @@ type remoteGitTemplate struct {
 type templateData struct {
 	Module         string
 	TemplateModule string
+	CoreReplace    string
 }
 
 type localTemplateMetadata struct {
@@ -123,7 +128,7 @@ func Init(opts InitOptions) error {
 		}
 	}
 
-	data := templateData{Module: module, TemplateModule: bundle.TemplateModule}
+	data := templateData{Module: module, TemplateModule: bundle.TemplateModule, CoreReplace: resolveCoreReplace(opts.CoreReplace)}
 	for _, file := range files {
 		source := file.Content
 		if data.TemplateModule != "" {
@@ -147,6 +152,52 @@ func Init(opts InitOptions) error {
 		}
 	}
 	return nil
+}
+
+func resolveCoreReplace(value string) string {
+	if replace := strings.TrimSpace(value); replace != "" {
+		return filepath.ToSlash(replace)
+	}
+	if replace := strings.TrimSpace(os.Getenv("FBAGO_CORE_REPLACE")); replace != "" {
+		return filepath.ToSlash(replace)
+	}
+	// Local development builds need a replace because the core module may not be
+	// published yet; released fbago binaries should let Go resolve semver modules.
+	if !isDevelopmentBuild() {
+		return ""
+	}
+	root, err := discoverCoreModuleRoot()
+	if err != nil {
+		return ""
+	}
+	return filepath.ToSlash(root)
+}
+
+func isDevelopmentBuild() bool {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return false
+	}
+	return info.Main.Version == "" || info.Main.Version == "(devel)"
+}
+
+func discoverCoreModuleRoot() (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("discover core module root: caller unavailable")
+	}
+	dir := filepath.Dir(file)
+	for {
+		content, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil && strings.Contains(string(content), "module "+coreModulePath) {
+			return filepath.Abs(dir)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("discover core module root: %s not found", coreModulePath)
+		}
+		dir = parent
+	}
 }
 
 func loadTemplate(name string) (templateBundle, error) {

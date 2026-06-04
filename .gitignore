@@ -1,2 +1,4 @@
 sources/
 /.codegraph
+/bin
+/tmp

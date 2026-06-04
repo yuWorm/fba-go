@@ -2345,6 +2345,7 @@ fbago init github.com/your-org/my-backend
 fbago init github.com/your-org/my-backend --template basic
 fbago init github.com/your-org/my-backend --template ../fba-go-template/admin
 fbago init github.com/your-org/my-backend --template github.com/your-org/fba-go-template/admin@v0.1.0
+fbago init github.com/your-org/my-backend --core-replace ../fba-go
 ```
 
 `init` 用于创建项目脚手架，语义对齐 `go mod init`：调用方传入 Go module name，工具按模板生成 `go.mod`、`Makefile`、`cmd/api`、`.env` 和项目内业务模块目录 `internal/app`。默认模板是内置 `basic`；完整 admin starter template 应维护在独立模板仓库中，并通过本地路径或 remote Git template spec 传给 `--template`。
@@ -2352,6 +2353,8 @@ fbago init github.com/your-org/my-backend --template github.com/your-org/fba-go-
 `internal/app` 是用户项目自己的业务代码位置，admin、dict、config、notice、订单、支付等可修改业务模块都应优先放在这里；远程 plugin 更适合承载邮件、OAuth2、对象存储、任务队列等通用能力。
 
 `basic` 模板的 `Makefile` 至少提供 `tidy`、`test`、`run`、`dev`、`build`、`clean`，并将 Go build cache 固定在项目目录内，避免本机或沙箱缓存权限影响初始化后的第一轮验证。
+
+在 `github.com/yuWorm/fba-go` 尚未作为可下载 Go module 发布前，生成项目需要通过 `replace github.com/yuWorm/fba-go => <local-path>` 指向本地 core 源码。`fbago init` 支持 `--core-replace <path>`，也可通过 `FBAGO_CORE_REPLACE` 提供；本地开发构建会尽量自动发现当前 `fba-go` 源码根目录并写入 `basic` 模板的 `go.mod`。正式发布版 CLI 不应强制写本地 replace，而应让 Go 按正常 module 版本解析。
 
 本地路径模板必须是一个完整模板目录，可以使用 `[[ .Module ]]` 渲染 module name，文件名以 `.tmpl` 结尾时会渲染并去掉后缀；`env.tmpl` 和 `gitignore.tmpl` 分别输出为 `.env` 和 `.gitignore`。本地模板路径面向“可直接运行、可独立测试”的模板仓库，因此模板仓库可以保留自己的真实 `go.mod`，同时提供 `go.mod.tmpl` 作为生成项目的 `go.mod`。
 

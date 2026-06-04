@@ -13,6 +13,11 @@ type Definition struct {
 	Handler asynq.Handler
 }
 
+type DefinitionRegistry interface {
+	Add(definition Definition) error
+	All() []Definition
+}
+
 type Registry struct {
 	definitions []Definition
 	byType      map[string]Definition

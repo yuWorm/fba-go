@@ -16,3 +16,7 @@ make test
 make build
 make run
 ```
+
+When using a local development build of `fbago`, the generated `go.mod`
+includes a local `replace` for `github.com/yuWorm/fba-go`. Installed builds can
+use `fbago init ... --core-replace /path/to/fba-go` or `FBAGO_CORE_REPLACE`.

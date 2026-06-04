@@ -56,6 +56,22 @@ func TestRunInitAcceptsTemplateFlag(t *testing.T) {
 	}
 }
 
+func TestRunInitAcceptsCoreReplaceFlag(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := run([]string{"init", "github.com/acme/backend", "--core-replace", "../fba-go", "--dir", dir}); err != nil {
+		t.Fatalf("run init: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		t.Fatalf("read go.mod: %v", err)
+	}
+	if !strings.Contains(string(content), "replace github.com/yuWorm/fba-go => ../fba-go") {
+		t.Fatalf("go.mod = %q, missing explicit core replace", string(content))
+	}
+}
+
 func TestRunInitRequiresModuleArgument(t *testing.T) {
 	err := run([]string{"init", "--dir", t.TempDir()})
 	if err == nil {

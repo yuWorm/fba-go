@@ -1,6 +1,7 @@
 package task_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -84,6 +85,29 @@ func TestRegisteredTasksUseCoreRegistryAndMatchPythonSchema(t *testing.T) {
 	assertKeys(t, item, "name", "task")
 	if item["task"] != "task_demo" {
 		t.Fatalf("task = %v, want task_demo", item["task"])
+	}
+}
+
+func TestTaskPluginConsumesCoreRuntimeContract(t *testing.T) {
+	runtime := &recordingRuntime{}
+	container := di.New()
+	if err := container.Provide(func() coretask.Runtime { return runtime }); err != nil {
+		t.Fatalf("Provide() error = %v", err)
+	}
+	app := newTaskAppWithContainer(t, container)
+
+	resp, body := requestJSON(t, app, "POST", "/api/v1/schedulers/1/execute", "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNull(t, body)
+	if runtime.executedTask != "task_demo" {
+		t.Fatalf("executed task = %q, want task_demo", runtime.executedTask)
+	}
+
+	resp, body = requestJSON(t, app, "DELETE", "/api/v1/tasks/task-123/cancel", "")
+	assertStatusOK(t, resp)
+	assertEnvelopeNull(t, body)
+	if runtime.canceledTaskID != "task-123" {
+		t.Fatalf("canceled task ID = %q, want task-123", runtime.canceledTaskID)
 	}
 }
 
@@ -208,13 +232,18 @@ func TestTaskValidationErrorsMatchPython(t *testing.T) {
 
 func newTaskApp(t *testing.T, registry *coretask.Registry) *fiber.App {
 	t.Helper()
-	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler})
 	container := di.New()
 	if registry != nil {
 		if err := container.Provide(func() *coretask.Registry { return registry }); err != nil {
 			t.Fatalf("Provide() error = %v", err)
 		}
 	}
+	return newTaskAppWithContainer(t, container)
+}
+
+func newTaskAppWithContainer(t *testing.T, container *di.Container) *fiber.App {
+	t.Helper()
+	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler})
 	ctx := plugin.NewContext(plugin.ContextOptions{
 		Container: container,
 		APIGroup:  app.Group("/api/v1"),
@@ -380,4 +409,25 @@ func routeKeys(routes map[string]plugin.Route) []string {
 		keys = append(keys, key)
 	}
 	return keys
+}
+
+type recordingRuntime struct {
+	reloadCalls    int
+	executedTask   string
+	canceledTaskID string
+}
+
+func (r *recordingRuntime) Reload(context.Context) error {
+	r.reloadCalls++
+	return nil
+}
+
+func (r *recordingRuntime) Execute(_ context.Context, task string, _ any, _ any) error {
+	r.executedTask = task
+	return nil
+}
+
+func (r *recordingRuntime) Cancel(_ context.Context, taskID string) error {
+	r.canceledTaskID = taskID
+	return nil
 }

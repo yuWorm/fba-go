@@ -16,7 +16,7 @@ import (
 
 type Service struct {
 	repo     repo.Repository
-	registry *coretask.Registry
+	registry coretask.DefinitionRegistry
 	executor Executor
 	leader   LeaderLease
 	hub      realtime.Hub
@@ -30,7 +30,7 @@ func WithRealtimeHub(hub realtime.Hub) Option {
 	}
 }
 
-func New(repository repo.Repository, registry *coretask.Registry, executor Executor, leader LeaderLease, opts ...Option) *Service {
+func New(repository repo.Repository, registry coretask.DefinitionRegistry, executor Executor, leader LeaderLease, opts ...Option) *Service {
 	if repository == nil {
 		repository = repo.NewMemoryRepository(repo.SeedData())
 	}

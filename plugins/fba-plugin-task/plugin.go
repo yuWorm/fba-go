@@ -33,7 +33,7 @@ func (Module) Meta() plugin.Meta {
 }
 
 func (Module) Register(ctx plugin.Context) error {
-	var registry *coretask.Registry
+	var registry coretask.DefinitionRegistry
 	_ = ctx.Container().Resolve(&registry)
 
 	repository := repo.Repository(repo.NewMemoryRepository(repo.SeedData()))
@@ -45,7 +45,7 @@ func (Module) Register(ctx plugin.Context) error {
 		}
 	}
 
-	executor := service.Executor(service.NoopExecutor{})
+	executor := coretask.Runtime(coretask.NoopRuntime{})
 	_ = ctx.Container().Resolve(&executor)
 	var hub realtime.Hub
 	_ = ctx.Container().Resolve(&hub)

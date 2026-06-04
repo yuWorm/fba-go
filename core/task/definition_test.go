@@ -39,6 +39,30 @@ func TestRegistryKeepsDefinitionsInRegistrationOrder(t *testing.T) {
 	}
 }
 
+func TestRegistryImplementsDefinitionRegistryContract(t *testing.T) {
+	var registry task.DefinitionRegistry = task.NewRegistry()
+	_ = registry.Add(task.Definition{Type: "email:send", Name: "发送邮件"})
+
+	definitions := registry.All()
+	if len(definitions) != 1 || definitions[0].Type != "email:send" {
+		t.Fatalf("definitions = %+v, want email:send", definitions)
+	}
+}
+
+func TestNoopRuntimeValidatesRequiredTaskInputs(t *testing.T) {
+	runtime := task.NoopRuntime{}
+
+	if err := runtime.Execute(context.Background(), "", nil, nil); err == nil {
+		t.Fatal("Execute() empty task error = nil, want error")
+	}
+	if err := runtime.Cancel(context.Background(), ""); err == nil {
+		t.Fatal("Cancel() empty taskID error = nil, want error")
+	}
+	if err := runtime.Reload(context.Background()); err != nil {
+		t.Fatalf("Reload() error = %v", err)
+	}
+}
+
 func TestMapAsynqStateReturnsPythonCompatibleStatus(t *testing.T) {
 	cases := map[string]task.CompatibleStatus{
 		"active":    task.StatusStarted,
