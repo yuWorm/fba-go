@@ -1,0 +1,18 @@
+package app
+
+import (
+	"github.com/yuWorm/fba-go/core/plugin"
+	"[[ .Module ]]/internal/app/health"
+)
+
+func Register(registry *plugin.Registry) error {
+	modules := []plugin.Module{
+		health.Module(),
+	}
+	for _, module := range modules {
+		if err := registry.Add(module, plugin.ModeAuto); err != nil {
+			return err
+		}
+	}
+	return nil
+}

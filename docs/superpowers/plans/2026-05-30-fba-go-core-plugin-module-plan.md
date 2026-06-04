@@ -93,13 +93,16 @@ core/observability/*.go                     # health/readiness/metrics
 core/swagger/*.go                           # OpenAPI aggregation and UI handler
 core/plugin/*.go                            # plugin SDK, registry, dependency graph
 cmd/fbago/main.go                          # CLI root
-cmd/fbago/internal/scaffold/*.go           # backend project scaffold init
+cmd/fbago/internal/scaffold/*.go           # backend project scaffold init and template listing
+cmd/fbago/internal/scaffold/templates/*    # embedded basic scaffold template
 cmd/fbago/internal/plugin/*.go             # scan, manifest, graph, codegen
 cmd/fbago/internal/swagger/*.go            # swagger aggregation
 cmd/fbago/internal/contract/*.go           # snapshot and contract test
 examples/compat-host/*                      # minimal host app consuming generated plugins
 internal/testplugin/*                       # test-only plugin fixtures
 ```
+
+Full admin starter projects should live in a separate runnable template repository. `fbago init --template <local-path-or-git-spec>` supports `.fbago-template.yaml` with a template module name so the template repository can pass `go test ./...` before generation and still rewrite imports to the target project module during scaffold creation. Git specs support both `github.com/org/repo/subdir@ref` and `https://host/org/repo.git//subdir@ref`.
 
 External plugin modules are planned separately and should use this structure:
 

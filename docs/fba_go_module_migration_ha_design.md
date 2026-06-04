@@ -2327,6 +2327,7 @@ contracts/redis.contract.yaml
 
 ```bash
 fbago init <module>
+fbago template list
 fbago plugin scan
 fbago plugin graph
 fbago di generate
@@ -2341,11 +2342,50 @@ fbago migration apply
 
 ```bash
 fbago init github.com/your-org/my-backend
+fbago init github.com/your-org/my-backend --template basic
+fbago init github.com/your-org/my-backend --template ../fba-go-template/admin
+fbago init github.com/your-org/my-backend --template github.com/your-org/fba-go-template/admin@v0.1.0
 ```
 
-`init` 用于创建项目脚手架，语义对齐 `go mod init`：调用方传入 Go module name，工具生成 `go.mod`、`cmd/api`、`.env` 和项目内业务模块目录 `internal/app`。`internal/app` 是用户项目自己的业务代码位置，admin、dict、config、notice、订单、支付等可修改业务模块都应优先放在这里；远程 plugin 更适合承载邮件、OAuth2、对象存储、任务队列等通用能力。
+`init` 用于创建项目脚手架，语义对齐 `go mod init`：调用方传入 Go module name，工具按模板生成 `go.mod`、`Makefile`、`cmd/api`、`.env` 和项目内业务模块目录 `internal/app`。默认模板是内置 `basic`；完整 admin starter template 应维护在独立模板仓库中，并通过本地路径或 remote Git template spec 传给 `--template`。
 
-### 23.3 plugin scan
+`internal/app` 是用户项目自己的业务代码位置，admin、dict、config、notice、订单、支付等可修改业务模块都应优先放在这里；远程 plugin 更适合承载邮件、OAuth2、对象存储、任务队列等通用能力。
+
+`basic` 模板的 `Makefile` 至少提供 `tidy`、`test`、`run`、`dev`、`build`、`clean`，并将 Go build cache 固定在项目目录内，避免本机或沙箱缓存权限影响初始化后的第一轮验证。
+
+本地路径模板必须是一个完整模板目录，可以使用 `[[ .Module ]]` 渲染 module name，文件名以 `.tmpl` 结尾时会渲染并去掉后缀；`env.tmpl` 和 `gitignore.tmpl` 分别输出为 `.env` 和 `.gitignore`。本地模板路径面向“可直接运行、可独立测试”的模板仓库，因此模板仓库可以保留自己的真实 `go.mod`，同时提供 `go.mod.tmpl` 作为生成项目的 `go.mod`。
+
+可运行模板仓库建议在根目录放置 `.fbago-template.yaml`：
+
+```yaml
+module: github.com/your-org/fba-go-template/admin
+```
+
+`fbago init` 会把该模板 module path 替换为用户传入的目标 module path，并且不会把 `.fbago-template.yaml` 复制到新项目。这样模板仓库源码可以直接使用 `github.com/your-org/fba-go-template/admin/internal/app/...` import 并通过 `go test ./...`，生成项目后这些 import 会变成 `github.com/your-org/my-backend/internal/app/...`。
+
+初始化时会跳过 `.git`、`.hg`、`.svn`、`.codegraph`、`.cache`、`bin`、`tmp`、`node_modules` 目录，以及 `.DS_Store`、`Thumbs.db` 文件，避免把仓库元数据和本地构建产物复制进新项目。
+
+remote Git template spec 支持两种形式：
+
+```bash
+# 简写：前三段是 Git 仓库，后续路径是模板子目录
+fbago init github.com/your-org/my-backend --template github.com/your-org/fba-go-template/admin@v0.1.0
+
+# 显式 Git URL：用 // 分隔仓库 URL 和模板子目录
+fbago init github.com/your-org/my-backend --template https://github.com/your-org/fba-go-template.git//admin@v0.1.0
+```
+
+`@ref` 可指定 tag、branch 或 Git 可识别的 ref；不指定时使用仓库默认分支。`FBAGO_TEMPLATE_CACHE_DIR` 可指定 clone 临时 checkout 的父目录。
+
+### 23.3 template list
+
+```bash
+fbago template list
+```
+
+输出当前内置模板名，例如 `basic`。外部模板仓库或本地路径模板不在此列表中。
+
+### 23.4 plugin scan
 
 ```bash
 fbago plugin scan \
@@ -2363,7 +2403,7 @@ internal/generated/plugin_graph.dot
 internal/generated/plugin_manifest.lock
 ```
 
-### 23.4 di generate
+### 23.5 di generate
 
 ```bash
 fbago di generate \
@@ -2371,7 +2411,7 @@ fbago di generate \
   --out internal/generated/fba_di.gen.go
 ```
 
-### 23.5 swagger scan
+### 23.6 swagger scan
 
 ```bash
 fbago swagger scan \
@@ -2379,7 +2419,7 @@ fbago swagger scan \
   --out docs/openapi.json
 ```
 
-### 23.6 contract test
+### 23.7 contract test
 
 ```bash
 fbago contract test \

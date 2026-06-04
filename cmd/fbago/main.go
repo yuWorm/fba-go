@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,10 @@ import (
 	"github.com/yuWorm/fba-go/cmd/fbago/internal/scaffold"
 	fbswagger "github.com/yuWorm/fba-go/cmd/fbago/internal/swagger"
 )
+
+var stdout io.Writer = os.Stdout
+
+const initUsage = "usage: fbago init <module> [--template TEMPLATE] [--dir DIR]"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -39,13 +44,15 @@ func run(args []string) error {
 		return runContractSnapshot(args[2:])
 	case "contract test":
 		return runContractTest(args[2:])
+	case "template list":
+		return runTemplateList(args[2:])
 	default:
 		return fmt.Errorf("unknown command %s %s", args[0], args[1])
 	}
 }
 
 func usage() error {
-	return fmt.Errorf("usage: fbago <init|plugin|swagger|contract> [command]")
+	return fmt.Errorf("usage: fbago <init|template|plugin|swagger|contract> [command]")
 }
 
 func runInit(args []string) error {
@@ -54,9 +61,23 @@ func runInit(args []string) error {
 		return err
 	}
 	if opts.Module == "" {
-		return fmt.Errorf("usage: fbago init <module> [--dir DIR]")
+		return fmt.Errorf(initUsage)
 	}
 	return scaffold.Init(opts)
+}
+
+func runTemplateList(args []string) error {
+	if len(args) != 0 {
+		return fmt.Errorf("usage: fbago template list")
+	}
+	templates, err := scaffold.ListTemplates()
+	if err != nil {
+		return err
+	}
+	for _, template := range templates {
+		fmt.Fprintln(stdout, template)
+	}
+	return nil
 }
 
 func parseInitArgs(args []string) (scaffold.InitOptions, error) {
@@ -72,12 +93,18 @@ func parseInitArgs(args []string) (scaffold.InitOptions, error) {
 			opts.Dir = args[i]
 		case "--force", "-force":
 			opts.Force = true
+		case "--template", "-template":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("missing value for %s", arg)
+			}
+			opts.Template = args[i]
 		default:
 			if strings.HasPrefix(arg, "-") {
 				return opts, fmt.Errorf("unknown init flag %s", arg)
 			}
 			if opts.Module != "" {
-				return opts, fmt.Errorf("usage: fbago init <module> [--dir DIR]")
+				return opts, fmt.Errorf(initUsage)
 			}
 			opts.Module = arg
 		}
