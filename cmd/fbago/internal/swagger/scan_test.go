@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	fbswagger "github.com/yuWorm/fba-go/cmd/fbagen/internal/swagger"
+	fbswagger "github.com/yuWorm/fba-go/cmd/fbago/internal/swagger"
 )
 
 func TestScanReadsPluginLockAndWritesAggregatedOpenAPI(t *testing.T) {

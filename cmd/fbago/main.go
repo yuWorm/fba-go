@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	fbcontract "github.com/yuWorm/fba-go/cmd/fbagen/internal/contract"
-	fbplugin "github.com/yuWorm/fba-go/cmd/fbagen/internal/plugin"
-	fbswagger "github.com/yuWorm/fba-go/cmd/fbagen/internal/swagger"
+	fbcontract "github.com/yuWorm/fba-go/cmd/fbago/internal/contract"
+	fbplugin "github.com/yuWorm/fba-go/cmd/fbago/internal/plugin"
+	"github.com/yuWorm/fba-go/cmd/fbago/internal/scaffold"
+	fbswagger "github.com/yuWorm/fba-go/cmd/fbago/internal/swagger"
 )
 
 func main() {
@@ -20,8 +21,14 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) == 0 {
+		return usage()
+	}
+	if args[0] == "init" {
+		return runInit(args[1:])
+	}
 	if len(args) < 2 {
-		return fmt.Errorf("usage: fbagen <plugin|swagger> <command>")
+		return usage()
 	}
 	switch args[0] + " " + args[1] {
 	case "plugin scan":
@@ -35,6 +42,47 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %s %s", args[0], args[1])
 	}
+}
+
+func usage() error {
+	return fmt.Errorf("usage: fbago <init|plugin|swagger|contract> [command]")
+}
+
+func runInit(args []string) error {
+	opts, err := parseInitArgs(args)
+	if err != nil {
+		return err
+	}
+	if opts.Module == "" {
+		return fmt.Errorf("usage: fbago init <module> [--dir DIR]")
+	}
+	return scaffold.Init(opts)
+}
+
+func parseInitArgs(args []string) (scaffold.InitOptions, error) {
+	opts := scaffold.InitOptions{Dir: "."}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "--dir", "-dir":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("missing value for %s", arg)
+			}
+			opts.Dir = args[i]
+		case "--force", "-force":
+			opts.Force = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return opts, fmt.Errorf("unknown init flag %s", arg)
+			}
+			if opts.Module != "" {
+				return opts, fmt.Errorf("usage: fbago init <module> [--dir DIR]")
+			}
+			opts.Module = arg
+		}
+	}
+	return opts, nil
 }
 
 func runPluginScan(args []string) error {

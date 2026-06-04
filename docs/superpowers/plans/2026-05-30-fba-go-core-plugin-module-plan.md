@@ -4,7 +4,7 @@
 
 **Goal:** Build `github.com/yuWorm/fba-go` as the reusable core Go module, with every business capability delivered as a build-time registered Go module plugin.
 
-**Architecture:** The root repository is core-only: app lifecycle, config, Fiber integration, DI, response/errors, logger, Redis/DB providers, auth primitives, RBAC primitives, task primitives, migration, Swagger, plugin registry, contracts, and `fbagen`. Frontend-compatible business routes such as `/api/v1/auth/*`, `/api/v1/sys/*`, `/api/v1/dict-*`, `/api/v1/tasks/*`, `/api/v1/logs/*`, and `/api/v1/monitors/*` are implemented by separate business plugin modules and compiled into a host app through generated registration code.
+**Architecture:** The root repository is core-only: app lifecycle, config, Fiber integration, DI, response/errors, logger, Redis/DB providers, auth primitives, RBAC primitives, task primitives, migration, Swagger, plugin registry, contracts, and `fbago`. Frontend-compatible business routes such as `/api/v1/auth/*`, `/api/v1/sys/*`, `/api/v1/dict-*`, `/api/v1/tasks/*`, `/api/v1/logs/*`, and `/api/v1/monitors/*` are implemented by separate business plugin modules and compiled into a host app through generated registration code.
 
 **Tech Stack:** Go 1.23.5, Fiber v3, Dig, Zap, go-redis, GORM-compatible DB abstraction, Asynq, Pond, Prometheus, OpenAPI/Swagger fragments, YAML manifests, build-time code generation.
 
@@ -92,10 +92,11 @@ core/pool/*.go                              # Pond provider
 core/observability/*.go                     # health/readiness/metrics
 core/swagger/*.go                           # OpenAPI aggregation and UI handler
 core/plugin/*.go                            # plugin SDK, registry, dependency graph
-cmd/fbagen/main.go                          # CLI root
-cmd/fbagen/internal/plugin/*.go             # scan, manifest, graph, codegen
-cmd/fbagen/internal/swagger/*.go            # swagger aggregation
-cmd/fbagen/internal/contract/*.go           # snapshot and contract test
+cmd/fbago/main.go                          # CLI root
+cmd/fbago/internal/scaffold/*.go           # backend project scaffold init
+cmd/fbago/internal/plugin/*.go             # scan, manifest, graph, codegen
+cmd/fbago/internal/swagger/*.go            # swagger aggregation
+cmd/fbago/internal/contract/*.go           # snapshot and contract test
 examples/compat-host/*                      # minimal host app consuming generated plugins
 internal/testplugin/*                       # test-only plugin fixtures
 ```
@@ -261,7 +262,7 @@ Redis contract must include token, refresh token, user cache, captcha, limiter, 
 
 - [ ] **Step 3: Validate YAML parses**
 
-Run: `go test ./cmd/fbagen/internal/contract`
+Run: `go test ./cmd/fbago/internal/contract`
 
 Expected initially: FAIL until the contract package exists. Mark this as pending until Chunk 8.
 
@@ -868,9 +869,9 @@ git commit -m "feat: add core health readiness metrics"
 - Create: `core/swagger/fragment.go`
 - Create: `core/swagger/aggregate.go`
 - Create: `core/swagger/handler.go`
-- Create: `cmd/fbagen/internal/swagger/scan.go`
+- Create: `cmd/fbago/internal/swagger/scan.go`
 - Test: `core/swagger/aggregate_test.go`
-- Test: `cmd/fbagen/internal/swagger/scan_test.go`
+- Test: `cmd/fbago/internal/swagger/scan_test.go`
 
 - [ ] **Step 1: Write failing aggregation tests**
 
@@ -878,17 +879,17 @@ Cover path merge, schema merge, plugin-prefixed schema names, and duplicate meth
 
 - [ ] **Step 2: Run test**
 
-Run: `go test ./core/swagger ./cmd/fbagen/internal/swagger`
+Run: `go test ./core/swagger ./cmd/fbago/internal/swagger`
 
 Expected: FAIL.
 
 - [ ] **Step 3: Implement aggregator and handlers**
 
-Expose handlers for `/docs`, `/openapi`, and `/swagger/doc.json`. Add the first `fbagen swagger scan` implementation that reads plugin fragments from the plugin lock file and writes the aggregated OpenAPI document.
+Expose handlers for `/docs`, `/openapi`, and `/swagger/doc.json`. Add the first `fbago swagger scan` implementation that reads plugin fragments from the plugin lock file and writes the aggregated OpenAPI document.
 
 - [ ] **Step 4: Run test**
 
-Run: `go test ./core/swagger ./cmd/fbagen/internal/swagger`
+Run: `go test ./core/swagger ./cmd/fbago/internal/swagger`
 
 Expected: PASS.
 
@@ -897,18 +898,18 @@ Expected: PASS.
 Run:
 
 ```bash
-git add core/swagger cmd/fbagen/internal/swagger
+git add core/swagger cmd/fbago/internal/swagger
 git commit -m "feat: add swagger aggregation"
 ```
 
-### Task 17: Implement `fbagen plugin scan`
+### Task 17: Implement `fbago plugin scan`
 
 **Files:**
-- Create: `cmd/fbagen/main.go`
-- Create: `cmd/fbagen/internal/plugin/manifest.go`
-- Create: `cmd/fbagen/internal/plugin/scan.go`
-- Create: `cmd/fbagen/internal/plugin/generate.go`
-- Test: `cmd/fbagen/internal/plugin/scan_test.go`
+- Create: `cmd/fbago/main.go`
+- Create: `cmd/fbago/internal/plugin/manifest.go`
+- Create: `cmd/fbago/internal/plugin/scan.go`
+- Create: `cmd/fbago/internal/plugin/generate.go`
+- Test: `cmd/fbago/internal/plugin/scan_test.go`
 
 - [ ] **Step 1: Write failing scanner tests**
 
@@ -916,7 +917,7 @@ Use `internal/testplugin` fixtures and assert manifest, import scan, and local s
 
 - [ ] **Step 2: Run test**
 
-Run: `go test ./cmd/fbagen/internal/plugin`
+Run: `go test ./cmd/fbago/internal/plugin`
 
 Expected: FAIL.
 
@@ -934,7 +935,7 @@ Generated code must call `reg.Add(plugin.FBAPlugin(), plugin.ModeAuto)` or the c
 
 - [ ] **Step 4: Run test**
 
-Run: `go test ./cmd/fbagen/internal/plugin`
+Run: `go test ./cmd/fbago/internal/plugin`
 
 Expected: PASS.
 
@@ -943,17 +944,17 @@ Expected: PASS.
 Run:
 
 ```bash
-git add cmd/fbagen internal/testplugin
+git add cmd/fbago internal/testplugin
 git commit -m "feat: add plugin code generation"
 ```
 
 ### Task 18: Implement contract snapshot and contract test CLI
 
 **Files:**
-- Create: `cmd/fbagen/internal/contract/contract.go`
-- Create: `cmd/fbagen/internal/contract/snapshot.go`
-- Create: `cmd/fbagen/internal/contract/test.go`
-- Test: `cmd/fbagen/internal/contract/contract_test.go`
+- Create: `cmd/fbago/internal/contract/contract.go`
+- Create: `cmd/fbago/internal/contract/snapshot.go`
+- Create: `cmd/fbago/internal/contract/test.go`
+- Test: `cmd/fbago/internal/contract/contract_test.go`
 
 - [ ] **Step 1: Write failing contract parser tests**
 
@@ -961,7 +962,7 @@ Assert route/method/path/response/Redis contracts parse from `contracts/*.yaml`.
 
 - [ ] **Step 2: Run test**
 
-Run: `go test ./cmd/fbagen/internal/contract`
+Run: `go test ./cmd/fbago/internal/contract`
 
 Expected: FAIL.
 
@@ -971,7 +972,7 @@ The first implementation may validate route existence, envelope fields, cookie/h
 
 - [ ] **Step 4: Run tests**
 
-Run: `go test ./cmd/fbagen/internal/contract ./...`
+Run: `go test ./cmd/fbago/internal/contract ./...`
 
 Expected: PASS.
 
@@ -980,7 +981,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add cmd/fbagen/internal/contract contracts
+git add cmd/fbago/internal/contract contracts
 git commit -m "feat: add api contract tooling"
 ```
 
@@ -1006,7 +1007,7 @@ The example imports `github.com/yuWorm/fba-go` and generated plugin registration
 Run:
 
 ```bash
-go run ./cmd/fbagen plugin scan \
+go run ./cmd/fbago plugin scan \
   --mode manifest \
   --manifest examples/compat-host/plugins.yaml \
   --out examples/compat-host/internal/generated/fba_plugins.gen.go
@@ -1056,7 +1057,7 @@ These tasks are not implemented inside this repository unless the plugin reposit
 
 - [ ] **Step 1: Write contract tests for priority auth/sys endpoints**
 
-Run from host app: `fbagen contract test --base-url http://127.0.0.1:8001 --contract contracts/api.contract.yaml`
+Run from host app: `fbago contract test --base-url http://127.0.0.1:8001 --contract contracts/api.contract.yaml`
 
 Expected initially: FAIL.
 
@@ -1088,7 +1089,7 @@ Implement users, roles, menus, departments, data rules, data scopes, files, plug
 
 - [ ] **Step 1: Write failing tests for `/api/v1/dict-datas/type-codes/{code}`**
 
-Run: `fbagen contract test --base-url http://127.0.0.1:8001 --contract contracts/api.contract.yaml`
+Run: `fbago contract test --base-url http://127.0.0.1:8001 --contract contracts/api.contract.yaml`
 
 Expected: FAIL until dict plugin is registered and implemented.
 
@@ -1116,7 +1117,7 @@ Expected: dict endpoints PASS.
 
 - [ ] **Step 1: Write failing tests for registered tasks and scheduler CRUD**
 
-Run: `fbagen contract test --base-url http://127.0.0.1:8001 --contract contracts/api.contract.yaml`
+Run: `fbago contract test --base-url http://127.0.0.1:8001 --contract contracts/api.contract.yaml`
 
 Expected: FAIL.
 
@@ -1151,11 +1152,11 @@ test:
 
 .PHONY: generate
 generate:
-	go run ./cmd/fbagen plugin scan --mode manifest --manifest examples/compat-host/plugins.yaml --out examples/compat-host/internal/generated/fba_plugins.gen.go
+	go run ./cmd/fbago plugin scan --mode manifest --manifest examples/compat-host/plugins.yaml --out examples/compat-host/internal/generated/fba_plugins.gen.go
 
 .PHONY: contract
 contract:
-	go run ./cmd/fbagen contract test --base-url http://127.0.0.1:8001 --contract contracts/api.contract.yaml
+	go run ./cmd/fbago contract test --base-url http://127.0.0.1:8001 --contract contracts/api.contract.yaml
 ```
 
 - [ ] **Step 2: Run verification**
@@ -1184,9 +1185,9 @@ Include:
 
 ```text
 go test ./...
-fbagen plugin graph
-fbagen contract snapshot
-fbagen contract test
+fbago plugin graph
+fbago contract snapshot
+fbago contract test
 Redis single/sentinel smoke test
 DB migration dry-run
 Scheduler leader lock smoke test
@@ -1220,7 +1221,7 @@ Implement in this order:
 4. Redis, DB, migration
 5. Plugin SDK and registry
 6. Auth/RBAC/task/observability primitives
-7. Swagger and fbagen
+7. Swagger and fbago
 8. Example host app
 9. External official plugins: admin, dict, task
 10. Contract test and HA release gates
@@ -1230,7 +1231,7 @@ The first shippable milestone is reached when:
 
 ```text
 go test ./...
-go run ./cmd/fbagen plugin scan ...
+go run ./cmd/fbago plugin scan ...
 examples/compat-host boots
 core has no business route handlers
 ```

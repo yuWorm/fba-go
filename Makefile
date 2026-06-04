@@ -16,7 +16,7 @@ test:
 
 .PHONY: generate
 generate:
-	$(GOENV) $(GO) run ./cmd/fbagen plugin scan --mode manifest --manifest examples/compat-host/plugins.yaml --out examples/compat-host/internal/generated/fba_plugins.gen.go
+	$(GOENV) $(GO) run ./cmd/fbago plugin scan --mode manifest --manifest examples/compat-host/plugins.yaml --out examples/compat-host/internal/generated/fba_plugins.gen.go
 
 .PHONY: contract
 contract:
@@ -35,7 +35,7 @@ contract:
 		cat "$$log"; \
 		exit 1; \
 	fi; \
-	$(GOENV) $(GO) run ./cmd/fbagen contract test --base-url http://127.0.0.1:8000 --contract contracts
+	$(GOENV) $(GO) run ./cmd/fbago contract test --base-url http://127.0.0.1:8000 --contract contracts
 
 .PHONY: contract-db
 contract-db:
@@ -54,4 +54,4 @@ contract-db:
 		cat "$$log"; \
 		exit 1; \
 	fi; \
-	$(GOENV) $(GO) run ./cmd/fbagen contract test --base-url http://127.0.0.1:8000 --contract contracts
+	$(GOENV) $(GO) run ./cmd/fbago contract test --base-url http://127.0.0.1:8000 --contract contracts

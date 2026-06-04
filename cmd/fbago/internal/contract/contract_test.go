@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yuWorm/fba-go/cmd/fbagen/internal/contract"
+	"github.com/yuWorm/fba-go/cmd/fbago/internal/contract"
 )
 
 func TestLoadParsesContracts(t *testing.T) {
