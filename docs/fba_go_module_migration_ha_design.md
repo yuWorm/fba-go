@@ -2343,12 +2343,14 @@ fbago migration apply
 ```bash
 fbago init github.com/your-org/my-backend
 fbago init github.com/your-org/my-backend --template basic
-fbago init github.com/your-org/my-backend --template ../fba-go-template/admin
-fbago init github.com/your-org/my-backend --template github.com/your-org/fba-go-template/admin@v0.1.0
+fbago init github.com/your-org/my-backend --template templates/fba-go-template/admin
+fbago init github.com/your-org/my-backend --template github.com/yuWorm/fba-go-template/admin@master
 fbago init github.com/your-org/my-backend --core-replace ../fba-go
 ```
 
 `init` 用于创建项目脚手架，语义对齐 `go mod init`：调用方传入 Go module name，工具按模板生成 `go.mod`、`Makefile`、`cmd/api`、`.env` 和项目内业务模块目录 `internal/app`。默认模板是内置 `basic`；完整 admin starter template 应维护在独立模板仓库中，并通过本地路径或 remote Git template spec 传给 `--template`。
+
+主仓库通过 `templates/fba-go-template` submodule 引入官方模板仓库 `github.com/yuWorm/fba-go-template`，本地开发和验证时优先使用 `--template templates/fba-go-template/admin`。
 
 `internal/app` 是用户项目自己的业务代码位置，admin、dict、config、notice、订单、支付等可修改业务模块都应优先放在这里；远程 plugin 更适合承载邮件、OAuth2、对象存储、任务队列等通用能力。
 
@@ -2361,10 +2363,10 @@ fbago init github.com/your-org/my-backend --core-replace ../fba-go
 可运行模板仓库建议在根目录放置 `.fbago-template.yaml`：
 
 ```yaml
-module: github.com/your-org/fba-go-template/admin
+module: github.com/yuWorm/fba-go-template/admin
 ```
 
-`fbago init` 会把该模板 module path 替换为用户传入的目标 module path，并且不会把 `.fbago-template.yaml` 复制到新项目。这样模板仓库源码可以直接使用 `github.com/your-org/fba-go-template/admin/internal/app/...` import 并通过 `go test ./...`，生成项目后这些 import 会变成 `github.com/your-org/my-backend/internal/app/...`。
+`fbago init` 会把该模板 module path 替换为用户传入的目标 module path，并且不会把 `.fbago-template.yaml` 复制到新项目。这样模板仓库源码可以直接使用 `github.com/yuWorm/fba-go-template/admin/internal/app/...` import 并通过 `go test ./...`，生成项目后这些 import 会变成 `github.com/your-org/my-backend/internal/app/...`。
 
 初始化时会跳过 `.git`、`.hg`、`.svn`、`.codegraph`、`.cache`、`bin`、`tmp`、`node_modules` 目录，以及 `.DS_Store`、`Thumbs.db` 文件，避免把仓库元数据和本地构建产物复制进新项目。
 
@@ -2372,10 +2374,10 @@ remote Git template spec 支持两种形式：
 
 ```bash
 # 简写：前三段是 Git 仓库，后续路径是模板子目录
-fbago init github.com/your-org/my-backend --template github.com/your-org/fba-go-template/admin@v0.1.0
+fbago init github.com/your-org/my-backend --template github.com/yuWorm/fba-go-template/admin@master
 
 # 显式 Git URL：用 // 分隔仓库 URL 和模板子目录
-fbago init github.com/your-org/my-backend --template https://github.com/your-org/fba-go-template.git//admin@v0.1.0
+fbago init github.com/your-org/my-backend --template https://github.com/yuWorm/fba-go-template.git//admin@master
 ```
 
 `@ref` 可指定 tag、branch 或 Git 可识别的 ref；不指定时使用仓库默认分支。`FBAGO_TEMPLATE_CACHE_DIR` 可指定 clone 临时 checkout 的父目录。

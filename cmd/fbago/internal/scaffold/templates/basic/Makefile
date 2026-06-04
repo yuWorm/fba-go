@@ -2,7 +2,7 @@ GO ?= go
 APP ?= fba-api
 BIN_DIR ?= bin
 GOCACHE_DIR ?= .cache/go-build
-GOENV := GOCACHE=$(CURDIR)/$(GOCACHE_DIR)
+GOENV := GOWORK=off GOCACHE=$(CURDIR)/$(GOCACHE_DIR)
 
 .PHONY: tidy
 tidy:

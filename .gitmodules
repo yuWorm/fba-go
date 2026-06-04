@@ -1,0 +1,3 @@
+[submodule "templates/fba-go-template"]
+	path = templates/fba-go-template
+	url = https://github.com/yuWorm/fba-go-template.git
