@@ -1,8 +1,0 @@
-id: task
-name: Task Plugin
-version: 0.1.0
-description: Task scheduler compatibility plugin
-depends_on:
-  - id: admin
-    optional: true
-auto_inject_default: true

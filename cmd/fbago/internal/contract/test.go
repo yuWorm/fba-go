@@ -257,6 +257,13 @@ func routeNeedsRefreshCookie(route Route) bool {
 }
 
 func routeNeedsAuth(route Route) bool {
+	switch route.Auth {
+	case "none":
+		return false
+	case "admin", "limited":
+		return true
+	}
+
 	path := strings.TrimRight(route.Path, "/")
 	switch {
 	case strings.HasSuffix(path, "/auth/captcha"),

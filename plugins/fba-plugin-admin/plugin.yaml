@@ -1,4 +1,0 @@
-id: admin
-name: Admin Plugin
-module: github.com/yuWorm/fba-plugin-admin
-mode: auto
