@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/command"
 	"github.com/yuWorm/fba-go/core/config"
 	"github.com/yuWorm/fba-go/core/di"
 	"github.com/yuWorm/fba-go/core/migration"
@@ -19,6 +20,7 @@ type Context interface {
 	Route(route Route) error
 	Task(task TaskDefinition) error
 	Migration(m migration.Migration) error
+	Command(command.Command) error
 	Swagger(fragment SwaggerFragment) error
 }
 
@@ -40,6 +42,7 @@ type RuntimeContext struct {
 	routes           []Route
 	tasks            []TaskDefinition
 	migrations       []migration.Migration
+	commands         []command.Command
 	swaggerFragments []SwaggerFragment
 }
 
@@ -98,6 +101,11 @@ func (c *RuntimeContext) Migration(m migration.Migration) error {
 	return nil
 }
 
+func (c *RuntimeContext) Command(command command.Command) error {
+	c.commands = append(c.commands, command)
+	return nil
+}
+
 func (c *RuntimeContext) Swagger(fragment SwaggerFragment) error {
 	c.swaggerFragments = append(c.swaggerFragments, fragment)
 	return nil
@@ -113,6 +121,10 @@ func (c *RuntimeContext) Tasks() []TaskDefinition {
 
 func (c *RuntimeContext) Migrations() []migration.Migration {
 	return append([]migration.Migration(nil), c.migrations...)
+}
+
+func (c *RuntimeContext) Commands() []command.Command {
+	return append([]command.Command(nil), c.commands...)
 }
 
 func (c *RuntimeContext) SwaggerFragments() []SwaggerFragment {

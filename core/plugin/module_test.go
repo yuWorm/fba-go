@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/command"
 	"github.com/yuWorm/fba-go/core/di"
 	"github.com/yuWorm/fba-go/core/migration"
 	"github.com/yuWorm/fba-go/core/plugin"
@@ -32,6 +33,9 @@ func TestModuleCanRegisterCoreContributions(t *testing.T) {
 	}
 	if len(ctx.Tasks()) != 1 {
 		t.Fatalf("tasks = %d, want 1", len(ctx.Tasks()))
+	}
+	if len(ctx.Commands()) != 1 {
+		t.Fatalf("commands = %d, want 1", len(ctx.Commands()))
 	}
 	if len(ctx.SwaggerFragments()) != 1 {
 		t.Fatalf("swagger fragments = %d, want 1", len(ctx.SwaggerFragments()))
@@ -81,6 +85,9 @@ func (testModule) Register(ctx plugin.Context) error {
 		return err
 	}
 	if err := ctx.Task(plugin.TaskDefinition{Type: "order:close", Name: "订单关闭"}); err != nil {
+		return err
+	}
+	if err := ctx.Command(command.Command{Use: "order close", Short: "Close expired orders"}); err != nil {
 		return err
 	}
 	return ctx.Swagger(plugin.SwaggerFragment{PluginID: "order"})
