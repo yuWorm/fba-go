@@ -45,7 +45,22 @@ func TestInitUsesExplicitCoreReplaceInBasicTemplate(t *testing.T) {
 		t.Fatalf("Init() error = %v", err)
 	}
 
+	assertFileContains(t, filepath.Join(dir, "go.mod"), "require github.com/yuWorm/fba-go v0.0.0")
 	assertFileContains(t, filepath.Join(dir, "go.mod"), "replace github.com/yuWorm/fba-go => ../fba-go")
+}
+
+func TestInitUsesExplicitCoreVersionInBasicTemplate(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := scaffold.Init(scaffold.InitOptions{
+		Dir:         dir,
+		Module:      "github.com/acme/backend",
+		CoreVersion: "v1.2.3",
+	}); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	assertFileContains(t, filepath.Join(dir, "go.mod"), "require github.com/yuWorm/fba-go v1.2.3")
 }
 
 func TestListTemplatesIncludesBasic(t *testing.T) {
@@ -135,18 +150,19 @@ func TestInitPrefersRenderableTemplateWhenTargetPathCollides(t *testing.T) {
 	templateDir := filepath.Join(t.TempDir(), "admin-template")
 	writeTemplateFile(t, templateDir, ".fbago-template.yaml", "module: github.com/acme/fba-go-template/admin\n")
 	writeTemplateFile(t, templateDir, "go.mod", "module github.com/acme/fba-go-template/admin\n\nreplace github.com/yuWorm/fba-go => ../../fba-go\n")
-	writeTemplateFile(t, templateDir, "go.mod.tmpl", "module [[ .Module ]]\n\nrequire github.com/yuWorm/fba-go v0.0.0\n")
+	writeTemplateFile(t, templateDir, "go.mod.tmpl", "module [[ .Module ]]\n\nrequire github.com/yuWorm/fba-go [[ .CoreVersion ]]\n")
 
 	if err := scaffold.Init(scaffold.InitOptions{
-		Dir:      dir,
-		Module:   "github.com/acme/backend",
-		Template: templateDir,
+		Dir:         dir,
+		Module:      "github.com/acme/backend",
+		Template:    templateDir,
+		CoreVersion: "v1.2.3",
 	}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
 	assertFileContains(t, filepath.Join(dir, "go.mod"), "module github.com/acme/backend")
-	assertFileContains(t, filepath.Join(dir, "go.mod"), "require github.com/yuWorm/fba-go v0.0.0")
+	assertFileContains(t, filepath.Join(dir, "go.mod"), "require github.com/yuWorm/fba-go v1.2.3")
 	assertFileNotContains(t, filepath.Join(dir, "go.mod"), "replace github.com/yuWorm/fba-go")
 }
 

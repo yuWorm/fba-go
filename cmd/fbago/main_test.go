@@ -72,6 +72,22 @@ func TestRunInitAcceptsCoreReplaceFlag(t *testing.T) {
 	}
 }
 
+func TestRunInitAcceptsCoreVersionFlag(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := run([]string{"init", "github.com/acme/backend", "--core-version", "v1.2.3", "--dir", dir}); err != nil {
+		t.Fatalf("run init: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		t.Fatalf("read go.mod: %v", err)
+	}
+	if !strings.Contains(string(content), "require github.com/yuWorm/fba-go v1.2.3") {
+		t.Fatalf("go.mod = %q, missing explicit core version", string(content))
+	}
+}
+
 func TestRunInitRequiresModuleArgument(t *testing.T) {
 	err := run([]string{"init", "--dir", t.TempDir()})
 	if err == nil {

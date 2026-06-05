@@ -24,12 +24,19 @@ var templateFS embed.FS
 
 const defaultTemplate = "basic"
 const coreModulePath = "github.com/yuWorm/fba-go"
+const developmentCoreVersion = "v0.0.0"
+
+var (
+	readBuildInfo          = debug.ReadBuildInfo
+	queryLatestCoreVersion = goListLatestCoreVersion
+)
 
 type InitOptions struct {
 	Dir         string
 	Module      string
 	Template    string
 	CoreReplace string
+	CoreVersion string
 	Force       bool
 }
 
@@ -55,6 +62,7 @@ type templateData struct {
 	Module         string
 	TemplateModule string
 	CoreReplace    string
+	CoreVersion    string
 }
 
 type localTemplateMetadata struct {
@@ -128,7 +136,12 @@ func Init(opts InitOptions) error {
 		}
 	}
 
-	data := templateData{Module: module, TemplateModule: bundle.TemplateModule, CoreReplace: resolveCoreReplace(opts.CoreReplace)}
+	coreReplace := resolveCoreReplace(opts.CoreReplace)
+	coreVersion, err := resolveCoreVersion(opts.CoreVersion, coreReplace)
+	if err != nil {
+		return err
+	}
+	data := templateData{Module: module, TemplateModule: bundle.TemplateModule, CoreReplace: coreReplace, CoreVersion: coreVersion}
 	for _, file := range files {
 		source := file.Content
 		if data.TemplateModule != "" {
@@ -173,12 +186,64 @@ func resolveCoreReplace(value string) string {
 	return filepath.ToSlash(root)
 }
 
+func resolveCoreVersion(value string, coreReplace string) (string, error) {
+	version := strings.TrimSpace(value)
+	if version == "" {
+		version = strings.TrimSpace(os.Getenv("FBAGO_CORE_VERSION"))
+	}
+	switch version {
+	case "":
+		if strings.TrimSpace(coreReplace) != "" {
+			// Go still needs a syntactically valid version even though replace makes
+			// the selected version irrelevant for local development templates.
+			return developmentCoreVersion, nil
+		}
+		if buildVersion, ok := releaseBuildCoreVersion(); ok {
+			return buildVersion, nil
+		}
+		return developmentCoreVersion, nil
+	case "latest":
+		return queryLatestCoreVersion()
+	default:
+		return version, nil
+	}
+}
+
+func releaseBuildCoreVersion() (string, bool) {
+	info, ok := readBuildInfo()
+	if !ok {
+		return "", false
+	}
+	version := strings.TrimSpace(info.Main.Version)
+	if version == "" || version == "(devel)" {
+		return "", false
+	}
+	return version, true
+}
+
+func goListLatestCoreVersion() (string, error) {
+	output, err := exec.Command("go", "list", "-m", "-f", "{{.Version}}", coreModulePath+"@latest").CombinedOutput()
+	if err != nil {
+		detail := strings.TrimSpace(string(output))
+		if detail != "" {
+			return "", fmt.Errorf("resolve latest %s: %w: %s", coreModulePath, err, detail)
+		}
+		return "", fmt.Errorf("resolve latest %s: %w", coreModulePath, err)
+	}
+	version := strings.TrimSpace(string(output))
+	if version == "" {
+		return "", fmt.Errorf("resolve latest %s: empty version", coreModulePath)
+	}
+	return version, nil
+}
+
 func isDevelopmentBuild() bool {
-	info, ok := debug.ReadBuildInfo()
+	info, ok := readBuildInfo()
 	if !ok {
 		return false
 	}
-	return info.Main.Version == "" || info.Main.Version == "(devel)"
+	version := strings.TrimSpace(info.Main.Version)
+	return version == "" || version == "(devel)"
 }
 
 func discoverCoreModuleRoot() (string, error) {

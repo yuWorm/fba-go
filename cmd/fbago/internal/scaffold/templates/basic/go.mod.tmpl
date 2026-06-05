@@ -2,7 +2,7 @@ module [[ .Module ]]
 
 go 1.25.0
 
-require github.com/yuWorm/fba-go v0.0.0
+require github.com/yuWorm/fba-go [[ .CoreVersion ]]
 [[ if .CoreReplace ]]
 replace github.com/yuWorm/fba-go => [[ .CoreReplace ]]
 [[ end ]]
