@@ -129,6 +129,33 @@ REALTIME_DISABLE_POLLING=true
 	}
 }
 
+func TestLoadFromEnvFileMapsPythonCORSSettings(t *testing.T) {
+	path := writeEnvFile(t, `
+MIDDLEWARE_CORS=false
+CORS_ALLOWED_ORIGINS='http://localhost:5173,http://127.0.0.1:3000'
+CORS_EXPOSE_HEADERS='X-Request-ID,X-Trace-ID'
+CORS_ALLOW_CREDENTIALS=false
+`)
+
+	opts, err := config.LoadFromEnvFile(path)
+	if err != nil {
+		t.Fatalf("LoadFromEnvFile() error = %v", err)
+	}
+
+	if opts.CORS.Enabled {
+		t.Fatal("CORS.Enabled = true, want false")
+	}
+	if got := strings.Join(opts.CORS.AllowedOrigins, ","); got != "http://localhost:5173,http://127.0.0.1:3000" {
+		t.Fatalf("CORS.AllowedOrigins = %q", got)
+	}
+	if got := strings.Join(opts.CORS.ExposeHeaders, ","); got != "X-Request-ID,X-Trace-ID" {
+		t.Fatalf("CORS.ExposeHeaders = %q", got)
+	}
+	if opts.CORS.AllowCredentials {
+		t.Fatal("CORS.AllowCredentials = true, want false")
+	}
+}
+
 func writeEnvFile(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), ".env")

@@ -11,6 +11,7 @@ type Options struct {
 	App      AppOptions
 	Fiber    fiber.Config
 	Logger   LoggerOptions
+	CORS     CORSOptions
 	Database DatabaseOptions
 	Redis    RedisOptions
 	Auth     AuthOptions
@@ -43,6 +44,21 @@ type LoggerOptions struct {
 	AccessLogPath    string
 	ErrorLogPath     string
 	Rotation         RotationOptions
+}
+
+type CORSOptions struct {
+	Enabled          bool
+	Disabled         bool
+	AllowedOrigins   []string
+	AllowCredentials bool
+	AllowMethods     []string
+	AllowHeaders     []string
+	ExposeHeaders    []string
+
+	// enabledSet distinguishes an explicit MIDDLEWARE_CORS=false from the zero
+	// value Options{}, where CORS should default to Python-compatible enabled.
+	enabledSet          bool
+	allowCredentialsSet bool
 }
 
 type RotationOptions struct {
@@ -143,6 +159,26 @@ func (o Options) WithDefaults() Options {
 	}
 	if o.App.Environment == "" {
 		o.App.Environment = "dev"
+	}
+	if o.CORS.Disabled {
+		o.CORS.Enabled = false
+	} else if !o.CORS.enabledSet {
+		o.CORS.Enabled = true
+	}
+	if len(o.CORS.AllowedOrigins) == 0 {
+		o.CORS.AllowedOrigins = []string{"http://127.0.0.1", "http://localhost:5173"}
+	}
+	if !o.CORS.allowCredentialsSet {
+		o.CORS.AllowCredentials = true
+	}
+	if len(o.CORS.AllowMethods) == 0 {
+		o.CORS.AllowMethods = []string{"*"}
+	}
+	if len(o.CORS.AllowHeaders) == 0 {
+		o.CORS.AllowHeaders = []string{"*"}
+	}
+	if len(o.CORS.ExposeHeaders) == 0 {
+		o.CORS.ExposeHeaders = []string{"X-Request-ID"}
 	}
 	if o.Realtime.Path == "" {
 		o.Realtime.Path = "/ws/socket.io"

@@ -100,6 +100,7 @@ func optionsFromEnv(values map[string]string) Options {
 	applyDatabaseEnv(&opts, values)
 	applyRedisEnv(&opts, values)
 	applyAuthEnv(&opts, values)
+	applyCORSEnv(&opts, values)
 	applyRealtimeEnv(&opts, values)
 	applyTaskEnv(&opts, values)
 	applyLoggerEnv(&opts, values)
@@ -199,6 +200,30 @@ func applyAuthEnv(opts *Options, values map[string]string) {
 	}
 	if ttl, ok := envDurationSeconds(values, "TOKEN_REFRESH_EXPIRE_SECONDS"); ok {
 		opts.Auth.RefreshTokenTTL = ttl
+	}
+}
+
+func applyCORSEnv(opts *Options, values map[string]string) {
+	if value, ok := envBool(values, "MIDDLEWARE_CORS", "CORS_ENABLED"); ok {
+		opts.CORS.Enabled = value
+		opts.CORS.Disabled = !value
+		opts.CORS.enabledSet = true
+	}
+	if value := firstEnv(values, "CORS_ALLOWED_ORIGINS"); value != "" {
+		opts.CORS.AllowedOrigins = splitList(value)
+	}
+	if value := firstEnv(values, "CORS_ALLOW_METHODS"); value != "" {
+		opts.CORS.AllowMethods = splitList(value)
+	}
+	if value := firstEnv(values, "CORS_ALLOW_HEADERS"); value != "" {
+		opts.CORS.AllowHeaders = splitList(value)
+	}
+	if value := firstEnv(values, "CORS_EXPOSE_HEADERS"); value != "" {
+		opts.CORS.ExposeHeaders = splitList(value)
+	}
+	if value, ok := envBool(values, "CORS_ALLOW_CREDENTIALS"); ok {
+		opts.CORS.AllowCredentials = value
+		opts.CORS.allowCredentialsSet = true
 	}
 }
 
