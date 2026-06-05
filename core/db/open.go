@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/yuWorm/fba-go/core/config"
-	"gorm.io/driver/mysql"
+	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -38,7 +39,7 @@ func OpenGORM(driver string, dsn string, opts config.DatabaseOptions) (*gorm.DB,
 	var dialector gorm.Dialector
 	switch driver {
 	case "mysql":
-		dialector = mysql.Open(dsn)
+		dialector = gormmysql.Open(normalizeMySQLDSN(dsn))
 	case "postgres", "postgresql":
 		dialector = postgres.Open(dsn)
 	case "sqlite", "sqlite3":
@@ -49,6 +50,9 @@ func OpenGORM(driver string, dsn string, opts config.DatabaseOptions) (*gorm.DB,
 	database, err := gorm.Open(dialector, &gorm.Config{})
 	if err != nil {
 		return nil, err
+	}
+	if driver == "mysql" {
+		database = database.Set("gorm:table_options", mysqlTableOptions())
 	}
 	if err := configurePool(database, opts); err != nil {
 		return nil, err
@@ -78,4 +82,25 @@ func configurePool(database *gorm.DB, opts config.DatabaseOptions) error {
 
 func normalizeDriver(driver string) string {
 	return strings.ToLower(strings.TrimSpace(driver))
+}
+
+func normalizeMySQLDSN(dsn string) string {
+	cfg, err := mysqldriver.ParseDSN(dsn)
+	if err != nil {
+		return dsn
+	}
+	if cfg.Params == nil {
+		cfg.Params = make(map[string]string)
+	}
+	// Admin seed data contains 4-byte Unicode such as emoji. utf8/utf8mb3
+	// connections can transmit Chinese text but still fail on those values.
+	cfg.Params["charset"] = "utf8mb4"
+	if cfg.Collation == "" || !strings.HasPrefix(strings.ToLower(cfg.Collation), "utf8mb4_") {
+		cfg.Collation = "utf8mb4_unicode_ci"
+	}
+	return cfg.FormatDSN()
+}
+
+func mysqlTableOptions() string {
+	return "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 }

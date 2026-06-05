@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/alitto/pond/v2 v2.6.0
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/gofiber/contrib/v3/socketio v1.3.0
 	github.com/gofiber/fiber/v3 v3.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -26,7 +27,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fasthttp/websocket v1.5.12 // indirect
-	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/gofiber/contrib/v3/websocket v1.2.0 // indirect
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.6 // indirect
