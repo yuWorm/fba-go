@@ -83,7 +83,7 @@ make run
 
 ```bash
 fbago init github.com/your-org/my-admin \
-  --template github.com/yuWorm/fba-go-template/admin@master \
+  --template github.com/yuWorm/fba-go-template/admin@v0.0.1 \
   --dir ./my-admin
 
 cd my-admin

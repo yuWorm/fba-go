@@ -2344,7 +2344,7 @@ fbago migration apply
 fbago init github.com/your-org/my-backend
 fbago init github.com/your-org/my-backend --template basic
 fbago init github.com/your-org/my-backend --template templates/fba-go-template/admin
-fbago init github.com/your-org/my-backend --template github.com/yuWorm/fba-go-template/admin@master
+fbago init github.com/your-org/my-backend --template github.com/yuWorm/fba-go-template/admin@v0.0.1
 fbago init github.com/your-org/my-backend --core-replace ../fba-go
 ```
 
@@ -2374,10 +2374,10 @@ remote Git template spec 支持两种形式：
 
 ```bash
 # 简写：前三段是 Git 仓库，后续路径是模板子目录
-fbago init github.com/your-org/my-backend --template github.com/yuWorm/fba-go-template/admin@master
+fbago init github.com/your-org/my-backend --template github.com/yuWorm/fba-go-template/admin@v0.0.1
 
 # 显式 Git URL：用 // 分隔仓库 URL 和模板子目录
-fbago init github.com/your-org/my-backend --template https://github.com/yuWorm/fba-go-template.git//admin@master
+fbago init github.com/your-org/my-backend --template https://github.com/yuWorm/fba-go-template.git//admin@v0.0.1
 ```
 
 `@ref` 可指定 tag、branch 或 Git 可识别的 ref；不指定时使用仓库默认分支。`FBAGO_TEMPLATE_CACHE_DIR` 可指定 clone 临时 checkout 的父目录。
