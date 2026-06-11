@@ -1,0 +1,15 @@
+version: 1
+
+template:
+  name: basic
+  module: [[ .Module ]]
+  source: [[ .TemplateSource ]]
+  template_path: [[ .TemplatePath ]]
+  core_version: [[ .CoreVersion ]]
+
+managed:
+  - name: health
+    kind: app
+    mode: source
+    path: internal/app/health
+    source_path: internal/app/health

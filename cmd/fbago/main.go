@@ -17,6 +17,8 @@ import (
 var stdout io.Writer = os.Stdout
 
 const initUsage = "usage: fbago init <module> [--template TEMPLATE] [--dir DIR] [--core-replace PATH] [--core-version VERSION|latest]"
+const templateDiffUsage = "usage: fbago template diff [--dir DIR] [--template TEMPLATE]"
+const templateUpdateUsage = "usage: fbago template update [--dir DIR] [--template TEMPLATE] [--dry-run] [--force]"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -46,6 +48,10 @@ func run(args []string) error {
 		return runContractTest(args[2:])
 	case "template list":
 		return runTemplateList(args[2:])
+	case "template diff":
+		return runTemplateDiff(args[2:])
+	case "template update":
+		return runTemplateUpdate(args[2:])
 	default:
 		return fmt.Errorf("unknown command %s %s", args[0], args[1])
 	}
@@ -78,6 +84,62 @@ func runTemplateList(args []string) error {
 		fmt.Fprintln(stdout, template)
 	}
 	return nil
+}
+
+func runTemplateDiff(args []string) error {
+	fs := flag.NewFlagSet("template diff", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "project directory")
+	template := fs.String("template", "", "template source override")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf(templateDiffUsage)
+	}
+	result, err := scaffold.DiffTemplate(scaffold.TemplateDiffOptions{
+		Dir:      *dir,
+		Template: *template,
+	})
+	if err != nil {
+		return err
+	}
+	printTemplateChanges(result.Entries)
+	return nil
+}
+
+func runTemplateUpdate(args []string) error {
+	fs := flag.NewFlagSet("template update", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "project directory")
+	template := fs.String("template", "", "template source override")
+	dryRun := fs.Bool("dry-run", false, "show changes without writing")
+	force := fs.Bool("force", false, "overwrite modified managed files")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf(templateUpdateUsage)
+	}
+	result, err := scaffold.UpdateTemplate(scaffold.TemplateUpdateOptions{
+		Dir:      *dir,
+		Template: *template,
+		DryRun:   *dryRun,
+		Force:    *force,
+	})
+	if err != nil && len(result.Entries) == 0 {
+		return err
+	}
+	printTemplateChanges(result.Entries)
+	return err
+}
+
+func printTemplateChanges(entries []scaffold.TemplateChange) {
+	if len(entries) == 0 {
+		fmt.Fprintln(stdout, "no template changes")
+		return
+	}
+	for _, entry := range entries {
+		fmt.Fprintf(stdout, "%s %s\n", entry.Status, entry.Path)
+	}
 }
 
 func parseInitArgs(args []string) (scaffold.InitOptions, error) {

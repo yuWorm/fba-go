@@ -2390,7 +2390,19 @@ fbago template list
 
 输出当前内置模板名，例如 `basic`。外部模板仓库或本地路径模板不在此列表中。
 
-### 23.4 plugin scan
+### 23.4 template diff / update
+
+```bash
+fbago template diff
+fbago template update --dry-run
+fbago template update --force
+```
+
+支持 `.fbago.yaml` 的项目可以基于该 manifest 对比或刷新模板管理的源码。`managed` 项只覆盖模板声明的 `internal/app/*` 与 `plugins/*` 等路径，不改变业务仍然放在 `internal/app` 下的方案。项目可以把单个 managed 项改为 `mode: manual`、`mode: ignore` 或 `mode: detached`，表示该路径已经进入项目侧手动维护，后续 diff/update 不再触碰。
+
+`template diff` 输出 managed 文件的 `A/M/D` 变化列表；`template update` 默认只写新增文件和 manifest，不会覆盖或删除已有 managed 文件。涉及修改或删除时，调用方需要先查看变更列表，再显式传入 `--force`。本地验证模板改动时，可用 `--template <local-template-path>` 覆盖 `.fbago.yaml` 中记录的来源。
+
+### 23.5 plugin scan
 
 ```bash
 fbago plugin scan \
@@ -2408,7 +2420,7 @@ internal/generated/plugin_graph.dot
 internal/generated/plugin_manifest.lock
 ```
 
-### 23.5 di generate
+### 23.6 di generate
 
 ```bash
 fbago di generate \
@@ -2416,7 +2428,7 @@ fbago di generate \
   --out internal/generated/fba_di.gen.go
 ```
 
-### 23.6 swagger scan
+### 23.7 swagger scan
 
 ```bash
 fbago swagger scan \
@@ -2424,7 +2436,7 @@ fbago swagger scan \
   --out docs/openapi.json
 ```
 
-### 23.7 contract test
+### 23.8 contract test
 
 ```bash
 fbago contract test \

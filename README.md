@@ -111,6 +111,8 @@ make run
 | `go install github.com/yuWorm/fba-go/cmd/fbago@latest` | 安装 CLI |
 | `fbago init <module>` | 创建项目 |
 | `go run ./cmd/fbago template list` | 查看内置模板，本地开发使用 |
+| `fbago template diff` | 基于 `.fbago.yaml` 查看模板 managed 文件变化 |
+| `fbago template update --dry-run` | 预览模板 managed 文件更新 |
 | `make test` | 运行 core 测试 |
 | `make verify-template` | 运行官方 admin 模板与生成项目验证 |
 

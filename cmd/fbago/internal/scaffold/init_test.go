@@ -28,6 +28,11 @@ func TestInitWritesBackendScaffoldWithModuleName(t *testing.T) {
 	assertFileContains(t, filepath.Join(dir, "internal/app/health/module.go"), `ID:          "health"`)
 	assertFileContains(t, filepath.Join(dir, ".env"), "FASTAPI_API_V1_PATH=/api/v1")
 	assertFileContains(t, filepath.Join(dir, ".env"), "MIDDLEWARE_REQUEST_ID=true")
+	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "version: 1")
+	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "template:")
+	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "name: basic")
+	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "source: embedded")
+	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "core_version: v0.0.0")
 	assertFileContains(t, filepath.Join(dir, "Makefile"), "$(GOENV) $(GO) mod tidy")
 	assertFileContains(t, filepath.Join(dir, "Makefile"), "$(GOENV) $(GO) build -o $(BIN_DIR)/$(APP) ./cmd/api")
 	assertFileContains(t, filepath.Join(dir, "Makefile"), "run ./cmd/api")
@@ -122,6 +127,20 @@ func TestInitRewritesRunnableLocalTemplateModule(t *testing.T) {
 	templateDir := filepath.Join(t.TempDir(), "admin-template")
 	writeTemplateFile(t, templateDir, ".fbago-template.yaml", "module: github.com/acme/fba-go-template/admin\n")
 	writeTemplateFile(t, templateDir, "go.mod", "module github.com/acme/fba-go-template/admin\n\ngo 1.25.0\n")
+	writeTemplateFile(t, templateDir, "fbago.yaml.tmpl", `version: 1
+
+template:
+  module: [[ .Module ]]
+  source_module: [[ .TemplateModule ]]
+  source: [[ .TemplateSource ]]
+
+managed:
+  - name: admin
+    kind: app
+    mode: source
+    path: internal/app/admin
+    source_path: internal/app/admin
+`)
 	writeTemplateFile(t, templateDir, "cmd/api/main.go", `package main
 
 import "github.com/acme/fba-go-template/admin/internal/app"
@@ -143,6 +162,10 @@ func main() {
 	assertFileContains(t, filepath.Join(dir, "go.mod"), "module github.com/acme/backend")
 	assertFileContains(t, filepath.Join(dir, "cmd/api/main.go"), `"github.com/acme/backend/internal/app"`)
 	assertFileContains(t, filepath.Join(dir, "README.md"), "Generated from github.com/acme/fba-go-template/admin to github.com/acme/backend")
+	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "module: github.com/acme/backend")
+	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "source_module: github.com/acme/fba-go-template/admin")
+	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "source: local")
+	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "path: internal/app/admin")
 	assertFileNotExists(t, filepath.Join(dir, ".fbago-template.yaml"))
 }
 
@@ -251,6 +274,35 @@ func TestInitSkipsLocalTemplateRepositoryArtifacts(t *testing.T) {
 	assertFileNotExists(t, filepath.Join(dir, ".cache"))
 	assertFileNotExists(t, filepath.Join(dir, "bin"))
 	assertFileNotExists(t, filepath.Join(dir, ".DS_Store"))
+}
+
+func TestInitWritesAdminTemplateManifest(t *testing.T) {
+	dir := t.TempDir()
+	templateDir, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "templates", "fba-go-template", "admin"))
+	if err != nil {
+		t.Fatalf("Abs(template dir) error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(templateDir, ".fbago-template.yaml")); err != nil {
+		t.Skipf("admin template submodule is not available: %v", err)
+	}
+
+	if err := scaffold.Init(scaffold.InitOptions{
+		Dir:         dir,
+		Module:      "github.com/acme/admin",
+		Template:    templateDir,
+		CoreReplace: filepath.Join("..", "fba-go"),
+	}); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	manifest := filepath.Join(dir, ".fbago.yaml")
+	assertFileContains(t, manifest, "name: admin")
+	assertFileContains(t, manifest, "module: github.com/acme/admin")
+	assertFileContains(t, manifest, "source_module: github.com/yuWorm/fba-go-template/admin")
+	assertFileContains(t, manifest, "repo: https://github.com/yuWorm/fba-go-template.git")
+	assertFileContains(t, manifest, "template_path: admin")
+	assertFileContains(t, manifest, "path: internal/app/admin")
+	assertFileContains(t, manifest, "path: plugins/uploadfile")
 }
 
 func TestInitRejectsUnknownTemplate(t *testing.T) {

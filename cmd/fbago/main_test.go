@@ -126,3 +126,24 @@ func TestRunTemplateListPrintsAvailableTemplates(t *testing.T) {
 		t.Fatalf("output = %q, should not list external admin template", buf.String())
 	}
 }
+
+func TestRunTemplateDiffPrintsNoChanges(t *testing.T) {
+	dir := t.TempDir()
+	if err := run([]string{"init", "github.com/acme/backend", "--dir", dir}); err != nil {
+		t.Fatalf("run init: %v", err)
+	}
+
+	var buf bytes.Buffer
+	previous := stdout
+	stdout = &buf
+	t.Cleanup(func() {
+		stdout = previous
+	})
+
+	if err := run([]string{"template", "diff", "--dir", dir}); err != nil {
+		t.Fatalf("run template diff: %v", err)
+	}
+	if strings.TrimSpace(buf.String()) != "no template changes" {
+		t.Fatalf("output = %q, want no template changes", buf.String())
+	}
+}

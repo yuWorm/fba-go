@@ -111,6 +111,8 @@ make run
 | `go install github.com/yuWorm/fba-go/cmd/fbago@latest` | Install the CLI |
 | `fbago init <module>` | Create a project |
 | `go run ./cmd/fbago template list` | List built-in templates for local development |
+| `fbago template diff` | Show `.fbago.yaml` managed template source changes |
+| `fbago template update --dry-run` | Preview managed template source updates |
 | `make test` | Run core tests |
 | `make verify-template` | Verify the official admin template and generated project |
 

@@ -46,9 +46,20 @@ type scaffoldFile struct {
 	Renderable bool
 }
 
+type renderedScaffoldFile struct {
+	Path    string
+	Content []byte
+}
+
 type templateBundle struct {
 	Files          []scaffoldFile
 	TemplateModule string
+	TemplateName   string
+	TemplateSource string
+	TemplateRepo   string
+	TemplateRef    string
+	TemplateCommit string
+	TemplatePath   string
 }
 
 type remoteGitTemplate struct {
@@ -61,6 +72,12 @@ type remoteGitTemplate struct {
 type templateData struct {
 	Module         string
 	TemplateModule string
+	TemplateName   string
+	TemplateSource string
+	TemplateRepo   string
+	TemplateRef    string
+	TemplateCommit string
+	TemplatePath   string
 	CoreReplace    string
 	CoreVersion    string
 }
@@ -141,7 +158,36 @@ func Init(opts InitOptions) error {
 	if err != nil {
 		return err
 	}
-	data := templateData{Module: module, TemplateModule: bundle.TemplateModule, CoreReplace: coreReplace, CoreVersion: coreVersion}
+	data := templateData{
+		Module:         module,
+		TemplateModule: bundle.TemplateModule,
+		TemplateName:   bundle.TemplateName,
+		TemplateSource: bundle.TemplateSource,
+		TemplateRepo:   bundle.TemplateRepo,
+		TemplateRef:    bundle.TemplateRef,
+		TemplateCommit: bundle.TemplateCommit,
+		TemplatePath:   bundle.TemplatePath,
+		CoreReplace:    coreReplace,
+		CoreVersion:    coreVersion,
+	}
+	renderedFiles, err := renderScaffoldFiles(files, data)
+	if err != nil {
+		return err
+	}
+	for _, file := range renderedFiles {
+		path := filepath.Join(dir, file.Path)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, file.Content, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func renderScaffoldFiles(files []scaffoldFile, data templateData) ([]renderedScaffoldFile, error) {
+	renderedFiles := make([]renderedScaffoldFile, 0, len(files))
 	for _, file := range files {
 		source := file.Content
 		if data.TemplateModule != "" {
@@ -151,20 +197,17 @@ func Init(opts InitOptions) error {
 		if file.Renderable {
 			rendered, err := render(source, data)
 			if err != nil {
-				return fmt.Errorf("render %s: %w", file.Path, err)
+				return nil, fmt.Errorf("render %s: %w", file.Path, err)
 			}
 			content = rendered
 		}
 		content = formatGoSource(file.Path, content)
-		path := filepath.Join(dir, file.Path)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(path, content, 0o644); err != nil {
-			return err
-		}
+		renderedFiles = append(renderedFiles, renderedScaffoldFile{
+			Path:    file.Path,
+			Content: content,
+		})
 	}
-	return nil
+	return renderedFiles, nil
 }
 
 func resolveCoreReplace(value string) string {
@@ -419,7 +462,17 @@ func loadRemoteGitTemplate(spec remoteGitTemplate) (templateBundle, error) {
 	if spec.Subdir != "" && spec.Subdir != "." {
 		root = filepath.Join(root, filepath.FromSlash(spec.Subdir))
 	}
-	return loadLocalTemplate(root)
+	bundle, err := loadLocalTemplate(root)
+	if err != nil {
+		return templateBundle{}, err
+	}
+	bundle.TemplateSource = "remote"
+	bundle.TemplateRepo = spec.CloneURL
+	bundle.TemplateRef = spec.Ref
+	if spec.Subdir != "" && spec.Subdir != "." {
+		bundle.TemplatePath = filepath.ToSlash(spec.Subdir)
+	}
+	return bundle, nil
 }
 
 func cloneRemoteGitTemplate(spec remoteGitTemplate) (string, func(), error) {
@@ -520,7 +573,12 @@ func loadEmbeddedTemplateFiles(name string) (templateBundle, error) {
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].Path < files[j].Path
 	})
-	return templateBundle{Files: files}, nil
+	return templateBundle{
+		Files:          files,
+		TemplateName:   name,
+		TemplateSource: "embedded",
+		TemplatePath:   name,
+	}, nil
 }
 
 func loadLocalTemplate(root string) (templateBundle, error) {
@@ -575,7 +633,53 @@ func loadLocalTemplate(root string) (templateBundle, error) {
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].Path < files[j].Path
 	})
-	return templateBundle{Files: files, TemplateModule: templateModule}, nil
+	repo, commit, templatePath := localTemplateGitMetadata(root)
+	return templateBundle{
+		Files:          files,
+		TemplateModule: templateModule,
+		TemplateName:   filepath.Base(root),
+		TemplateSource: "local",
+		TemplateRepo:   repo,
+		TemplateCommit: commit,
+		TemplatePath:   templatePath,
+	}, nil
+}
+
+func localTemplateGitMetadata(root string) (repo string, commit string, templatePath string) {
+	// Template origin metadata is best-effort: ordinary local directories used in
+	// tests or private templates may not be Git checkouts, but official templates
+	// should record enough information for future diff/update commands.
+	if absRoot, err := filepath.Abs(root); err == nil {
+		root = absRoot
+	}
+	repo = gitOutput(root, "config", "--get", "remote.origin.url")
+	commit = gitOutput(root, "rev-parse", "HEAD")
+	gitRoot := gitOutput(root, "rev-parse", "--show-toplevel")
+	if gitRoot == "" {
+		return repo, commit, ""
+	}
+	resolvedGitRoot, err := filepath.EvalSymlinks(gitRoot)
+	if err == nil {
+		gitRoot = resolvedGitRoot
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err == nil {
+		root = resolvedRoot
+	}
+	rel, err := filepath.Rel(gitRoot, root)
+	if err != nil || rel == "." {
+		return repo, commit, "."
+	}
+	return repo, commit, filepath.ToSlash(rel)
+}
+
+func gitOutput(root string, args ...string) string {
+	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func readLocalTemplateModule(root string) (string, error) {
@@ -627,6 +731,9 @@ func shouldSkipLocalTemplateFile(name string) bool {
 func targetPath(rel string) (string, bool) {
 	if rel == "env.tmpl" {
 		return ".env", true
+	}
+	if rel == "fbago.yaml.tmpl" {
+		return ".fbago.yaml", true
 	}
 	if rel == "gitignore.tmpl" {
 		return ".gitignore", true
