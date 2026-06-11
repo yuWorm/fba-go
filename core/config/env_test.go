@@ -156,6 +156,53 @@ CORS_ALLOW_CREDENTIALS=false
 	}
 }
 
+func TestLoadFromEnvFileMapsHTTPMiddlewareSettings(t *testing.T) {
+	path := writeEnvFile(t, `
+MIDDLEWARE_REQUEST_ID=false
+MIDDLEWARE_RECOVER=false
+MIDDLEWARE_RECOVER_STACK_TRACE=false
+MIDDLEWARE_ACCESS_LOG=false
+MIDDLEWARE_ACCESS_LOG_SKIP_PATHS=/healthz,/readyz,/metrics
+MIDDLEWARE_ERROR_LOG=false
+ERROR_RESPONSE_INCLUDE_DETAIL=true
+LOG_ACCESS_FILENAME=/tmp/fba-access.log
+LOG_ERROR_FILENAME=/tmp/fba-error.log
+`)
+
+	opts, err := config.LoadFromEnvFile(path)
+	if err != nil {
+		t.Fatalf("LoadFromEnvFile() error = %v", err)
+	}
+
+	if opts.Middleware.RequestID.Enabled {
+		t.Fatal("RequestID.Enabled = true, want false")
+	}
+	if opts.Middleware.Recover.Enabled {
+		t.Fatal("Recover.Enabled = true, want false")
+	}
+	if opts.Middleware.Recover.EnableStackTrace {
+		t.Fatal("Recover.EnableStackTrace = true, want false")
+	}
+	if opts.Middleware.AccessLog.Enabled {
+		t.Fatal("AccessLog.Enabled = true, want false")
+	}
+	if got := strings.Join(opts.Middleware.AccessLog.SkipPaths, ","); got != "/healthz,/readyz,/metrics" {
+		t.Fatalf("AccessLog.SkipPaths = %q", got)
+	}
+	if opts.Middleware.ErrorLog.Enabled {
+		t.Fatal("ErrorLog.Enabled = true, want false")
+	}
+	if !opts.Middleware.ErrorResponse.IncludeDetail {
+		t.Fatal("ErrorResponse.IncludeDetail = false, want true")
+	}
+	if opts.Logger.AccessLogPath != "/tmp/fba-access.log" {
+		t.Fatalf("AccessLogPath = %q", opts.Logger.AccessLogPath)
+	}
+	if opts.Logger.ErrorLogPath != "/tmp/fba-error.log" {
+		t.Fatalf("ErrorLogPath = %q", opts.Logger.ErrorLogPath)
+	}
+}
+
 func writeEnvFile(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), ".env")

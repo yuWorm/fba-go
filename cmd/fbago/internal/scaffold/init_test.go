@@ -27,6 +27,7 @@ func TestInitWritesBackendScaffoldWithModuleName(t *testing.T) {
 	assertFileContains(t, filepath.Join(dir, "internal/app/register.go"), `"github.com/acme/backend/internal/app/health"`)
 	assertFileContains(t, filepath.Join(dir, "internal/app/health/module.go"), `ID:          "health"`)
 	assertFileContains(t, filepath.Join(dir, ".env"), "FASTAPI_API_V1_PATH=/api/v1")
+	assertFileContains(t, filepath.Join(dir, ".env"), "MIDDLEWARE_REQUEST_ID=true")
 	assertFileContains(t, filepath.Join(dir, "Makefile"), "$(GOENV) $(GO) mod tidy")
 	assertFileContains(t, filepath.Join(dir, "Makefile"), "$(GOENV) $(GO) build -o $(BIN_DIR)/$(APP) ./cmd/api")
 	assertFileContains(t, filepath.Join(dir, "Makefile"), "run ./cmd/api")

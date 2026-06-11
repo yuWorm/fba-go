@@ -2,23 +2,25 @@ package config
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 )
 
 type Options struct {
-	App      AppOptions
-	Fiber    fiber.Config
-	Logger   LoggerOptions
-	CORS     CORSOptions
-	Database DatabaseOptions
-	Redis    RedisOptions
-	Auth     AuthOptions
-	Realtime RealtimeOptions
-	Task     TaskOptions
-	Pools    map[string]PoolOptions
-	Hooks    Hooks
+	App        AppOptions
+	Fiber      fiber.Config
+	Logger     LoggerOptions
+	Middleware MiddlewareOptions
+	CORS       CORSOptions
+	Database   DatabaseOptions
+	Redis      RedisOptions
+	Auth       AuthOptions
+	Realtime   RealtimeOptions
+	Task       TaskOptions
+	Pools      map[string]PoolOptions
+	Hooks      Hooks
 }
 
 type AppOptions struct {
@@ -44,6 +46,54 @@ type LoggerOptions struct {
 	AccessLogPath    string
 	ErrorLogPath     string
 	Rotation         RotationOptions
+}
+
+type MiddlewareOptions struct {
+	RequestID     RequestIDOptions
+	Recover       RecoverOptions
+	AccessLog     AccessLogOptions
+	ErrorLog      ErrorLogOptions
+	ErrorResponse ErrorResponseOptions
+}
+
+type RequestIDOptions struct {
+	Enabled  bool
+	Disabled bool
+
+	// enabledSet preserves explicit false from env parsing; otherwise diagnostics
+	// middleware defaults to enabled for Python-compatible traceability.
+	enabledSet bool
+}
+
+type RecoverOptions struct {
+	Enabled          bool
+	Disabled         bool
+	EnableStackTrace bool
+
+	enabledSet    bool
+	stackTraceSet bool
+}
+
+type AccessLogOptions struct {
+	Enabled   bool
+	Disabled  bool
+	SkipPaths []string
+
+	enabledSet bool
+}
+
+type ErrorLogOptions struct {
+	Enabled  bool
+	Disabled bool
+
+	enabledSet bool
+}
+
+type ErrorResponseOptions struct {
+	IncludeDetail bool
+	HideDetail    bool
+
+	includeDetailSet bool
 }
 
 type CORSOptions struct {
@@ -160,6 +210,21 @@ func (o Options) WithDefaults() Options {
 	if o.App.Environment == "" {
 		o.App.Environment = "dev"
 	}
+	o.Middleware.RequestID.Enabled = defaultEnabled(o.Middleware.RequestID.Disabled, o.Middleware.RequestID.Enabled, o.Middleware.RequestID.enabledSet)
+	o.Middleware.Recover.Enabled = defaultEnabled(o.Middleware.Recover.Disabled, o.Middleware.Recover.Enabled, o.Middleware.Recover.enabledSet)
+	if !o.Middleware.Recover.stackTraceSet {
+		o.Middleware.Recover.EnableStackTrace = true
+	}
+	o.Middleware.AccessLog.Enabled = defaultEnabled(o.Middleware.AccessLog.Disabled, o.Middleware.AccessLog.Enabled, o.Middleware.AccessLog.enabledSet)
+	if len(o.Middleware.AccessLog.SkipPaths) == 0 {
+		o.Middleware.AccessLog.SkipPaths = []string{"/healthz", "/readyz", "/metrics"}
+	}
+	o.Middleware.ErrorLog.Enabled = defaultEnabled(o.Middleware.ErrorLog.Disabled, o.Middleware.ErrorLog.Enabled, o.Middleware.ErrorLog.enabledSet)
+	if o.Middleware.ErrorResponse.HideDetail {
+		o.Middleware.ErrorResponse.IncludeDetail = false
+	} else if !o.Middleware.ErrorResponse.includeDetailSet && !o.Middleware.ErrorResponse.IncludeDetail {
+		o.Middleware.ErrorResponse.IncludeDetail = strings.EqualFold(o.App.Environment, "dev")
+	}
 	if o.CORS.Disabled {
 		o.CORS.Enabled = false
 	} else if !o.CORS.enabledSet {
@@ -200,4 +265,14 @@ func (o Options) WithDefaults() Options {
 		o.Realtime.MultiInstance.Channel = prefix + ":realtime:broadcast"
 	}
 	return o
+}
+
+func defaultEnabled(disabled bool, enabled bool, set bool) bool {
+	if disabled {
+		return false
+	}
+	if !set {
+		return true
+	}
+	return enabled
 }

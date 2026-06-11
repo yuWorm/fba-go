@@ -101,6 +101,7 @@ func optionsFromEnv(values map[string]string) Options {
 	applyRedisEnv(&opts, values)
 	applyAuthEnv(&opts, values)
 	applyCORSEnv(&opts, values)
+	applyMiddlewareEnv(&opts, values)
 	applyRealtimeEnv(&opts, values)
 	applyTaskEnv(&opts, values)
 	applyLoggerEnv(&opts, values)
@@ -224,6 +225,41 @@ func applyCORSEnv(opts *Options, values map[string]string) {
 	if value, ok := envBool(values, "CORS_ALLOW_CREDENTIALS"); ok {
 		opts.CORS.AllowCredentials = value
 		opts.CORS.allowCredentialsSet = true
+	}
+}
+
+func applyMiddlewareEnv(opts *Options, values map[string]string) {
+	if value, ok := envBool(values, "MIDDLEWARE_REQUEST_ID"); ok {
+		opts.Middleware.RequestID.Enabled = value
+		opts.Middleware.RequestID.Disabled = !value
+		opts.Middleware.RequestID.enabledSet = true
+	}
+	if value, ok := envBool(values, "MIDDLEWARE_RECOVER"); ok {
+		opts.Middleware.Recover.Enabled = value
+		opts.Middleware.Recover.Disabled = !value
+		opts.Middleware.Recover.enabledSet = true
+	}
+	if value, ok := envBool(values, "MIDDLEWARE_RECOVER_STACK_TRACE"); ok {
+		opts.Middleware.Recover.EnableStackTrace = value
+		opts.Middleware.Recover.stackTraceSet = true
+	}
+	if value, ok := envBool(values, "MIDDLEWARE_ACCESS_LOG"); ok {
+		opts.Middleware.AccessLog.Enabled = value
+		opts.Middleware.AccessLog.Disabled = !value
+		opts.Middleware.AccessLog.enabledSet = true
+	}
+	if value := firstEnv(values, "MIDDLEWARE_ACCESS_LOG_SKIP_PATHS"); value != "" {
+		opts.Middleware.AccessLog.SkipPaths = splitList(value)
+	}
+	if value, ok := envBool(values, "MIDDLEWARE_ERROR_LOG"); ok {
+		opts.Middleware.ErrorLog.Enabled = value
+		opts.Middleware.ErrorLog.Disabled = !value
+		opts.Middleware.ErrorLog.enabledSet = true
+	}
+	if value, ok := envBool(values, "ERROR_RESPONSE_INCLUDE_DETAIL"); ok {
+		opts.Middleware.ErrorResponse.IncludeDetail = value
+		opts.Middleware.ErrorResponse.HideDetail = !value
+		opts.Middleware.ErrorResponse.includeDetailSet = true
 	}
 }
 
