@@ -203,6 +203,37 @@ LOG_ERROR_FILENAME=/tmp/fba-error.log
 	}
 }
 
+func TestLoadFromEnvFileMapsIPLocationSettings(t *testing.T) {
+	path := writeEnvFile(t, `
+IP_LOCATION_PARSE=ip2region
+IP_LOCATION_XDB_PATH=/opt/fba/ip2region_v4.xdb
+IP_LOCATION_V6_XDB_PATH=/opt/fba/ip2region_v6.xdb
+IP_LOCATION_CACHE_POLICY=content
+IP_LOCATION_SEARCHERS=8
+`)
+
+	opts, err := config.LoadFromEnvFile(path)
+	if err != nil {
+		t.Fatalf("LoadFromEnvFile() error = %v", err)
+	}
+
+	if opts.IPLocation.Provider != "ip2region" {
+		t.Fatalf("IPLocation.Provider = %q, want ip2region", opts.IPLocation.Provider)
+	}
+	if opts.IPLocation.V4XDBPath != "/opt/fba/ip2region_v4.xdb" {
+		t.Fatalf("IPLocation.V4XDBPath = %q, want v4 path", opts.IPLocation.V4XDBPath)
+	}
+	if opts.IPLocation.V6XDBPath != "/opt/fba/ip2region_v6.xdb" {
+		t.Fatalf("IPLocation.V6XDBPath = %q, want v6 path", opts.IPLocation.V6XDBPath)
+	}
+	if opts.IPLocation.CachePolicy != "content" {
+		t.Fatalf("IPLocation.CachePolicy = %q, want content", opts.IPLocation.CachePolicy)
+	}
+	if opts.IPLocation.Searchers != 8 {
+		t.Fatalf("IPLocation.Searchers = %d, want 8", opts.IPLocation.Searchers)
+	}
+}
+
 func writeEnvFile(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), ".env")

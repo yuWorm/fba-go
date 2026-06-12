@@ -100,6 +100,7 @@ func optionsFromEnv(values map[string]string) Options {
 	applyDatabaseEnv(&opts, values)
 	applyRedisEnv(&opts, values)
 	applyAuthEnv(&opts, values)
+	applyIPLocationEnv(&opts, values)
 	applyCORSEnv(&opts, values)
 	applyMiddlewareEnv(&opts, values)
 	applyRealtimeEnv(&opts, values)
@@ -201,6 +202,24 @@ func applyAuthEnv(opts *Options, values map[string]string) {
 	}
 	if ttl, ok := envDurationSeconds(values, "TOKEN_REFRESH_EXPIRE_SECONDS"); ok {
 		opts.Auth.RefreshTokenTTL = ttl
+	}
+}
+
+func applyIPLocationEnv(opts *Options, values map[string]string) {
+	if value := firstEnv(values, "IP_LOCATION_PARSE", "IP_LOCATION_PROVIDER"); value != "" {
+		opts.IPLocation.Provider = value
+	}
+	if value := firstEnv(values, "IP_LOCATION_V4_XDB_PATH", "IP_LOCATION_XDB_PATH", "IP_LOCATION_DB_PATH"); value != "" {
+		opts.IPLocation.V4XDBPath = value
+	}
+	if value := firstEnv(values, "IP_LOCATION_V6_XDB_PATH"); value != "" {
+		opts.IPLocation.V6XDBPath = value
+	}
+	if value := firstEnv(values, "IP_LOCATION_CACHE_POLICY"); value != "" {
+		opts.IPLocation.CachePolicy = value
+	}
+	if value, ok := envInt(values, "IP_LOCATION_SEARCHERS"); ok {
+		opts.IPLocation.Searchers = value
 	}
 }
 

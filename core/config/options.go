@@ -17,6 +17,7 @@ type Options struct {
 	Database   DatabaseOptions
 	Redis      RedisOptions
 	Auth       AuthOptions
+	IPLocation IPLocationOptions
 	Realtime   RealtimeOptions
 	Task       TaskOptions
 	Pools      map[string]PoolOptions
@@ -161,6 +162,14 @@ type AuthOptions struct {
 	RefreshTokenTTL time.Duration
 }
 
+type IPLocationOptions struct {
+	Provider    string
+	V4XDBPath   string
+	V6XDBPath   string
+	CachePolicy string
+	Searchers   int
+}
+
 type RealtimeOptions struct {
 	Disabled       bool
 	Path           string
@@ -244,6 +253,15 @@ func (o Options) WithDefaults() Options {
 	}
 	if len(o.CORS.ExposeHeaders) == 0 {
 		o.CORS.ExposeHeaders = []string{"X-Request-ID"}
+	}
+	if o.IPLocation.Provider == "" {
+		o.IPLocation.Provider = "none"
+	}
+	if o.IPLocation.CachePolicy == "" {
+		o.IPLocation.CachePolicy = "vectorIndex"
+	}
+	if o.IPLocation.Searchers <= 0 {
+		o.IPLocation.Searchers = 20
 	}
 	if o.Realtime.Path == "" {
 		o.Realtime.Path = "/ws/socket.io"
