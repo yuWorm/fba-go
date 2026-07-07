@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/glebarez/sqlite"
 	"github.com/yuWorm/fba-go/core/migration"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 

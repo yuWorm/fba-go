@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/glebarez/sqlite"
 	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/yuWorm/fba-go/core/config"
 	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 

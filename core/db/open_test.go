@@ -22,6 +22,13 @@ func TestOpenCreatesSQLiteProvider(t *testing.T) {
 	if got := provider.Write().Dialector.Name(); got != "sqlite" {
 		t.Fatalf("dialect = %q, want sqlite", got)
 	}
+	var one int
+	if err := provider.Write().Raw("select 1").Scan(&one).Error; err != nil {
+		t.Fatalf("sqlite query failed: %v", err)
+	}
+	if one != 1 {
+		t.Fatalf("sqlite query result = %d, want 1", one)
+	}
 }
 
 func TestOpenRejectsMissingDatabaseConfiguration(t *testing.T) {
