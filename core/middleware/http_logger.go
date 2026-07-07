@@ -86,7 +86,9 @@ func newHTTPLogger(opts config.LoggerOptions, paths []string) *zap.Logger {
 
 func accessLogPaths(opts config.LoggerOptions) []string {
 	if opts.AccessLogPath != "" {
-		return []string{opts.AccessLogPath}
+		// LOG_ACCESS_FILENAME means "also write an access log file". Keep
+		// stdout so local development and process managers still see requests.
+		return appendLogPath([]string{opts.AccessLogPath}, "stdout")
 	}
 	if len(opts.OutputPaths) > 0 {
 		return opts.OutputPaths
@@ -96,12 +98,23 @@ func accessLogPaths(opts config.LoggerOptions) []string {
 
 func errorLogPaths(opts config.LoggerOptions) []string {
 	if opts.ErrorLogPath != "" {
-		return []string{opts.ErrorLogPath}
+		// LOG_ERROR_FILENAME should not hide server errors from stderr; file
+		// output is an additional sink for later inspection.
+		return appendLogPath([]string{opts.ErrorLogPath}, "stderr")
 	}
 	if len(opts.ErrorOutputPaths) > 0 {
 		return opts.ErrorOutputPaths
 	}
 	return []string{"stderr"}
+}
+
+func appendLogPath(paths []string, path string) []string {
+	for _, existing := range paths {
+		if existing == path {
+			return paths
+		}
+	}
+	return append(paths, path)
 }
 
 func ensureLogDirs(paths []string) {
