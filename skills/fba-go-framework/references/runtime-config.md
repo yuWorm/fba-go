@@ -134,6 +134,16 @@ Do not add per-plugin CORS logic. CORS is an application-level concern.
 
 `fiberx.New` installs request ID, HTTP logging, recover, and CORS middleware from application-level config. Request IDs feed the `trace_id` response field and both access/error logs. Error responses keep production-safe messages unless `ERROR_RESPONSE_INCLUDE_DETAIL=true`; server logs still record the original error detail for HTTP 500 responses.
 
+Logger encoding is sink-aware by default:
+
+- `stdout` and `stderr` use human-readable console output with ISO-8601 time
+  and ANSI-colored levels.
+- File sinks, including `LOG_ACCESS_FILENAME` and `LOG_ERROR_FILENAME`, use
+  structured JSON.
+- File logging remains mirrored to the corresponding console sink.
+- Programmatic `LoggerOptions.Encoding` values `json` or `console` explicitly
+  force that encoder for every sink; leaving it empty enables the split default.
+
 ## Realtime
 
 `core/app.New` always provides `realtime.Hub` and `realtime.OnlineStore`. When realtime is not disabled, it mounts the Socket.IO server and registers shutdown hooks.

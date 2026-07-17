@@ -8,6 +8,7 @@
 
 - **Go module 核心**：应用启动、配置加载、响应结构、分页、认证中间件、RBAC、插件注册、Swagger、实时通信和任务抽象。
 - **Fiber v3**：HTTP 层使用 Fiber v3。
+- **日志分流**：终端使用带颜色的常规文本日志，访问日志和错误日志文件保持结构化 JSON。
 - **插件体系**：官方、第三方和项目本地模块统一通过 `plugins.yaml` 注册，`plugins.lock` 记录实际 Go module 版本与本地替换。
 - **内置 Admin 模板**：`fbago` 直接携带薄 Admin starter；完整功能由独立版本化的 [`fba-go-admin`](https://github.com/yuWorm/fba-go-admin) module 提供。
 - **可接管源码**：默认通过 Go module 升级；初始化时可用 `--template-replace`，已有项目可用 `fbago module use` 指向本地 fork 或 Git submodule。

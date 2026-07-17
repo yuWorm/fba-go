@@ -40,7 +40,9 @@ type Hooks struct {
 }
 
 type LoggerOptions struct {
-	Level            string
+	Level string
+	// Empty Encoding keeps machine-readable JSON for files while rendering
+	// stdout and stderr with the human-oriented colored console encoder.
 	Encoding         string
 	OutputPaths      []string
 	ErrorOutputPaths []string

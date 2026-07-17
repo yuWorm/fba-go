@@ -8,6 +8,7 @@
 
 - **Go module core**: application bootstrap, config loading, response envelopes, pagination, auth middleware, RBAC, plugin registration, Swagger, realtime events, and task contracts.
 - **Fiber v3**: HTTP is built on Fiber v3.
+- **Split log rendering**: terminals use conventional colored text while access and error log files remain structured JSON.
 - **Plugin system**: official, third-party, and project-local modules are registered through `plugins.yaml`; `plugins.lock` records resolved Go module versions and local replacements.
 - **Embedded Admin template**: `fbago` carries the thin Admin starter directly; the complete feature set is supplied by the independently versioned [`fba-go-admin`](https://github.com/yuWorm/fba-go-admin) module.
 - **Editable source**: Go modules are the default upgrade path; use `--template-replace` during initialization or `fbago module use` in an existing project to select a local fork or Git submodule.
