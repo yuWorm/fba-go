@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	fbcontract "github.com/yuWorm/fba-go/cmd/fbago/internal/contract"
+	fbmodule "github.com/yuWorm/fba-go/cmd/fbago/internal/modulecmd"
 	fbplugin "github.com/yuWorm/fba-go/cmd/fbago/internal/plugin"
 	"github.com/yuWorm/fba-go/cmd/fbago/internal/scaffold"
 	fbswagger "github.com/yuWorm/fba-go/cmd/fbago/internal/swagger"
@@ -16,9 +17,12 @@ import (
 
 var stdout io.Writer = os.Stdout
 
-const initUsage = "usage: fbago init <module> [--template TEMPLATE] [--dir DIR] [--core-replace PATH] [--core-version VERSION|latest]"
+const initUsage = "usage: fbago init <module> [--template TEMPLATE] [--template-replace PATH] [--dir DIR] [--core-replace PATH] [--core-version VERSION|latest]"
 const templateDiffUsage = "usage: fbago template diff [--dir DIR] [--template TEMPLATE]"
 const templateUpdateUsage = "usage: fbago template update [--dir DIR] [--template TEMPLATE] [--dry-run] [--force]"
+const pluginSyncUsage = "usage: fbago plugin sync [--dir DIR] [--manifest FILE] [--out FILE] [--lock-out FILE] [--check]"
+const moduleUseUsage = "usage: fbago module use [--dir DIR] --path PATH <module>"
+const moduleResetUsage = "usage: fbago module reset [--dir DIR] <module>"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -40,6 +44,12 @@ func run(args []string) error {
 	switch args[0] + " " + args[1] {
 	case "plugin scan":
 		return runPluginScan(args[2:])
+	case "plugin sync":
+		return runPluginSync(args[2:])
+	case "module use":
+		return runModuleUse(args[2:])
+	case "module reset":
+		return runModuleReset(args[2:])
 	case "swagger scan":
 		return runSwaggerScan(args[2:])
 	case "contract snapshot":
@@ -58,7 +68,7 @@ func run(args []string) error {
 }
 
 func usage() error {
-	return fmt.Errorf("usage: fbago <init|template|plugin|swagger|contract> [command]")
+	return fmt.Errorf("usage: fbago <init|template|plugin|module|swagger|contract> [command]")
 }
 
 func runInit(args []string) error {
@@ -161,6 +171,12 @@ func parseInitArgs(args []string) (scaffold.InitOptions, error) {
 				return opts, fmt.Errorf("missing value for %s", arg)
 			}
 			opts.Template = args[i]
+		case "--template-replace", "-template-replace":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("missing value for %s", arg)
+			}
+			opts.TemplateReplace = args[i]
 		case "--core-replace", "-core-replace":
 			i++
 			if i >= len(args) {
@@ -184,6 +200,59 @@ func parseInitArgs(args []string) (scaffold.InitOptions, error) {
 		}
 	}
 	return opts, nil
+}
+
+func runModuleUse(args []string) error {
+	fs := flag.NewFlagSet("module use", flag.ContinueOnError)
+	projectDir := fs.String("dir", ".", "project module directory")
+	localPath := fs.String("path", "", "local module checkout")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 || strings.TrimSpace(*localPath) == "" {
+		return fmt.Errorf(moduleUseUsage)
+	}
+	return fbmodule.Use(fbmodule.UseOptions{
+		ProjectDir: *projectDir,
+		Module:     fs.Arg(0),
+		Path:       *localPath,
+	})
+}
+
+func runModuleReset(args []string) error {
+	fs := flag.NewFlagSet("module reset", flag.ContinueOnError)
+	projectDir := fs.String("dir", ".", "project module directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf(moduleResetUsage)
+	}
+	return fbmodule.Reset(*projectDir, fs.Arg(0))
+}
+
+func runPluginSync(args []string) error {
+	fs := flag.NewFlagSet("plugin sync", flag.ContinueOnError)
+	moduleDir := fs.String("dir", ".", "project module directory")
+	manifest := fs.String("manifest", "plugins.yaml", "project plugin manifest")
+	out := fs.String("out", "internal/generated/fba_plugins.gen.go", "generated registration output")
+	lockOut := fs.String("lock-out", "plugins.lock", "module-aware plugin lock output")
+	packageName := fs.String("package", "generated", "generated package name")
+	check := fs.Bool("check", false, "verify generated outputs without writing")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf(pluginSyncUsage)
+	}
+	return fbplugin.Sync(fbplugin.SyncOptions{
+		ModuleDir: *moduleDir,
+		Manifest:  *manifest,
+		Out:       *out,
+		LockOut:   *lockOut,
+		Package:   *packageName,
+		Check:     *check,
+	})
 }
 
 func runPluginScan(args []string) error {

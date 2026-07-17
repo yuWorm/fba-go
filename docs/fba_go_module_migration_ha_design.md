@@ -2341,43 +2341,44 @@ fbago migration apply
 ### 23.2 init
 
 ```bash
-fbago init github.com/your-org/my-backend
+fbago init github.com/your-org/my-admin
 fbago init github.com/your-org/my-backend --template basic
-fbago init github.com/your-org/my-backend --template templates/fba-go-template/admin
-fbago init github.com/your-org/my-backend --template github.com/yuWorm/fba-go-template/admin@v0.0.1
-fbago init github.com/your-org/my-backend --core-replace ../fba-go
+fbago init github.com/your-org/custom --template ./custom-template
+fbago init github.com/your-org/custom --template github.com/acme/custom-template/admin@v0.0.1
+fbago init github.com/your-org/my-admin --core-replace ../fba-go
+fbago init github.com/your-org/my-admin --template-replace ../fba-go-admin
 ```
 
-`init` 用于创建项目脚手架，语义对齐 `go mod init`：调用方传入 Go module name，工具按模板生成 `go.mod`、`Makefile`、`cmd/api`、`.env` 和项目内业务模块目录 `internal/app`。默认模板是内置 `basic`；完整 admin starter template 应维护在独立模板仓库中，并通过本地路径或 remote Git template spec 传给 `--template`。
+`init` 用于创建项目脚手架，语义对齐 `go mod init`：调用方传入 Go module name，工具按模板生成 `go.mod`、`Makefile`、`cmd/api`、`.env`、插件清单和生成注册。默认模板是直接编译进 `fbago` 的薄 `admin` starter；`basic` 通过 `--template basic` 显式选择。Admin 实现源码不属于内置模板，生成项目通过版本化 Admin Go module 获取官方功能。
 
-主仓库通过 `templates/fba-go-template` submodule 引入官方模板仓库 `github.com/yuWorm/fba-go-template`，本地开发和验证时优先使用 `--template templates/fba-go-template/admin`。
+主仓库中的 `cmd/fbago/internal/scaffold/templates/admin` 是默认模板唯一入口。完整 Admin runtime 和官方业务模块位于独立仓库 `github.com/yuWorm/fba-go-admin`，通过 Go module 版本接入；本地 checkout 只用于显式联调，不再嵌套在模板仓库中。
 
-`internal/app` 是用户项目自己的业务代码位置，admin、dict、config、notice、订单、支付等可修改业务模块都应优先放在这里；远程 plugin 更适合承载邮件、OAuth2、对象存储、任务队列等通用能力。
+`internal/app` 是用户项目自己的业务代码位置，订单、支付等项目模块放在这里；admin、config、dict、notice 等官方功能由 Admin module 提供，邮件、OAuth2、对象存储和任务等能力也通过统一插件清单注册。
 
 `basic` 模板的 `Makefile` 至少提供 `tidy`、`test`、`run`、`dev`、`build`、`clean`，并将 Go build cache 固定在项目目录内，避免本机或沙箱缓存权限影响初始化后的第一轮验证。
 
-在 `github.com/yuWorm/fba-go` 尚未作为可下载 Go module 发布前，生成项目需要通过 `replace github.com/yuWorm/fba-go => <local-path>` 指向本地 core 源码。`fbago init` 支持 `--core-replace <path>`，也可通过 `FBAGO_CORE_REPLACE` 提供；本地开发构建会尽量自动发现当前 `fba-go` 源码根目录并写入 `basic` 模板的 `go.mod`。正式发布版 CLI 不应强制写本地 replace，而应让 Go 按正常 module 版本解析。
+在相关 module 尚未发布前，生成项目需要通过 `replace` 指向本地源码。`fbago init` 对 core 支持 `--core-replace <path>` 或 `FBAGO_CORE_REPLACE`，对 Admin/template module 支持 `--template-replace <path>` 或 `FBAGO_TEMPLATE_REPLACE`。正式发布版 CLI 默认写固定语义化版本，不猜测或写入本机 Admin checkout。
 
-本地路径模板必须是一个完整模板目录，可以使用 `[[ .Module ]]` 渲染 module name，文件名以 `.tmpl` 结尾时会渲染并去掉后缀；`env.tmpl` 和 `gitignore.tmpl` 分别输出为 `.env` 和 `.gitignore`。本地模板路径面向“可直接运行、可独立测试”的模板仓库，因此模板仓库可以保留自己的真实 `go.mod`，同时提供 `go.mod.tmpl` 作为生成项目的 `go.mod`。
+本地路径模板必须是一个完整模板目录，可以使用 `[[ .Module ]]` 渲染 module name，文件名以 `.tmpl` 结尾时会渲染并去掉后缀；`env.tmpl`、`env.example.tmpl` 和 `gitignore.tmpl` 分别输出为 `.env`、`.env.example` 和 `.gitignore`。本地模板路径面向“可直接运行、可独立测试”的自定义模板仓库，因此可以保留真实 `go.mod`，同时提供 `go.mod.tmpl` 作为生成项目的 `go.mod`。
 
 可运行模板仓库建议在根目录放置 `.fbago-template.yaml`：
 
 ```yaml
-module: github.com/yuWorm/fba-go-template/admin
+module: github.com/acme/custom-template
 ```
 
-`fbago init` 会把该模板 module path 替换为用户传入的目标 module path，并且不会把 `.fbago-template.yaml` 复制到新项目。这样模板仓库源码可以直接使用 `github.com/yuWorm/fba-go-template/admin/internal/app/...` import 并通过 `go test ./...`，生成项目后这些 import 会变成 `github.com/your-org/my-backend/internal/app/...`。
+`fbago init` 会把该模板 module path 替换为用户传入的目标 module path，并且不会把 `.fbago-template.yaml` 复制到新项目。这样自定义模板源码可以直接使用 `github.com/acme/custom-template/internal/app/...` import 并通过 `go test ./...`，生成项目后这些 import 会变成 `github.com/your-org/my-backend/internal/app/...`。
 
 初始化时会跳过 `.git`、`.hg`、`.svn`、`.codegraph`、`.cache`、`bin`、`tmp`、`node_modules` 目录，以及 `.DS_Store`、`Thumbs.db` 文件，避免把仓库元数据和本地构建产物复制进新项目。
 
 remote Git template spec 支持两种形式：
 
 ```bash
-# 简写：前三段是 Git 仓库，后续路径是模板子目录
-fbago init github.com/your-org/my-backend --template github.com/yuWorm/fba-go-template/admin@v0.0.1
+# 简写：前三段是 Git 仓库，后续路径是自定义模板子目录
+fbago init github.com/your-org/custom --template github.com/acme/custom-template/admin@v0.0.1
 
-# 显式 Git URL：用 // 分隔仓库 URL 和模板子目录
-fbago init github.com/your-org/my-backend --template https://github.com/yuWorm/fba-go-template.git//admin@v0.0.1
+# 显式 Git URL：用 // 分隔仓库 URL 和自定义模板子目录
+fbago init github.com/your-org/custom --template https://github.com/acme/custom-template.git//admin@v0.0.1
 ```
 
 `@ref` 可指定 tag、branch 或 Git 可识别的 ref；不指定时使用仓库默认分支。`FBAGO_TEMPLATE_CACHE_DIR` 可指定 clone 临时 checkout 的父目录。
@@ -2388,7 +2389,7 @@ fbago init github.com/your-org/my-backend --template https://github.com/yuWorm/f
 fbago template list
 ```
 
-输出当前内置模板名，例如 `basic`。外部模板仓库或本地路径模板不在此列表中。
+输出当前内置模板名，包括默认 `admin` 和显式选择的 `basic`。外部模板仓库或本地路径模板不在此列表中。
 
 ### 23.4 template diff / update
 
@@ -2398,7 +2399,7 @@ fbago template update --dry-run
 fbago template update --force
 ```
 
-支持 `.fbago.yaml` 的项目可以基于该 manifest 对比或刷新模板管理的源码。`managed` 项只覆盖模板声明的 `internal/app/*` 与 `plugins/*` 等路径，不改变业务仍然放在 `internal/app` 下的方案。项目可以把单个 managed 项改为 `mode: manual`、`mode: ignore` 或 `mode: detached`，表示该路径已经进入项目侧手动维护，后续 diff/update 不再触碰。
+支持 `.fbago.yaml` 的项目可以基于该 manifest 对比或刷新模板管理的源码。内置 Admin 的 `managed` 项只覆盖 `cmd/api/main.go`、Makefile 等薄启动文件；`internal/app`、`plugins.yaml` 和生成注册分别由项目、插件清单和 `fbago plugin sync` 管理，不属于模板更新面。项目可以把单个 managed 项改为 `mode: manual`、`mode: ignore` 或 `mode: detached`，使后续 diff/update 不再触碰该路径。
 
 `template diff` 输出 managed 文件的 `A/M/D` 变化列表；`template update` 默认只写新增文件和 manifest，不会覆盖或删除已有 managed 文件。涉及修改或删除时，调用方需要先查看变更列表，再显式传入 `--force`。本地验证模板改动时，可用 `--template <local-template-path>` 覆盖 `.fbago.yaml` 中记录的来源。
 

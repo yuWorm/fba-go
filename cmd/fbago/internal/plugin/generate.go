@@ -14,13 +14,19 @@ func WriteLock(path string, result ScanResult) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, content, 0o644)
+	content = append(content, '\n')
+	return writeGeneratedFile(path, content)
 }
 
 func GenerateRegistration(path string, packageName string, result ScanResult) error {
+	content, err := registrationContent(packageName, result)
+	if err != nil {
+		return err
+	}
+	return writeGeneratedFile(path, content)
+}
+
+func registrationContent(packageName string, result ScanResult) ([]byte, error) {
 	if packageName == "" {
 		packageName = "generated"
 	}
@@ -43,10 +49,10 @@ func GenerateRegistration(path string, packageName string, result ScanResult) er
 	buf.WriteString("\treturn nil\n")
 	buf.WriteString("}\n")
 
-	content, err := format.Source(buf.Bytes())
-	if err != nil {
-		return err
-	}
+	return format.Source(buf.Bytes())
+}
+
+func writeGeneratedFile(path string, content []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}

@@ -156,16 +156,19 @@ func planTemplateSync(dir string, templateOverride string) (templateSyncPlan, er
 	if coreVersion == "" {
 		coreVersion = developmentCoreVersion
 	}
+	templateVersion, templateReplace := resolveTemplateDependency(bundle, "")
 	data := templateData{
-		Module:         module,
-		TemplateModule: bundle.TemplateModule,
-		TemplateName:   bundle.TemplateName,
-		TemplateSource: bundle.TemplateSource,
-		TemplateRepo:   bundle.TemplateRepo,
-		TemplateRef:    bundle.TemplateRef,
-		TemplateCommit: bundle.TemplateCommit,
-		TemplatePath:   bundle.TemplatePath,
-		CoreVersion:    coreVersion,
+		Module:          module,
+		TemplateModule:  bundle.TemplateModule,
+		TemplateName:    bundle.TemplateName,
+		TemplateSource:  bundle.TemplateSource,
+		TemplateRepo:    bundle.TemplateRepo,
+		TemplateRef:     bundle.TemplateRef,
+		TemplateCommit:  bundle.TemplateCommit,
+		TemplatePath:    bundle.TemplatePath,
+		TemplateVersion: templateVersion,
+		TemplateReplace: templateReplace,
+		CoreVersion:     coreVersion,
 	}
 	rendered, err := renderScaffoldFiles(bundle.Files, data)
 	if err != nil {

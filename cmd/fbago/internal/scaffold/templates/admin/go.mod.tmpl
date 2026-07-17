@@ -1,0 +1,13 @@
+module [[ .Module ]]
+
+go 1.25.0
+
+require (
+	github.com/yuWorm/fba-go [[ .CoreVersion ]]
+	[[ .TemplateModule ]] [[ .TemplateVersion ]]
+)
+[[ if .CoreReplace ]]
+replace github.com/yuWorm/fba-go => [[ .CoreReplace ]]
+[[ end ]][[ if .TemplateReplace ]]
+replace [[ .TemplateModule ]] => [[ .TemplateReplace ]]
+[[ end ]]

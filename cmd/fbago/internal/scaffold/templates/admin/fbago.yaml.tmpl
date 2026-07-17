@@ -1,0 +1,25 @@
+version: 1
+
+template:
+  name: admin
+  module: [[ .Module ]]
+  source_module: [[ .TemplateModule ]]
+  source: [[ .TemplateSource ]]
+[[ if .TemplateRepo ]]  repo: [[ .TemplateRepo ]]
+[[ end ]][[ if .TemplateRef ]]  ref: [[ .TemplateRef ]]
+[[ end ]][[ if .TemplateCommit ]]  commit: [[ .TemplateCommit ]]
+[[ end ]][[ if .TemplatePath ]]  template_path: [[ .TemplatePath ]]
+[[ end ]]  core_version: [[ .CoreVersion ]]
+
+managed:
+  - name: bootstrap
+    kind: generated
+    mode: source
+    path: cmd/api/main.go
+    source_path: cmd/api/main.go
+
+  - name: makefile
+    kind: generated
+    mode: source
+    path: Makefile
+    source_path: Makefile

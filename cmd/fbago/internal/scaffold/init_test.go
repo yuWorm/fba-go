@@ -10,8 +10,9 @@ import (
 	"github.com/yuWorm/fba-go/cmd/fbago/internal/scaffold"
 )
 
-func TestInitWritesBackendScaffoldWithModuleName(t *testing.T) {
+func TestInitWritesDefaultAdminScaffold(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("FBAGO_TEMPLATE_REPLACE", "")
 
 	if err := scaffold.Init(scaffold.InitOptions{
 		Dir:    dir,
@@ -21,23 +22,27 @@ func TestInitWritesBackendScaffoldWithModuleName(t *testing.T) {
 	}
 
 	assertFileContains(t, filepath.Join(dir, "go.mod"), "module github.com/acme/backend")
-	assertFileContains(t, filepath.Join(dir, "go.mod"), "require github.com/yuWorm/fba-go v0.0.0")
+	assertFileContains(t, filepath.Join(dir, "go.mod"), "github.com/yuWorm/fba-go-admin v0.1.0")
 	assertFileContains(t, filepath.Join(dir, "go.mod"), "replace github.com/yuWorm/fba-go => ")
-	assertFileContains(t, filepath.Join(dir, "cmd/api/main.go"), `"github.com/acme/backend/internal/app"`)
-	assertFileContains(t, filepath.Join(dir, "internal/app/register.go"), `"github.com/acme/backend/internal/app/health"`)
-	assertFileContains(t, filepath.Join(dir, "internal/app/health/module.go"), `ID:          "health"`)
+	assertFileNotContains(t, filepath.Join(dir, "go.mod"), "replace github.com/yuWorm/fba-go-admin =>")
+	assertFileContains(t, filepath.Join(dir, "cmd/api/main.go"), `admin "github.com/yuWorm/fba-go-admin"`)
+	assertFileContains(t, filepath.Join(dir, "cmd/api/main.go"), `"github.com/acme/backend/internal/generated"`)
+	assertFileContains(t, filepath.Join(dir, "internal/generated/fba_plugins.gen.go"), "func RegisterPlugins")
+	assertFileContains(t, filepath.Join(dir, "plugins.yaml"), "github.com/yuWorm/fba-go-admin/modules/admin")
+	assertFileContains(t, filepath.Join(dir, "plugins.lock"), `"module": "github.com/yuWorm/fba-go-admin"`)
 	assertFileContains(t, filepath.Join(dir, ".env"), "FASTAPI_API_V1_PATH=/api/v1")
-	assertFileContains(t, filepath.Join(dir, ".env"), "MIDDLEWARE_REQUEST_ID=true")
+	assertFileContains(t, filepath.Join(dir, ".env.example"), "# CORS")
 	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "version: 1")
-	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "template:")
-	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "name: basic")
+	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "name: admin")
 	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "source: embedded")
 	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "core_version: v0.0.0")
 	assertFileContains(t, filepath.Join(dir, "Makefile"), "$(GOENV) $(GO) mod tidy")
 	assertFileContains(t, filepath.Join(dir, "Makefile"), "$(GOENV) $(GO) build -o $(BIN_DIR)/$(APP) ./cmd/api")
-	assertFileContains(t, filepath.Join(dir, "Makefile"), "run ./cmd/api")
-	assertFileContains(t, filepath.Join(dir, "Makefile"), "test ./...")
-	assertFileContains(t, filepath.Join(dir, "README.md"), "fbago init github.com/acme/backend")
+	assertFileContains(t, filepath.Join(dir, "README.md"), "--template admin")
+	assertFileNotExists(t, filepath.Join(dir, "internal", "app"))
+	assertFileNotExists(t, filepath.Join(dir, "internal", "runtime"))
+	assertFileNotExists(t, filepath.Join(dir, "plugins"))
+	assertFileNotExists(t, filepath.Join(dir, "fbago-template.yaml"))
 }
 
 func TestInitUsesExplicitCoreReplaceInBasicTemplate(t *testing.T) {
@@ -46,6 +51,7 @@ func TestInitUsesExplicitCoreReplaceInBasicTemplate(t *testing.T) {
 	if err := scaffold.Init(scaffold.InitOptions{
 		Dir:         dir,
 		Module:      "github.com/acme/backend",
+		Template:    "basic",
 		CoreReplace: "../fba-go",
 	}); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -61,6 +67,7 @@ func TestInitUsesExplicitCoreVersionInBasicTemplate(t *testing.T) {
 	if err := scaffold.Init(scaffold.InitOptions{
 		Dir:         dir,
 		Module:      "github.com/acme/backend",
+		Template:    "basic",
 		CoreVersion: "v1.2.3",
 	}); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -69,13 +76,16 @@ func TestInitUsesExplicitCoreVersionInBasicTemplate(t *testing.T) {
 	assertFileContains(t, filepath.Join(dir, "go.mod"), "require github.com/yuWorm/fba-go v1.2.3")
 }
 
-func TestListTemplatesIncludesBasic(t *testing.T) {
+func TestListTemplatesIncludesBuiltins(t *testing.T) {
 	templates, err := scaffold.ListTemplates()
 	if err != nil {
 		t.Fatalf("ListTemplates() error = %v", err)
 	}
 	if !contains(templates, "basic") {
 		t.Fatalf("templates = %v, missing basic", templates)
+	}
+	if !contains(templates, "admin") {
+		t.Fatalf("templates = %v, missing admin", templates)
 	}
 }
 
@@ -235,13 +245,13 @@ func main() {
 	runGit(t, repoDir, "init")
 	runGit(t, repoDir, "add", ".")
 	runGit(t, repoDir, "-c", "user.name=fbago", "-c", "user.email=fbago@example.invalid", "commit", "-m", "init")
-	runGit(t, repoDir, "tag", "v0.1.0")
+	runGit(t, repoDir, "tag", "admin/v0.1.0")
 	t.Setenv("FBAGO_TEMPLATE_CACHE_DIR", t.TempDir())
 
 	if err := scaffold.Init(scaffold.InitOptions{
 		Dir:      dir,
 		Module:   "github.com/acme/backend",
-		Template: "file://" + filepath.ToSlash(repoDir) + "//admin@v0.1.0",
+		Template: "file://" + filepath.ToSlash(repoDir) + "//admin@admin/v0.1.0",
 	}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
@@ -276,33 +286,55 @@ func TestInitSkipsLocalTemplateRepositoryArtifacts(t *testing.T) {
 	assertFileNotExists(t, filepath.Join(dir, ".DS_Store"))
 }
 
-func TestInitWritesAdminTemplateManifest(t *testing.T) {
+func TestInitUsesExplicitTemplateReplace(t *testing.T) {
+	t.Setenv("FBAGO_TEMPLATE_REPLACE", "../ignored-template")
 	dir := t.TempDir()
-	templateDir, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "templates", "fba-go-template", "admin"))
-	if err != nil {
-		t.Fatalf("Abs(template dir) error = %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(templateDir, ".fbago-template.yaml")); err != nil {
-		t.Skipf("admin template submodule is not available: %v", err)
-	}
+	templateDir := filepath.Join(t.TempDir(), "template")
+	writeTemplateFile(t, templateDir, ".fbago-template.yaml", "module: github.com/acme/template\n")
+	writeTemplateFile(t, templateDir, "go.mod.tmpl", `module [[ .Module ]]
+
+go 1.25.0
+
+require [[ .TemplateModule ]] [[ .TemplateVersion ]]
+[[ if .TemplateReplace ]]replace [[ .TemplateModule ]] => [[ .TemplateReplace ]]
+[[ end ]]`)
 
 	if err := scaffold.Init(scaffold.InitOptions{
-		Dir:         dir,
-		Module:      "github.com/acme/admin",
-		Template:    templateDir,
-		CoreReplace: filepath.Join("..", "fba-go"),
+		Dir:             dir,
+		Module:          "github.com/acme/backend",
+		Template:        templateDir,
+		TemplateReplace: "../explicit-template",
 	}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
-	manifest := filepath.Join(dir, ".fbago.yaml")
-	assertFileContains(t, manifest, "name: admin")
-	assertFileContains(t, manifest, "module: github.com/acme/admin")
-	assertFileContains(t, manifest, "source_module: github.com/yuWorm/fba-go-template/admin")
-	assertFileContains(t, manifest, "repo: https://github.com/yuWorm/fba-go-template.git")
-	assertFileContains(t, manifest, "template_path: admin")
-	assertFileContains(t, manifest, "path: internal/app/admin")
-	assertFileContains(t, manifest, "path: plugins/uploadfile")
+	assertFileContains(t, filepath.Join(dir, "go.mod"), "github.com/acme/template v0.0.0")
+	assertFileContains(t, filepath.Join(dir, "go.mod"), "replace github.com/acme/template => ../explicit-template")
+	assertFileNotContains(t, filepath.Join(dir, "go.mod"), "../ignored-template")
+}
+
+func TestInitUsesTemplateReplaceEnvironment(t *testing.T) {
+	t.Setenv("FBAGO_TEMPLATE_REPLACE", "../environment-template")
+	dir := t.TempDir()
+	templateDir := filepath.Join(t.TempDir(), "template")
+	writeTemplateFile(t, templateDir, ".fbago-template.yaml", "module: github.com/acme/template\n")
+	writeTemplateFile(t, templateDir, "go.mod.tmpl", `module [[ .Module ]]
+
+go 1.25.0
+
+require [[ .TemplateModule ]] [[ .TemplateVersion ]]
+[[ if .TemplateReplace ]]replace [[ .TemplateModule ]] => [[ .TemplateReplace ]]
+[[ end ]]`)
+
+	if err := scaffold.Init(scaffold.InitOptions{
+		Dir:      dir,
+		Module:   "github.com/acme/backend",
+		Template: templateDir,
+	}); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	assertFileContains(t, filepath.Join(dir, "go.mod"), "replace github.com/acme/template => ../environment-template")
 }
 
 func TestInitRejectsUnknownTemplate(t *testing.T) {

@@ -16,15 +16,17 @@ import (
 	"strings"
 	"text/template"
 
+	fbplugin "github.com/yuWorm/fba-go/cmd/fbago/internal/plugin"
 	"gopkg.in/yaml.v3"
 )
 
 //go:embed templates
 var templateFS embed.FS
 
-const defaultTemplate = "basic"
+const defaultTemplate = "admin"
 const coreModulePath = "github.com/yuWorm/fba-go"
 const developmentCoreVersion = "v0.0.0"
+const embeddedTemplateMetadataFile = "fbago-template.yaml"
 
 var (
 	readBuildInfo          = debug.ReadBuildInfo
@@ -32,18 +34,20 @@ var (
 )
 
 type InitOptions struct {
-	Dir         string
-	Module      string
-	Template    string
-	CoreReplace string
-	CoreVersion string
-	Force       bool
+	Dir             string
+	Module          string
+	Template        string
+	TemplateReplace string
+	CoreReplace     string
+	CoreVersion     string
+	Force           bool
 }
 
 type scaffoldFile struct {
-	Path       string
-	Content    string
-	Renderable bool
+	Path           string
+	Content        string
+	Renderable     bool
+	PreserveModule bool
 }
 
 type renderedScaffoldFile struct {
@@ -52,14 +56,16 @@ type renderedScaffoldFile struct {
 }
 
 type templateBundle struct {
-	Files          []scaffoldFile
-	TemplateModule string
-	TemplateName   string
-	TemplateSource string
-	TemplateRepo   string
-	TemplateRef    string
-	TemplateCommit string
-	TemplatePath   string
+	Files           []scaffoldFile
+	TemplateModule  string
+	TemplateVersion string
+	TemplateName    string
+	TemplateSource  string
+	TemplateRepo    string
+	TemplateRef     string
+	TemplateCommit  string
+	TemplatePath    string
+	TemplateRoot    string
 }
 
 type remoteGitTemplate struct {
@@ -70,20 +76,29 @@ type remoteGitTemplate struct {
 }
 
 type templateData struct {
-	Module         string
-	TemplateModule string
-	TemplateName   string
-	TemplateSource string
-	TemplateRepo   string
-	TemplateRef    string
-	TemplateCommit string
-	TemplatePath   string
-	CoreReplace    string
-	CoreVersion    string
+	Module          string
+	TemplateModule  string
+	TemplateName    string
+	TemplateSource  string
+	TemplateRepo    string
+	TemplateRef     string
+	TemplateCommit  string
+	TemplatePath    string
+	TemplateVersion string
+	TemplateReplace string
+	CoreReplace     string
+	CoreVersion     string
 }
 
 type localTemplateMetadata struct {
-	Module string `yaml:"module"`
+	Module              string   `yaml:"module"`
+	Exclude             []string `yaml:"exclude"`
+	PreserveModulePaths []string `yaml:"preserve_module_paths"`
+}
+
+type embeddedTemplateMetadata struct {
+	Module  string `yaml:"module"`
+	Version string `yaml:"version"`
 }
 
 // Local template paths usually point at a real, runnable template repository.
@@ -158,17 +173,20 @@ func Init(opts InitOptions) error {
 	if err != nil {
 		return err
 	}
+	templateVersion, templateReplace := resolveTemplateDependency(bundle, opts.TemplateReplace)
 	data := templateData{
-		Module:         module,
-		TemplateModule: bundle.TemplateModule,
-		TemplateName:   bundle.TemplateName,
-		TemplateSource: bundle.TemplateSource,
-		TemplateRepo:   bundle.TemplateRepo,
-		TemplateRef:    bundle.TemplateRef,
-		TemplateCommit: bundle.TemplateCommit,
-		TemplatePath:   bundle.TemplatePath,
-		CoreReplace:    coreReplace,
-		CoreVersion:    coreVersion,
+		Module:          module,
+		TemplateModule:  bundle.TemplateModule,
+		TemplateName:    bundle.TemplateName,
+		TemplateSource:  bundle.TemplateSource,
+		TemplateRepo:    bundle.TemplateRepo,
+		TemplateRef:     bundle.TemplateRef,
+		TemplateCommit:  bundle.TemplateCommit,
+		TemplatePath:    bundle.TemplatePath,
+		TemplateVersion: templateVersion,
+		TemplateReplace: templateReplace,
+		CoreReplace:     coreReplace,
+		CoreVersion:     coreVersion,
 	}
 	renderedFiles, err := renderScaffoldFiles(files, data)
 	if err != nil {
@@ -183,6 +201,11 @@ func Init(opts InitOptions) error {
 			return err
 		}
 	}
+	if _, err := os.Stat(filepath.Join(dir, "plugins.yaml")); err == nil {
+		return fbplugin.Sync(fbplugin.SyncOptions{ModuleDir: dir})
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	return nil
 }
 
@@ -190,7 +213,7 @@ func renderScaffoldFiles(files []scaffoldFile, data templateData) ([]renderedSca
 	renderedFiles := make([]renderedScaffoldFile, 0, len(files))
 	for _, file := range files {
 		source := file.Content
-		if data.TemplateModule != "" {
+		if data.TemplateModule != "" && !file.PreserveModule {
 			source = strings.ReplaceAll(source, data.TemplateModule, data.Module)
 		}
 		content := []byte(source)
@@ -227,6 +250,35 @@ func resolveCoreReplace(value string) string {
 		return ""
 	}
 	return filepath.ToSlash(root)
+}
+
+func resolveTemplateReplace(value string) string {
+	if replacement := strings.TrimSpace(value); replacement != "" {
+		return filepath.ToSlash(replacement)
+	}
+	return filepath.ToSlash(strings.TrimSpace(os.Getenv("FBAGO_TEMPLATE_REPLACE")))
+}
+
+func resolveTemplateDependency(bundle templateBundle, replacementOverride string) (version string, replace string) {
+	if strings.TrimSpace(bundle.TemplateModule) == "" {
+		return "", ""
+	}
+	if replacement := resolveTemplateReplace(replacementOverride); replacement != "" {
+		return developmentCoreVersion, replacement
+	}
+	if bundle.TemplateSource == "local" {
+		return developmentCoreVersion, filepath.ToSlash(bundle.TemplateRoot)
+	}
+	if bundle.TemplateSource == "embedded" {
+		return strings.TrimSpace(bundle.TemplateVersion), ""
+	}
+	// A module in a repository subdirectory is tagged as "subdir/vX.Y.Z";
+	// only the semantic-version suffix belongs in the generated go.mod.
+	candidate := path.Base(strings.TrimSpace(bundle.TemplateRef))
+	if strings.HasPrefix(candidate, "v") && strings.Count(candidate, ".") >= 2 {
+		return candidate, ""
+	}
+	return developmentCoreVersion, ""
 }
 
 func resolveCoreVersion(value string, coreReplace string) (string, error) {
@@ -542,6 +594,10 @@ func ensureTemplateExists(name string) error {
 
 func loadEmbeddedTemplateFiles(name string) (templateBundle, error) {
 	root := path.Join("templates", name)
+	metadata, err := readEmbeddedTemplateMetadata(root)
+	if err != nil {
+		return templateBundle{}, err
+	}
 	files := make([]scaffoldFile, 0)
 	if err := fs.WalkDir(templateFS, root, func(item string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -558,9 +614,13 @@ func loadEmbeddedTemplateFiles(name string) (templateBundle, error) {
 		if err != nil {
 			return err
 		}
+		rel = filepath.ToSlash(rel)
+		if rel == embeddedTemplateMetadataFile {
+			return nil
+		}
 		// Files ending in .tmpl participate in module-name rendering and drop the suffix.
-		// The root env.tmpl maps to .env because go:embed directory patterns ignore dotfiles.
-		target, renderable := targetPath(filepath.ToSlash(rel))
+		// Root env templates map to dotfiles because go:embed ignores hidden files.
+		target, renderable := targetPath(rel)
 		files = append(files, scaffoldFile{
 			Path:       target,
 			Content:    string(content),
@@ -574,11 +634,40 @@ func loadEmbeddedTemplateFiles(name string) (templateBundle, error) {
 		return files[i].Path < files[j].Path
 	})
 	return templateBundle{
-		Files:          files,
-		TemplateName:   name,
-		TemplateSource: "embedded",
-		TemplatePath:   name,
+		Files:           files,
+		TemplateModule:  metadata.Module,
+		TemplateVersion: metadata.Version,
+		TemplateName:    name,
+		TemplateSource:  "embedded",
+		TemplatePath:    name,
 	}, nil
+}
+
+func readEmbeddedTemplateMetadata(root string) (embeddedTemplateMetadata, error) {
+	metadataPath := path.Join(root, embeddedTemplateMetadataFile)
+	content, err := templateFS.ReadFile(metadataPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return embeddedTemplateMetadata{}, nil
+		}
+		return embeddedTemplateMetadata{}, err
+	}
+	var metadata embeddedTemplateMetadata
+	if err := yaml.Unmarshal(content, &metadata); err != nil {
+		return embeddedTemplateMetadata{}, fmt.Errorf("read embedded template metadata %s: %w", metadataPath, err)
+	}
+	metadata.Module = strings.TrimSpace(metadata.Module)
+	metadata.Version = strings.TrimSpace(metadata.Version)
+	if metadata.Module == "" {
+		return embeddedTemplateMetadata{}, fmt.Errorf("embedded template metadata %s must define module", metadataPath)
+	}
+	if strings.ContainsAny(metadata.Module, " \t\r\n") {
+		return embeddedTemplateMetadata{}, fmt.Errorf("embedded template metadata %s module must not contain whitespace", metadataPath)
+	}
+	if !strings.HasPrefix(metadata.Version, "v") || strings.Count(metadata.Version, ".") < 2 {
+		return embeddedTemplateMetadata{}, fmt.Errorf("embedded template metadata %s must define a semantic version", metadataPath)
+	}
+	return metadata, nil
 }
 
 func loadLocalTemplate(root string) (templateBundle, error) {
@@ -593,7 +682,7 @@ func loadLocalTemplate(root string) (templateBundle, error) {
 		return templateBundle{}, fmt.Errorf("template path %q is not a directory", root)
 	}
 
-	templateModule, err := readLocalTemplateModule(root)
+	metadata, err := readLocalTemplateMetadata(root)
 	if err != nil {
 		return templateBundle{}, err
 	}
@@ -602,6 +691,17 @@ func loadLocalTemplate(root string) (templateBundle, error) {
 	if err := filepath.WalkDir(root, func(item string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		rel, err := filepath.Rel(root, item)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if item != root && templatePathMatches(rel, metadata.Exclude) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if entry.IsDir() {
 			if item != root && shouldSkipLocalTemplateDir(entry.Name()) {
@@ -616,15 +716,12 @@ func loadLocalTemplate(root string) (templateBundle, error) {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(root, item)
-		if err != nil {
-			return err
-		}
-		target, renderable := targetPath(filepath.ToSlash(rel))
+		target, renderable := targetPath(rel)
 		files = append(files, scaffoldFile{
-			Path:       target,
-			Content:    string(content),
-			Renderable: renderable,
+			Path:           target,
+			Content:        string(content),
+			Renderable:     renderable,
+			PreserveModule: templatePathMatches(rel, metadata.PreserveModulePaths),
 		})
 		return nil
 	}); err != nil {
@@ -634,14 +731,19 @@ func loadLocalTemplate(root string) (templateBundle, error) {
 		return files[i].Path < files[j].Path
 	})
 	repo, commit, templatePath := localTemplateGitMetadata(root)
+	resolvedRoot, err := filepath.Abs(root)
+	if err != nil {
+		return templateBundle{}, err
+	}
 	return templateBundle{
 		Files:          files,
-		TemplateModule: templateModule,
+		TemplateModule: metadata.Module,
 		TemplateName:   filepath.Base(root),
 		TemplateSource: "local",
 		TemplateRepo:   repo,
 		TemplateCommit: commit,
 		TemplatePath:   templatePath,
+		TemplateRoot:   resolvedRoot,
 	}, nil
 }
 
@@ -682,27 +784,54 @@ func gitOutput(root string, args ...string) string {
 	return strings.TrimSpace(string(output))
 }
 
-func readLocalTemplateModule(root string) (string, error) {
-	path := filepath.Join(root, ".fbago-template.yaml")
-	content, err := os.ReadFile(path)
+func readLocalTemplateMetadata(root string) (localTemplateMetadata, error) {
+	metadataPath := filepath.Join(root, ".fbago-template.yaml")
+	content, err := os.ReadFile(metadataPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", nil
+			return localTemplateMetadata{}, nil
 		}
-		return "", err
+		return localTemplateMetadata{}, err
 	}
 	var metadata localTemplateMetadata
 	if err := yaml.Unmarshal(content, &metadata); err != nil {
-		return "", fmt.Errorf("read template metadata %s: %w", path, err)
+		return localTemplateMetadata{}, fmt.Errorf("read template metadata %s: %w", metadataPath, err)
 	}
-	module := strings.TrimSpace(metadata.Module)
-	if module == "" {
-		return "", fmt.Errorf("template metadata %s must define module", path)
+	metadata.Module = strings.TrimSpace(metadata.Module)
+	if metadata.Module == "" {
+		return localTemplateMetadata{}, fmt.Errorf("template metadata %s must define module", metadataPath)
 	}
-	if strings.ContainsAny(module, " \t\r\n") {
-		return "", fmt.Errorf("template metadata %s module must not contain whitespace", path)
+	if strings.ContainsAny(metadata.Module, " \t\r\n") {
+		return localTemplateMetadata{}, fmt.Errorf("template metadata %s module must not contain whitespace", metadataPath)
 	}
-	return module, nil
+	if err := validateTemplateMetadataPaths(metadataPath, metadata.Exclude); err != nil {
+		return localTemplateMetadata{}, err
+	}
+	if err := validateTemplateMetadataPaths(metadataPath, metadata.PreserveModulePaths); err != nil {
+		return localTemplateMetadata{}, err
+	}
+	return metadata, nil
+}
+
+func validateTemplateMetadataPaths(metadataPath string, values []string) error {
+	for _, value := range values {
+		cleaned := path.Clean(strings.TrimSpace(filepath.ToSlash(value)))
+		if cleaned == "." || cleaned == "" || strings.HasPrefix(cleaned, "../") || path.IsAbs(cleaned) {
+			return fmt.Errorf("template metadata %s contains invalid path %q", metadataPath, value)
+		}
+	}
+	return nil
+}
+
+func templatePathMatches(rel string, values []string) bool {
+	rel = path.Clean(filepath.ToSlash(rel))
+	for _, value := range values {
+		cleaned := path.Clean(strings.TrimSpace(filepath.ToSlash(value)))
+		if rel == cleaned || strings.HasPrefix(rel, cleaned+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func formatGoSource(target string, content []byte) []byte {
@@ -731,6 +860,9 @@ func shouldSkipLocalTemplateFile(name string) bool {
 func targetPath(rel string) (string, bool) {
 	if rel == "env.tmpl" {
 		return ".env", true
+	}
+	if rel == "env.example.tmpl" {
+		return ".env.example", true
 	}
 	if rel == "fbago.yaml.tmpl" {
 		return ".fbago.yaml", true

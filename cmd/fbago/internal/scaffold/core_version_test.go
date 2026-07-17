@@ -47,6 +47,22 @@ func TestResolveCoreVersionQueriesLatestWhenRequested(t *testing.T) {
 	}
 }
 
+func TestResolveTemplateDependencyUsesEmbeddedVersionByDefault(t *testing.T) {
+	t.Setenv("FBAGO_TEMPLATE_REPLACE", "")
+
+	version, replacement := resolveTemplateDependency(templateBundle{
+		TemplateModule:  "github.com/yuWorm/fba-go-admin",
+		TemplateVersion: "v0.3.0",
+		TemplateSource:  "embedded",
+	}, "")
+	if version != "v0.3.0" {
+		t.Fatalf("resolveTemplateDependency() version = %q, want v0.3.0", version)
+	}
+	if replacement != "" {
+		t.Fatalf("resolveTemplateDependency() replacement = %q, want empty replacement", replacement)
+	}
+}
+
 func withReadBuildInfo(t *testing.T, version string) {
 	t.Helper()
 	previous := readBuildInfo
