@@ -1,0 +1,4 @@
+interface:
+  display_name: "FBA Go Framework"
+  short_description: "Use FBA Go framework conventions."
+  default_prompt: "Use this skill when analyzing, changing, or reviewing FBA Go core framework behavior."

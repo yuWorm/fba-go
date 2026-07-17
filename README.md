@@ -97,7 +97,8 @@ make run
 | `core/` | 可复用核心能力与稳定接口 |
 | `cmd/fbago/` | CLI，以及内置的 `basic`、`admin` 脚手架 |
 | `contracts/` | core smoke API contract 定义 |
-| `templates/fba-go-template/` | AI 工程技能与脚手架集成验证资产 |
+| `skills/` | FBA Go 框架、插件和脚手架的 AI 工程技能 |
+| `scripts/verify-template.sh` | 内置 Admin starter 端到端验证脚本 |
 | `docs/` | 迁移设计与实现说明 |
 | `sources/fastapi-best-architecture/` | 可选本地参考源码目录，通常不随公开仓库发布 |
 
@@ -122,12 +123,9 @@ make run
 ## 本地开发
 
 ```bash
-git clone --recursive https://github.com/yuWorm/fba-go.git
+git clone https://github.com/yuWorm/fba-go.git
 git clone https://github.com/yuWorm/fba-go-admin.git
 cd fba-go
-
-# 如果 clone 时没有带 --recursive
-git submodule update --init --recursive
 
 make test
 make verify-template

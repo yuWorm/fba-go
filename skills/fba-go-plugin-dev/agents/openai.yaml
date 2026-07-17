@@ -1,0 +1,4 @@
+interface:
+  display_name: "FBA Go Plugin Dev"
+  short_description: "Build FBA Go plugins correctly."
+  default_prompt: "Use this skill when creating, modifying, or reviewing FBA Go plugins and app modules."

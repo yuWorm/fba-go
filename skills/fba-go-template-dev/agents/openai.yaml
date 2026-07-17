@@ -1,0 +1,4 @@
+interface:
+  display_name: "FBA Go Template Dev"
+  short_description: "Maintain FBA Go templates safely."
+  default_prompt: "Use this skill when changing fbago init, scaffold templates, or the official admin template."

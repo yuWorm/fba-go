@@ -97,7 +97,8 @@ make run
 | `core/` | Reusable core APIs and contracts |
 | `cmd/fbago/` | CLI plus the embedded `basic` and `admin` scaffolds |
 | `contracts/` | Core smoke API contract definitions |
-| `templates/fba-go-template/` | AI engineering skills and scaffold integration assets |
+| `skills/` | AI engineering skills for the framework, plugins, and scaffolds |
+| `scripts/verify-template.sh` | End-to-end verification for the embedded Admin starter |
 | `docs/` | Migration and design docs |
 | `sources/fastapi-best-architecture/` | Optional local reference source, usually not published with the repository |
 
@@ -122,12 +123,9 @@ make run
 ## Local Development
 
 ```bash
-git clone --recursive https://github.com/yuWorm/fba-go.git
+git clone https://github.com/yuWorm/fba-go.git
 git clone https://github.com/yuWorm/fba-go-admin.git
 cd fba-go
-
-# If cloned without --recursive
-git submodule update --init --recursive
 
 make test
 make verify-template

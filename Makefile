@@ -8,4 +8,4 @@ test:
 
 .PHONY: verify-template
 verify-template:
-	$(MAKE) -C templates/fba-go-template verify
+	scripts/verify-template.sh
