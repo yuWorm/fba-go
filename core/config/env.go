@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -285,15 +286,13 @@ func applyMiddlewareEnv(opts *Options, values map[string]string) {
 func applyRealtimeEnv(opts *Options, values map[string]string) {
 	if value, ok := envBool(values, "REALTIME_DISABLED"); ok {
 		opts.Realtime.Disabled = value
+		opts.Realtime.Enabled = !value
 	}
 	if value := firstEnv(values, "REALTIME_PATH", "SOCKETIO_PATH"); value != "" {
 		opts.Realtime.Path = value
 	}
 	if value := firstEnv(values, "REALTIME_NAMESPACE", "SOCKETIO_NAMESPACE"); value != "" {
 		opts.Realtime.Namespace = value
-	}
-	if value, ok := values["WS_NO_AUTH_MARKER"]; ok {
-		opts.Realtime.NoAuthMarker = value
 	}
 	if value, ok := envBool(values, "REALTIME_DISABLE_POLLING"); ok {
 		opts.Realtime.DisablePolling = value
@@ -339,6 +338,9 @@ func applyTaskEnv(opts *Options, values map[string]string) {
 	}
 	if value, ok := envInt(values, "TASK_CONCURRENCY"); ok {
 		opts.Task.Concurrency = value
+	}
+	if value := firstEnv(values, "TASK_QUEUES"); value != "" {
+		opts.Task.Queues = parseTaskQueues(value)
 	}
 	if value, ok := envBool(values, "TASK_SCHEDULER_ENABLED"); ok {
 		opts.Task.SchedulerEnabled = value
@@ -457,10 +459,49 @@ func envBool(values map[string]string, keys ...string) (bool, bool) {
 }
 
 func splitList(value string) []string {
-	parts := strings.Split(value, ",")
+	value = strings.TrimSpace(value)
+	var decoded []string
+	if strings.HasPrefix(value, "[") && strings.HasSuffix(value, "]") {
+		if err := json.Unmarshal([]byte(value), &decoded); err == nil {
+			return cleanList(decoded)
+		}
+		// Python-style environment examples often use single-quoted lists,
+		// which are not JSON but should preserve the same element boundaries.
+		value = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(value, "["), "]"))
+	}
+	return cleanList(strings.Split(value, ","))
+}
+
+func parseTaskQueues(value string) map[string]int {
+	queues := make(map[string]int)
+	var decoded map[string]int
+	if err := json.Unmarshal([]byte(strings.TrimSpace(value)), &decoded); err == nil {
+		for name, priority := range decoded {
+			name = strings.TrimSpace(name)
+			if name != "" && priority > 0 {
+				queues[name] = priority
+			}
+		}
+		return queues
+	}
+	for _, item := range splitList(value) {
+		name, rawPriority, ok := strings.Cut(item, ":")
+		if !ok {
+			name, rawPriority, ok = strings.Cut(item, "=")
+		}
+		priority, err := strconv.Atoi(strings.TrimSpace(rawPriority))
+		name = strings.TrimSpace(name)
+		if ok && err == nil && name != "" && priority > 0 {
+			queues[name] = priority
+		}
+	}
+	return queues
+}
+
+func cleanList(parts []string) []string {
 	items := make([]string, 0, len(parts))
 	for _, part := range parts {
-		part = strings.TrimSpace(part)
+		part = strings.Trim(strings.TrimSpace(part), `"'`)
 		if part != "" {
 			items = append(items, part)
 		}

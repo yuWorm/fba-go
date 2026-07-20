@@ -337,6 +337,57 @@ require [[ .TemplateModule ]] [[ .TemplateVersion ]]
 	assertFileContains(t, filepath.Join(dir, "go.mod"), "replace github.com/acme/template => ../environment-template")
 }
 
+func TestInitRejectsSymbolicLinkInLocalTemplate(t *testing.T) {
+	templateDir := t.TempDir()
+	writeTemplateFile(t, templateDir, ".fbago-template.yaml", "module: github.com/acme/template\n")
+	outside := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(outside, []byte("must not be copied"), 0o600); err != nil {
+		t.Fatalf("write outside secret: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(templateDir, "leak.txt")); err != nil {
+		t.Skipf("symbolic links are unavailable: %v", err)
+	}
+
+	dir := t.TempDir()
+	err := scaffold.Init(scaffold.InitOptions{
+		Dir:      dir,
+		Module:   "github.com/acme/backend",
+		Template: templateDir,
+	})
+	if err == nil {
+		t.Fatal("Init() succeeded, want symbolic-link rejection")
+	}
+	if !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("error = %q, want symbolic-link rejection", err.Error())
+	}
+	assertFileNotExists(t, filepath.Join(dir, "leak.txt"))
+}
+
+func TestInitCannotWriteThroughDestinationSymbolicLink(t *testing.T) {
+	templateDir := t.TempDir()
+	writeTemplateFile(t, templateDir, ".fbago-template.yaml", "module: github.com/acme/template\n")
+	writeTemplateFile(t, templateDir, "escape/payload.txt", "must stay inside project\n")
+
+	dir := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dir, "escape")); err != nil {
+		t.Skipf("symbolic links are unavailable: %v", err)
+	}
+	err := scaffold.Init(scaffold.InitOptions{
+		Dir:      dir,
+		Module:   "github.com/acme/backend",
+		Template: templateDir,
+		Force:    true,
+	})
+	if err == nil {
+		t.Fatal("Init() succeeded, want destination symbolic-link rejection")
+	}
+	if !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("error = %q, want symbolic-link rejection", err.Error())
+	}
+	assertFileNotExists(t, filepath.Join(outside, "payload.txt"))
+}
+
 func TestInitRejectsUnknownTemplate(t *testing.T) {
 	err := scaffold.Init(scaffold.InitOptions{
 		Dir:      t.TempDir(),

@@ -2,6 +2,7 @@ package migration
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -38,13 +39,17 @@ func NewRunner(store Store, lock Lock) *Runner {
 	}
 }
 
-func (r *Runner) Run(ctx context.Context, migrations []Migration) error {
+func (r *Runner) Run(ctx context.Context, migrations []Migration) (runErr error) {
 	release, err := r.lock.Acquire(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = release(ctx)
+		// Acquisition contexts are commonly cancelled during shutdown. Use a
+		// bounded detached context so session-scoped database locks still release.
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		runErr = errors.Join(runErr, release(releaseCtx))
 	}()
 
 	for _, m := range migrations {

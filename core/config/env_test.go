@@ -17,7 +17,6 @@ FASTAPI_API_V1_PATH='/from-dotenv'
 REDIS_HOST='dotenv-redis'
 REDIS_PORT=6380
 TOKEN_SECRET_KEY='dotenv-secret'
-WS_NO_AUTH_MARKER='dotenv-marker'
 `)
 	t.Setenv("FASTAPI_API_V1_PATH", "/from-system")
 	t.Setenv("TOKEN_SECRET_KEY", "system-secret")
@@ -35,9 +34,6 @@ WS_NO_AUTH_MARKER='dotenv-marker'
 	}
 	if opts.Redis.Addr != "dotenv-redis:6380" {
 		t.Fatalf("Redis.Addr = %q, want dotenv-redis:6380", opts.Redis.Addr)
-	}
-	if opts.Realtime.NoAuthMarker != "dotenv-marker" {
-		t.Fatalf("NoAuthMarker = %q, want dotenv-marker", opts.Realtime.NoAuthMarker)
 	}
 }
 
@@ -62,8 +58,8 @@ TOKEN_SECRET_KEY='token-secret'
 TOKEN_EXPIRE_SECONDS=3600
 TOKEN_REFRESH_EXPIRE_SECONDS=7200
 TOKEN_REDIS_PREFIX='acme:token'
-WS_NO_AUTH_MARKER='ws-internal'
 CELERY_BROKER_REDIS_DATABASE=3
+TASK_QUEUES='{"critical":6,"default":3}'
 `)
 
 	opts, err := config.LoadFromEnvFile(path)
@@ -94,11 +90,11 @@ CELERY_BROKER_REDIS_DATABASE=3
 	if opts.Auth.JWTSecret != "token-secret" || opts.Auth.AccessTokenTTL != time.Hour || opts.Auth.RefreshTokenTTL != 2*time.Hour {
 		t.Fatalf("Auth options = %+v", opts.Auth)
 	}
-	if opts.Realtime.NoAuthMarker != "ws-internal" {
-		t.Fatalf("Realtime.NoAuthMarker = %q", opts.Realtime.NoAuthMarker)
-	}
 	if opts.Task.RedisDB != 3 {
 		t.Fatalf("Task.RedisDB = %d, want 3", opts.Task.RedisDB)
+	}
+	if opts.Task.Queues["critical"] != 6 || opts.Task.Queues["default"] != 3 {
+		t.Fatalf("Task.Queues = %v, want critical=6 default=3", opts.Task.Queues)
 	}
 }
 
@@ -132,7 +128,7 @@ REALTIME_DISABLE_POLLING=true
 func TestLoadFromEnvFileMapsPythonCORSSettings(t *testing.T) {
 	path := writeEnvFile(t, `
 MIDDLEWARE_CORS=false
-CORS_ALLOWED_ORIGINS='http://localhost:5173,http://127.0.0.1:3000'
+CORS_ALLOWED_ORIGINS='["http://localhost:5173","http://127.0.0.1:3000"]'
 CORS_EXPOSE_HEADERS='X-Request-ID,X-Trace-ID'
 CORS_ALLOW_CREDENTIALS=false
 `)
@@ -153,6 +149,20 @@ CORS_ALLOW_CREDENTIALS=false
 	}
 	if opts.CORS.AllowCredentials {
 		t.Fatal("CORS.AllowCredentials = true, want false")
+	}
+}
+
+func TestLoadFromEnvFileMapsPythonStyleCORSList(t *testing.T) {
+	path := writeEnvFile(t, `
+CORS_ALLOWED_ORIGINS=['http://localhost:5173','http://127.0.0.1:3000']
+`)
+
+	opts, err := config.LoadFromEnvFile(path)
+	if err != nil {
+		t.Fatalf("LoadFromEnvFile() error = %v", err)
+	}
+	if got := strings.Join(opts.CORS.AllowedOrigins, ","); got != "http://localhost:5173,http://127.0.0.1:3000" {
+		t.Fatalf("CORS.AllowedOrigins = %q", got)
 	}
 }
 

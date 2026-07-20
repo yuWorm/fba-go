@@ -42,3 +42,8 @@ func (r *Registry) Add(definition Definition) error {
 func (r *Registry) All() []Definition {
 	return append([]Definition(nil), r.definitions...)
 }
+
+func (r *Registry) Lookup(taskType string) (Definition, bool) {
+	definition, ok := r.byType[taskType]
+	return definition, ok
+}

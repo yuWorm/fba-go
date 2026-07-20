@@ -179,8 +179,8 @@ func TestNewControlsInternalErrorResponseDetails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadAll(include detail) error = %v", err)
 	}
-	if !strings.Contains(string(body), "database connection refused") {
-		t.Fatalf("body = %s, want internal error detail when enabled", body)
+	if strings.Contains(string(body), "database connection refused") {
+		t.Fatalf("body = %s, production must ignore attempts to expose internal details", body)
 	}
 }
 

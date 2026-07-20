@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -27,5 +28,18 @@ func TestCORSDefaultsMatchPythonSettings(t *testing.T) {
 	}
 	if !reflect.DeepEqual(opts.CORS.ExposeHeaders, []string{"X-Request-ID"}) {
 		t.Fatalf("CORS.ExposeHeaders = %#v", opts.CORS.ExposeHeaders)
+	}
+}
+
+func TestValidateCORSOptionsRejectsWildcardCredentials(t *testing.T) {
+	opts := config.Options{
+		CORS: config.CORSOptions{
+			AllowedOrigins:   []string{"*"},
+			AllowCredentials: true,
+		},
+	}.WithDefaults()
+
+	if err := config.ValidateCORSOptions(opts.CORS); !errors.Is(err, config.ErrCORSWildcardCredentials) {
+		t.Fatalf("ValidateCORSOptions() error = %v, want ErrCORSWildcardCredentials", err)
 	}
 }

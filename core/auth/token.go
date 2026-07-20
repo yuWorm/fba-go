@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"strconv"
 	"time"
 
@@ -14,7 +15,11 @@ import (
 
 const defaultAccessTokenTTL = 2 * time.Hour
 
-var ErrAccessTokenExpired = errors.New("access token expired")
+var (
+	ErrAccessTokenExpired = errors.New("access token expired")
+	ErrJWTSecretRequired  = errors.New("JWT secret must contain at least 32 bytes")
+	ErrJWTIssuerRequired  = errors.New("JWT issuer is required")
+)
 
 type TokenService interface {
 	CreateAccessToken(ctx context.Context, userID int64, sessionUUID string, extra map[string]any) (*AccessToken, error)
@@ -37,26 +42,37 @@ type JWTService struct {
 	issuer string
 	ttl    time.Duration
 	Now    func() time.Time
+	configErr error
 }
 
 func NewJWTService(opts config.AuthOptions) *JWTService {
 	ttl := opts.AccessTokenTTL
-	if ttl == 0 {
+	if ttl <= 0 {
 		ttl = defaultAccessTokenTTL
 	}
-	secret := opts.JWTSecret
-	if secret == "" {
-		secret = "change-me"
-	}
 	return &JWTService{
-		secret: []byte(secret),
-		issuer: opts.JWTIssuer,
-		ttl:    ttl,
-		Now:    time.Now,
+		secret:    []byte(opts.JWTSecret),
+		issuer:    strings.TrimSpace(opts.JWTIssuer),
+		ttl:       ttl,
+		Now:       time.Now,
+		configErr: ValidateJWTOptions(opts),
 	}
 }
 
+func ValidateJWTOptions(opts config.AuthOptions) error {
+	if len([]byte(opts.JWTSecret)) < 32 {
+		return ErrJWTSecretRequired
+	}
+	if strings.TrimSpace(opts.JWTIssuer) == "" {
+		return ErrJWTIssuerRequired
+	}
+	return nil
+}
+
 func (s *JWTService) CreateAccessToken(_ context.Context, userID int64, sessionUUID string, _ map[string]any) (*AccessToken, error) {
+	if s.configErr != nil {
+		return nil, s.configErr
+	}
 	if sessionUUID == "" {
 		sessionUUID = uuid.NewString()
 	}
@@ -85,12 +101,23 @@ func (s *JWTService) CreateAccessToken(_ context.Context, userID int64, sessionU
 }
 
 func (s *JWTService) ParseAccessToken(tokenString string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (any, error) {
-		if token.Method != jwt.SigningMethodHS256 {
-			return nil, fmt.Errorf("unexpected signing method %s", token.Method.Alg())
-		}
-		return s.secret, nil
-	})
+	if s.configErr != nil {
+		return nil, s.configErr
+	}
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		&Claims{},
+		func(token *jwt.Token) (any, error) {
+			if token.Method != jwt.SigningMethodHS256 {
+				return nil, fmt.Errorf("unexpected signing method %s", token.Method.Alg())
+			}
+			return s.secret, nil
+		},
+		jwt.WithIssuer(s.issuer),
+		jwt.WithExpirationRequired(),
+		jwt.WithIssuedAt(),
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+	)
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return nil, ErrAccessTokenExpired

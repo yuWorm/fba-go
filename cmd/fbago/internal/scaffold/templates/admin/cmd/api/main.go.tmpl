@@ -4,13 +4,17 @@ import (
 	"context"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	admin "[[ .TemplateModule ]]"
 	"[[ .Module ]]/internal/generated"
 )
 
 func main() {
-	if err := admin.Run(context.Background(), os.Args[1:], admin.Options{
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := admin.Run(ctx, os.Args[1:], admin.Options{
 		Register: generated.RegisterPlugins,
 	}); err != nil {
 		log.Fatal(err)

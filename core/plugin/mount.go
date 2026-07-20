@@ -75,6 +75,9 @@ func authHandler(route Route, authenticator Authenticator) fiber.Handler {
 		if err != nil {
 			return authErrorFailure(c, err)
 		}
+		if user == nil {
+			return authFailure(c, http.StatusUnauthorized, "未认证")
+		}
 		// Auth-only routes mirror Python's DependsJwtAuth: they require a valid user context
 		// but must not apply role/menu checks unless the route declares RBAC metadata.
 		if route.Permission != "" || route.SuperuserRequired {

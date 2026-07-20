@@ -16,6 +16,11 @@ func TestOpenCreatesSQLiteProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
+	closer, ok := provider.(db.Closer)
+	if !ok {
+		t.Fatalf("provider = %T, want db.Closer", provider)
+	}
+	defer closer.Close()
 	if provider.Write() == nil || provider.Read() == nil {
 		t.Fatal("provider returned nil database handle")
 	}
@@ -35,5 +40,29 @@ func TestOpenRejectsMissingDatabaseConfiguration(t *testing.T) {
 	_, err := db.Open(config.DatabaseOptions{})
 	if err == nil || !strings.Contains(err.Error(), "database driver is required") {
 		t.Fatalf("Open() error = %v, want missing driver", err)
+	}
+}
+
+func TestGORMProviderCloseClosesOwnedPool(t *testing.T) {
+	provider, err := db.Open(config.DatabaseOptions{
+		Driver:   "sqlite",
+		WriteDSN: "file:close_database?mode=memory&cache=shared",
+	})
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	pool, err := provider.Write().DB()
+	if err != nil {
+		t.Fatalf("DB() error = %v", err)
+	}
+	closer, ok := provider.(db.Closer)
+	if !ok {
+		t.Fatalf("provider = %T, want db.Closer", provider)
+	}
+	if err := closer.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if err := pool.Ping(); err == nil {
+		t.Fatal("Ping() error = nil after provider close")
 	}
 }

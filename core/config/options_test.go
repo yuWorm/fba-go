@@ -38,3 +38,16 @@ func TestWithDefaultsHidesErrorDetailOutsideDev(t *testing.T) {
 		t.Fatal("ErrorResponse.IncludeDetail = true in prod, want false")
 	}
 }
+
+func TestWithDefaultsCannotExposeErrorDetailOutsideDev(t *testing.T) {
+	opts := config.Options{
+		App: config.AppOptions{Environment: "prod"},
+		Middleware: config.MiddlewareOptions{
+			ErrorResponse: config.ErrorResponseOptions{IncludeDetail: true},
+		},
+	}.WithDefaults()
+
+	if opts.Middleware.ErrorResponse.IncludeDetail {
+		t.Fatal("ErrorResponse.IncludeDetail = true in prod after an explicit enable")
+	}
+}

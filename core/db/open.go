@@ -1,6 +1,7 @@
 package db
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -21,7 +22,7 @@ func Open(opts config.DatabaseOptions) (Provider, error) {
 	if strings.TrimSpace(opts.ReadDSN) != "" {
 		read, err = OpenGORM(opts.Driver, opts.ReadDSN, opts)
 		if err != nil {
-			return nil, err
+			return nil, errors.Join(err, closeGORM(write))
 		}
 	}
 	return NewGORMProvider(write, read), nil
@@ -55,7 +56,7 @@ func OpenGORM(driver string, dsn string, opts config.DatabaseOptions) (*gorm.DB,
 		database = database.Set("gorm:table_options", mysqlTableOptions())
 	}
 	if err := configurePool(database, opts); err != nil {
-		return nil, err
+		return nil, errors.Join(err, closeGORM(database))
 	}
 	return database, nil
 }
@@ -78,6 +79,17 @@ func configurePool(database *gorm.DB, opts config.DatabaseOptions) error {
 		sqlDB.SetConnMaxIdleTime(opts.ConnMaxIdleTime)
 	}
 	return nil
+}
+
+func closeGORM(database *gorm.DB) error {
+	if database == nil {
+		return nil
+	}
+	pool, err := database.DB()
+	if err != nil {
+		return err
+	}
+	return pool.Close()
 }
 
 func normalizeDriver(driver string) string {

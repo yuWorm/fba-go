@@ -1,12 +1,14 @@
 package middleware_test
 
 import (
+	"errors"
 	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/yuWorm/fba-go/core/config"
 	"github.com/yuWorm/fba-go/core/middleware"
 )
 
@@ -80,5 +82,30 @@ func TestRecoverReturnsCompatibleErrorEnvelope(t *testing.T) {
 	}
 	if !strings.Contains(string(body), `"trace_id"`) {
 		t.Fatalf("body = %s, want trace_id", body)
+	}
+}
+
+func TestErrorHandlerNeverExposesInternalDetailInProduction(t *testing.T) {
+	app := fiber.New(fiber.Config{ErrorHandler: middleware.NewErrorHandler(config.Options{
+		App: config.AppOptions{Environment: "prod"},
+		Middleware: config.MiddlewareOptions{
+			ErrorResponse: config.ErrorResponseOptions{IncludeDetail: true},
+		},
+	})})
+	app.Get("/failure", func(fiber.Ctx) error {
+		return errors.New("postgres://user:secret@database.internal/private")
+	})
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/failure", nil))
+	if err != nil {
+		t.Fatalf("App.Test() error = %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	if strings.Contains(string(body), "secret") || !strings.Contains(string(body), "内部服务器错误") {
+		t.Fatalf("body = %s, want public production error", body)
 	}
 }

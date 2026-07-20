@@ -3,6 +3,7 @@ package scaffold
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -112,11 +113,16 @@ func UpdateTemplate(opts TemplateUpdateOptions) (TemplateUpdateResult, error) {
 		}
 	}
 	dir := projectDir(opts.Dir)
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return result, err
+	}
+	defer root.Close()
 	for _, change := range plan.Changes {
 		if change.Manifest {
 			continue
 		}
-		if err := writePlannedChange(dir, change); err != nil {
+		if err := writePlannedChange(root, change); err != nil {
 			return result, err
 		}
 	}
@@ -124,7 +130,7 @@ func UpdateTemplate(opts TemplateUpdateOptions) (TemplateUpdateResult, error) {
 		if !change.Manifest {
 			continue
 		}
-		if err := writePlannedChange(dir, change); err != nil {
+		if err := writePlannedChange(root, change); err != nil {
 			return result, err
 		}
 	}
@@ -133,7 +139,12 @@ func UpdateTemplate(opts TemplateUpdateOptions) (TemplateUpdateResult, error) {
 
 func planTemplateSync(dir string, templateOverride string) (templateSyncPlan, error) {
 	dir = projectDir(dir)
-	current, err := readProjectManifest(dir)
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return templateSyncPlan{}, err
+	}
+	defer root.Close()
+	current, err := readProjectManifest(root, dir)
 	if err != nil {
 		return templateSyncPlan{}, err
 	}
@@ -147,7 +158,7 @@ func planTemplateSync(dir string, templateOverride string) (templateSyncPlan, er
 	}
 	module := strings.TrimSpace(current.Template.Module)
 	if module == "" {
-		module, err = readGoModuleName(dir)
+		module, err = readGoModuleName(root, dir)
 		if err != nil {
 			return templateSyncPlan{}, err
 		}
@@ -179,11 +190,11 @@ func planTemplateSync(dir string, templateOverride string) (templateSyncPlan, er
 		return templateSyncPlan{}, err
 	}
 	next = mergeManagedPaths(current, next)
-	changes, err := planManagedChanges(dir, rendered, next.Managed)
+	changes, err := planManagedChanges(root, rendered, next.Managed)
 	if err != nil {
 		return templateSyncPlan{}, err
 	}
-	removedChanges, err := planRemovedManagedChanges(dir, current.Managed, next.Managed)
+	removedChanges, err := planRemovedManagedChanges(root, current.Managed, next.Managed)
 	if err != nil {
 		return templateSyncPlan{}, err
 	}
@@ -193,7 +204,7 @@ func planTemplateSync(dir string, templateOverride string) (templateSyncPlan, er
 		if err != nil {
 			return templateSyncPlan{}, err
 		}
-		if change, ok, err := compareTargetFile(dir, projectManifestFile, manifestContent, true); err != nil {
+		if change, ok, err := compareTargetFile(root, projectManifestFile, manifestContent, true); err != nil {
 			return templateSyncPlan{}, err
 		} else if ok {
 			changes = append(changes, change)
@@ -205,9 +216,12 @@ func planTemplateSync(dir string, templateOverride string) (templateSyncPlan, er
 	return templateSyncPlan{Changes: changes}, nil
 }
 
-func readProjectManifest(dir string) (projectManifest, error) {
+func readProjectManifest(root *os.Root, dir string) (projectManifest, error) {
 	path := filepath.Join(dir, projectManifestFile)
-	content, err := os.ReadFile(path)
+	if err := rejectRootSymlinks(root, projectManifestFile); err != nil {
+		return projectManifest{}, err
+	}
+	content, err := root.ReadFile(projectManifestFile)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return projectManifest{}, fmt.Errorf("%s not found; run fbago init with a manifest-enabled template first", path)
@@ -260,8 +274,11 @@ func manifestRemoteTemplateSpec(template projectTemplateManifest) string {
 	return spec
 }
 
-func readGoModuleName(dir string) (string, error) {
-	content, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+func readGoModuleName(root *os.Root, dir string) (string, error) {
+	if err := rejectRootSymlinks(root, "go.mod"); err != nil {
+		return "", err
+	}
+	content, err := root.ReadFile("go.mod")
 	if err != nil {
 		return "", err
 	}
@@ -341,7 +358,7 @@ func isManualManagedMode(mode string) bool {
 	}
 }
 
-func planManagedChanges(dir string, files []renderedScaffoldFile, managed []managedSource) ([]plannedTemplateChange, error) {
+func planManagedChanges(root *os.Root, files []renderedScaffoldFile, managed []managedSource) ([]plannedTemplateChange, error) {
 	changes := make([]plannedTemplateChange, 0)
 	seenTargets := make(map[string]string)
 	for _, item := range managed {
@@ -375,7 +392,7 @@ func planManagedChanges(dir string, files []renderedScaffoldFile, managed []mana
 				return nil, fmt.Errorf("managed target %s is declared more than once", target)
 			}
 			seenTargets[target] = managedKey(item)
-			change, ok, err := compareTargetFile(dir, target, file.Content, false)
+			change, ok, err := compareTargetFile(root, target, file.Content, false)
 			if err != nil {
 				return nil, err
 			}
@@ -390,7 +407,7 @@ func planManagedChanges(dir string, files []renderedScaffoldFile, managed []mana
 	return changes, nil
 }
 
-func planRemovedManagedChanges(dir string, current []managedSource, next []managedSource) ([]plannedTemplateChange, error) {
+func planRemovedManagedChanges(root *os.Root, current []managedSource, next []managedSource) ([]plannedTemplateChange, error) {
 	nextByKey := make(map[string]managedSource, len(next))
 	nextPaths := make([]string, 0, len(next))
 	for _, item := range next {
@@ -417,7 +434,7 @@ func planRemovedManagedChanges(dir string, current []managedSource, next []manag
 		if overlapsAnyManagedPath(targetBase, nextPaths) {
 			continue
 		}
-		files, err := listProjectFiles(dir, targetBase)
+		files, err := listProjectFiles(root, targetBase)
 		if err != nil {
 			return nil, err
 		}
@@ -440,9 +457,15 @@ func overlapsAnyManagedPath(target string, paths []string) bool {
 	return false
 }
 
-func listProjectFiles(dir string, rel string) ([]string, error) {
-	root := filepath.Join(dir, filepath.FromSlash(rel))
-	info, err := os.Stat(root)
+func listProjectFiles(root *os.Root, rel string) ([]string, error) {
+	name, err := cleanRootRelativePath(rel)
+	if err != nil {
+		return nil, err
+	}
+	if err := rejectRootSymlinks(root, name); err != nil {
+		return nil, err
+	}
+	info, err := root.Lstat(name)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -450,21 +473,20 @@ func listProjectFiles(dir string, rel string) ([]string, error) {
 		return nil, err
 	}
 	if !info.IsDir() {
-		return []string{rel}, nil
+		return []string{filepath.ToSlash(name)}, nil
 	}
 	files := make([]string, 0)
-	if err := filepath.WalkDir(root, func(item string, entry os.DirEntry, err error) error {
+	if err := fs.WalkDir(root.FS(), filepath.ToSlash(name), func(item string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if entry.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("managed project entry %q must not be a symbolic link", item)
 		}
 		if entry.IsDir() {
 			return nil
 		}
-		file, err := filepath.Rel(dir, item)
-		if err != nil {
-			return err
-		}
-		files = append(files, filepath.ToSlash(file))
+		files = append(files, filepath.ToSlash(item))
 		return nil
 	}); err != nil {
 		return nil, err
@@ -496,12 +518,19 @@ func managedFileSuffix(file string, sourceBase string) (string, bool) {
 	return "", false
 }
 
-func compareTargetFile(dir string, rel string, content []byte, manifest bool) (plannedTemplateChange, bool, error) {
-	current, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+func compareTargetFile(root *os.Root, rel string, content []byte, manifest bool) (plannedTemplateChange, bool, error) {
+	name, err := cleanRootRelativePath(rel)
+	if err != nil {
+		return plannedTemplateChange{}, false, err
+	}
+	if err := rejectRootSymlinks(root, name); err != nil {
+		return plannedTemplateChange{}, false, err
+	}
+	current, err := root.ReadFile(name)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return plannedTemplateChange{
-				TemplateChange: TemplateChange{Status: "A", Path: rel},
+				TemplateChange: TemplateChange{Status: "A", Path: filepath.ToSlash(name)},
 				Content:        content,
 				Manifest:       manifest,
 			}, true, nil
@@ -512,7 +541,7 @@ func compareTargetFile(dir string, rel string, content []byte, manifest bool) (p
 		return plannedTemplateChange{}, false, nil
 	}
 	return plannedTemplateChange{
-		TemplateChange: TemplateChange{Status: "M", Path: rel},
+		TemplateChange: TemplateChange{Status: "M", Path: filepath.ToSlash(name)},
 		Content:        content,
 		Manifest:       manifest,
 	}, true, nil
@@ -538,18 +567,24 @@ func unsafeChangePaths(changes []plannedTemplateChange) []string {
 	return paths
 }
 
-func writePlannedChange(dir string, change plannedTemplateChange) error {
-	path := filepath.Join(dir, filepath.FromSlash(change.Path))
+func writePlannedChange(root *os.Root, change plannedTemplateChange) error {
+	name, err := cleanRootRelativePath(change.Path)
+	if err != nil {
+		return err
+	}
+	if err := rejectRootSymlinks(root, name); err != nil {
+		return err
+	}
 	if change.Delete {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		if err := root.Remove(name); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, change.Content, 0o644)
+	return root.WriteFile(name, change.Content, 0o644)
 }
 
 func projectDir(value string) string {
@@ -557,4 +592,37 @@ func projectDir(value string) string {
 		return "."
 	}
 	return value
+}
+
+func cleanRootRelativePath(value string) (string, error) {
+	cleaned := filepath.Clean(filepath.FromSlash(value))
+	if cleaned == "." || !filepath.IsLocal(cleaned) {
+		return "", fmt.Errorf("path %q must be relative to the project root", value)
+	}
+	return cleaned, nil
+}
+
+func rejectRootSymlinks(root *os.Root, value string) error {
+	name, err := cleanRootRelativePath(value)
+	if err != nil {
+		return err
+	}
+	current := ""
+	for _, part := range strings.Split(name, string(filepath.Separator)) {
+		current = filepath.Join(current, part)
+		info, err := root.Lstat(current)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("project path %q must not contain symbolic links", filepath.ToSlash(current))
+		}
+		if current != name && !info.IsDir() {
+			return fmt.Errorf("project path component %q is not a directory", filepath.ToSlash(current))
+		}
+	}
+	return nil
 }

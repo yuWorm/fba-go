@@ -84,7 +84,7 @@ echo "==> testing generated project"
 	cd "${generated_dir}"
 	GOWORK=off go test ./...
 	GOWORK=off go build ./cmd/api
-	GOWORK=off go run ./cmd/api --help >/dev/null
+	TOKEN_SECRET_KEY=0123456789abcdef0123456789abcdef GOWORK=off go run ./cmd/api --help >/dev/null
 )
 
 echo "==> checking template drift"

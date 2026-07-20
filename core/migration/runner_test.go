@@ -75,6 +75,17 @@ func TestRunnerRecordsFailedMigration(t *testing.T) {
 	}
 }
 
+func TestRunnerReturnsLockReleaseError(t *testing.T) {
+	releaseErr := errors.New("release lock")
+	runner := migration.NewRunner(&fakeStore{}, &fakeLock{releaseErr: releaseErr})
+
+	err := runner.Run(context.Background(), nil)
+
+	if !errors.Is(err, releaseErr) {
+		t.Fatalf("Run() error = %v, want release error", err)
+	}
+}
+
 type fakeStore struct {
 	applied map[string]bool
 	records []migration.Record
@@ -90,14 +101,15 @@ func (s *fakeStore) Record(_ context.Context, record migration.Record) error {
 }
 
 type fakeLock struct {
-	acquired bool
-	released bool
+	acquired   bool
+	released   bool
+	releaseErr error
 }
 
 func (l *fakeLock) Acquire(context.Context) (func(context.Context) error, error) {
 	l.acquired = true
 	return func(context.Context) error {
 		l.released = true
-		return nil
+		return l.releaseErr
 	}, nil
 }

@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -114,6 +115,20 @@ type CORSOptions struct {
 	allowCredentialsSet bool
 }
 
+var ErrCORSWildcardCredentials = errors.New("CORS wildcard origin cannot be combined with credentials")
+
+func ValidateCORSOptions(opts CORSOptions) error {
+	if !opts.Enabled || !opts.AllowCredentials {
+		return nil
+	}
+	for _, origin := range opts.AllowedOrigins {
+		if strings.TrimSpace(origin) == "*" {
+			return ErrCORSWildcardCredentials
+		}
+	}
+	return nil
+}
+
 type RotationOptions struct {
 	MaxSize    int
 	MaxAge     int
@@ -173,10 +188,10 @@ type IPLocationOptions struct {
 }
 
 type RealtimeOptions struct {
+	Enabled        bool
 	Disabled       bool
 	Path           string
 	Namespace      string
-	NoAuthMarker   string
 	EnablePolling  bool
 	DisablePolling bool
 	MultiInstance  RealtimeMultiInstanceOptions
@@ -231,10 +246,10 @@ func (o Options) WithDefaults() Options {
 		o.Middleware.AccessLog.SkipPaths = []string{"/healthz", "/readyz", "/metrics"}
 	}
 	o.Middleware.ErrorLog.Enabled = defaultEnabled(o.Middleware.ErrorLog.Disabled, o.Middleware.ErrorLog.Enabled, o.Middleware.ErrorLog.enabledSet)
-	if o.Middleware.ErrorResponse.HideDetail {
+	if !strings.EqualFold(o.App.Environment, "dev") || o.Middleware.ErrorResponse.HideDetail {
 		o.Middleware.ErrorResponse.IncludeDetail = false
 	} else if !o.Middleware.ErrorResponse.includeDetailSet && !o.Middleware.ErrorResponse.IncludeDetail {
-		o.Middleware.ErrorResponse.IncludeDetail = strings.EqualFold(o.App.Environment, "dev")
+		o.Middleware.ErrorResponse.IncludeDetail = true
 	}
 	if o.CORS.Disabled {
 		o.CORS.Enabled = false
@@ -265,14 +280,17 @@ func (o Options) WithDefaults() Options {
 	if o.IPLocation.Searchers <= 0 {
 		o.IPLocation.Searchers = 20
 	}
+	if !o.Realtime.Enabled {
+		o.Realtime.Disabled = true
+	}
+	if o.Realtime.Disabled {
+		o.Realtime.Enabled = false
+	}
 	if o.Realtime.Path == "" {
 		o.Realtime.Path = "/ws/socket.io"
 	}
 	if o.Realtime.Namespace == "" {
 		o.Realtime.Namespace = "/ws"
-	}
-	if o.Realtime.NoAuthMarker == "" {
-		o.Realtime.NoAuthMarker = "internal"
 	}
 	if !o.Realtime.DisablePolling {
 		o.Realtime.EnablePolling = true

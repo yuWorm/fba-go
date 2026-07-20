@@ -11,3 +11,9 @@ type Provider interface {
 	Read() *gorm.DB
 	Transaction(ctx context.Context, fn func(tx *gorm.DB) error) error
 }
+
+// Closer is implemented by providers that own database connection pools.
+// Runtimes should close only providers they opened themselves.
+type Closer interface {
+	Close() error
+}

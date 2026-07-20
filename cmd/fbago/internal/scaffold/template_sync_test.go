@@ -121,6 +121,40 @@ func TestUpdateTemplateForceOverwritesManagedFiles(t *testing.T) {
 	assertFileContains(t, filepath.Join(dir, "internal/app/admin/version.txt"), "admin v2")
 }
 
+func TestUpdateTemplateCannotWriteThroughDestinationSymbolicLink(t *testing.T) {
+	dir := t.TempDir()
+	templateDir := t.TempDir()
+	writeSyncTemplate(t, templateDir, "admin v1\n", false)
+	if err := scaffold.Init(scaffold.InitOptions{
+		Dir:      dir,
+		Module:   "github.com/acme/backend",
+		Template: templateDir,
+	}); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	if err := os.RemoveAll(filepath.Join(dir, "internal")); err != nil {
+		t.Fatalf("remove managed directory: %v", err)
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dir, "internal")); err != nil {
+		t.Skipf("symbolic links are unavailable: %v", err)
+	}
+	writeSyncTemplate(t, templateDir, "admin v2\n", false)
+	_, err := scaffold.UpdateTemplate(scaffold.TemplateUpdateOptions{
+		Dir:      dir,
+		Template: templateDir,
+		Force:    true,
+	})
+	if err == nil {
+		t.Fatal("UpdateTemplate() succeeded, want destination symbolic-link rejection")
+	}
+	if !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("error = %q, want symbolic-link rejection", err.Error())
+	}
+	assertFileNotExists(t, filepath.Join(outside, "app/admin/version.txt"))
+}
+
 func TestDiffTemplateSkipsManualManagedEntries(t *testing.T) {
 	dir := t.TempDir()
 	templateDir := t.TempDir()

@@ -157,16 +157,6 @@ func Init(opts InitOptions) error {
 		return err
 	}
 	files := bundle.Files
-	if !opts.Force {
-		for _, file := range files {
-			path := filepath.Join(dir, file.Path)
-			if _, err := os.Stat(path); err == nil {
-				return fmt.Errorf("%s already exists", path)
-			} else if !os.IsNotExist(err) {
-				return err
-			}
-		}
-	}
 
 	coreReplace := resolveCoreReplace(opts.CoreReplace)
 	coreVersion, err := resolveCoreVersion(opts.CoreVersion, coreReplace)
@@ -192,16 +182,49 @@ func Init(opts InitOptions) error {
 	if err != nil {
 		return err
 	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	projectRoot, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer projectRoot.Close()
+	if !opts.Force {
+		for _, file := range renderedFiles {
+			name, err := cleanRootRelativePath(file.Path)
+			if err != nil {
+				return err
+			}
+			if err := rejectRootSymlinks(projectRoot, name); err != nil {
+				return err
+			}
+			if _, err := projectRoot.Stat(name); err == nil {
+				return fmt.Errorf("%s already exists", filepath.Join(dir, name))
+			} else if !os.IsNotExist(err) {
+				return err
+			}
+		}
+	}
 	for _, file := range renderedFiles {
-		path := filepath.Join(dir, file.Path)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		name, err := cleanRootRelativePath(file.Path)
+		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, file.Content, 0o644); err != nil {
+		if err := rejectRootSymlinks(projectRoot, name); err != nil {
+			return err
+		}
+		if err := projectRoot.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+			return err
+		}
+		if err := projectRoot.WriteFile(name, file.Content, 0o644); err != nil {
 			return err
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, "plugins.yaml")); err == nil {
+	if err := rejectRootSymlinks(projectRoot, "plugins.yaml"); err != nil {
+		return err
+	}
+	if _, err := projectRoot.Stat("plugins.yaml"); err == nil {
 		return fbplugin.Sync(fbplugin.SyncOptions{ModuleDir: dir})
 	} else if !os.IsNotExist(err) {
 		return err
@@ -671,48 +694,62 @@ func readEmbeddedTemplateMetadata(root string) (embeddedTemplateMetadata, error)
 }
 
 func loadLocalTemplate(root string) (templateBundle, error) {
-	info, err := os.Stat(root)
+	info, err := os.Lstat(root)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return templateBundle{}, fmt.Errorf("template path %q does not exist", root)
 		}
 		return templateBundle{}, err
 	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return templateBundle{}, fmt.Errorf("template path %q must not be a symbolic link", root)
+	}
 	if !info.IsDir() {
 		return templateBundle{}, fmt.Errorf("template path %q is not a directory", root)
 	}
+	templateRoot, err := os.OpenRoot(root)
+	if err != nil {
+		return templateBundle{}, err
+	}
+	defer templateRoot.Close()
 
-	metadata, err := readLocalTemplateMetadata(root)
+	metadata, err := readLocalTemplateMetadata(templateRoot, root)
 	if err != nil {
 		return templateBundle{}, err
 	}
 
 	files := make([]scaffoldFile, 0)
-	if err := filepath.WalkDir(root, func(item string, entry fs.DirEntry, err error) error {
+	if err := fs.WalkDir(templateRoot.FS(), ".", func(item string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(root, item)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		if item != root && templatePathMatches(rel, metadata.Exclude) {
+		rel := filepath.ToSlash(item)
+		if item != "." && templatePathMatches(rel, metadata.Exclude) {
 			if entry.IsDir() {
-				return filepath.SkipDir
+				return fs.SkipDir
 			}
 			return nil
 		}
+		if entry.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("template entry %q must not be a symbolic link", filepath.Join(root, item))
+		}
 		if entry.IsDir() {
-			if item != root && shouldSkipLocalTemplateDir(entry.Name()) {
-				return filepath.SkipDir
+			if item != "." && shouldSkipLocalTemplateDir(entry.Name()) {
+				return fs.SkipDir
 			}
 			return nil
 		}
 		if shouldSkipLocalTemplateFile(entry.Name()) {
 			return nil
 		}
-		content, err := os.ReadFile(item)
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("template entry %q must be a regular file", filepath.Join(root, item))
+		}
+		content, err := templateRoot.ReadFile(item)
 		if err != nil {
 			return err
 		}
@@ -784,9 +821,9 @@ func gitOutput(root string, args ...string) string {
 	return strings.TrimSpace(string(output))
 }
 
-func readLocalTemplateMetadata(root string) (localTemplateMetadata, error) {
-	metadataPath := filepath.Join(root, ".fbago-template.yaml")
-	content, err := os.ReadFile(metadataPath)
+func readLocalTemplateMetadata(root *os.Root, displayRoot string) (localTemplateMetadata, error) {
+	metadataPath := filepath.Join(displayRoot, ".fbago-template.yaml")
+	content, err := root.ReadFile(".fbago-template.yaml")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return localTemplateMetadata{}, nil

@@ -13,7 +13,8 @@ import (
 
 func TestJWTServiceCreatesCompatiblePayload(t *testing.T) {
 	service := auth.NewJWTService(config.AuthOptions{
-		JWTSecret:      "secret",
+		JWTSecret:      "0123456789abcdef0123456789abcdef",
+		JWTIssuer:      "token-test",
 		AccessTokenTTL: time.Hour,
 	})
 	now := time.Now().UTC().Truncate(time.Second)
@@ -44,7 +45,8 @@ func TestJWTServiceCreatesCompatiblePayload(t *testing.T) {
 
 func TestJWTServiceCreatesUniqueTokensForSameUserSession(t *testing.T) {
 	service := auth.NewJWTService(config.AuthOptions{
-		JWTSecret:      "secret",
+		JWTSecret:      "0123456789abcdef0123456789abcdef",
+		JWTIssuer:      "token-test",
 		AccessTokenTTL: time.Hour,
 	})
 	now := time.Now().UTC().Truncate(time.Second)
@@ -68,7 +70,8 @@ func TestJWTServiceCreatesUniqueTokensForSameUserSession(t *testing.T) {
 
 func TestJWTServiceReportsExpiredAccessToken(t *testing.T) {
 	service := auth.NewJWTService(config.AuthOptions{
-		JWTSecret:      "secret",
+		JWTSecret:      "0123456789abcdef0123456789abcdef",
+		JWTIssuer:      "token-test",
 		AccessTokenTTL: time.Hour,
 	})
 	issuedAt := time.Now().UTC().Truncate(time.Second).Add(-2 * time.Hour)
@@ -83,6 +86,41 @@ func TestJWTServiceReportsExpiredAccessToken(t *testing.T) {
 	_, err = service.ParseAccessToken(token.Token)
 	if !errors.Is(err, auth.ErrAccessTokenExpired) {
 		t.Fatalf("ParseAccessToken() error = %v, want ErrAccessTokenExpired", err)
+	}
+}
+
+func TestValidateJWTOptionsRejectsUnsafeConfiguration(t *testing.T) {
+	tests := []struct {
+		name string
+		opts config.AuthOptions
+	}{
+		{name: "missing secret", opts: config.AuthOptions{JWTIssuer: "issuer"}},
+		{name: "short secret", opts: config.AuthOptions{JWTSecret: "too-short", JWTIssuer: "issuer"}},
+		{name: "missing issuer", opts: config.AuthOptions{JWTSecret: "0123456789abcdef0123456789abcdef"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := auth.ValidateJWTOptions(test.opts); err == nil {
+				t.Fatal("ValidateJWTOptions() error = nil")
+			}
+		})
+	}
+}
+
+func TestJWTServiceRejectsTokenFromDifferentIssuer(t *testing.T) {
+	issuerA := config.AuthOptions{
+		JWTSecret: "0123456789abcdef0123456789abcdef",
+		JWTIssuer: "issuer-a",
+	}
+	issuerB := issuerA
+	issuerB.JWTIssuer = "issuer-b"
+	token, err := auth.NewJWTService(issuerA).CreateAccessToken(context.Background(), 10001, "session-1", nil)
+	if err != nil {
+		t.Fatalf("CreateAccessToken() error = %v", err)
+	}
+
+	if _, err := auth.NewJWTService(issuerB).ParseAccessToken(token.Token); err == nil {
+		t.Fatal("ParseAccessToken() error = nil for a different issuer")
 	}
 }
 

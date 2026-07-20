@@ -2,7 +2,7 @@ package task
 
 import "github.com/hibiken/asynq"
 
-func BuildServeMux(registry *Registry) *asynq.ServeMux {
+func BuildServeMux(registry DefinitionRegistry) *asynq.ServeMux {
 	mux := asynq.NewServeMux()
 	for _, definition := range registry.All() {
 		if definition.Handler != nil {
