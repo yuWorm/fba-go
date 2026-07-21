@@ -34,6 +34,16 @@ go run ./cmd/api migrate status
 Add project modules under `internal/app`, list their import paths in
 `plugins.yaml`, then run `fbago plugin sync`.
 
+Inspect and apply released plugin module updates separately from generated-file
+checks:
+
+```bash
+fbago plugin outdated
+fbago plugin update --dry-run
+fbago plugin update
+fbago plugin sync --check
+```
+
 To modify the official Admin module through a local checkout or Git submodule:
 
 ```bash
@@ -46,6 +56,9 @@ Remove that override with:
 ```bash
 fbago module reset [[ .TemplateModule ]]
 ```
+
+Plugin updates reject locally replaced modules. Reset the replacement before
+updating to a released version.
 
 When initialization uses `--template-replace`, `go.mod` records that local
 checkout. Released initialization defaults to semantic module dependencies.

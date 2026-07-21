@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
 
 	fbcontract "github.com/yuWorm/fba-go/cmd/fbago/internal/contract"
 	fbmodule "github.com/yuWorm/fba-go/cmd/fbago/internal/modulecmd"
@@ -46,6 +47,10 @@ func run(args []string) error {
 		return runPluginScan(args[2:])
 	case "plugin sync":
 		return runPluginSync(args[2:])
+	case "plugin outdated":
+		return runPluginOutdated(args[2:])
+	case "plugin update":
+		return runPluginUpdate(args[2:])
 	case "module use":
 		return runModuleUse(args[2:])
 	case "module reset":
@@ -245,14 +250,149 @@ func runPluginSync(args []string) error {
 	if fs.NArg() != 0 {
 		return fmt.Errorf(pluginSyncUsage)
 	}
-	return fbplugin.Sync(fbplugin.SyncOptions{
+	if err := fbplugin.Sync(fbplugin.SyncOptions{
 		ModuleDir: *moduleDir,
 		Manifest:  *manifest,
 		Out:       *out,
 		LockOut:   *lockOut,
 		Package:   *packageName,
 		Check:     *check,
+	}); err != nil {
+		return err
+	}
+	if *check {
+		_, err := fmt.Fprintln(stdout, "plugin state is synchronized; dependency updates were not checked")
+		return err
+	}
+	return nil
+}
+
+func runPluginOutdated(args []string) error {
+	fs := flag.NewFlagSet("plugin outdated", flag.ContinueOnError)
+	moduleDir := fs.String("dir", ".", "project module directory")
+	manifest := fs.String("manifest", "plugins.yaml", "project plugin manifest")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	statuses, err := fbplugin.Outdated(fbplugin.VersionOptions{
+		ModuleDir: *moduleDir,
+		Manifest:  *manifest,
+		Targets:   fs.Args(),
 	})
+	if err != nil {
+		return err
+	}
+	if len(statuses) == 0 {
+		_, err := fmt.Fprintln(stdout, "no plugin modules found")
+		return err
+	}
+	return writePluginModuleStatuses(statuses)
+}
+
+func runPluginUpdate(args []string) error {
+	fs := flag.NewFlagSet("plugin update", flag.ContinueOnError)
+	moduleDir := fs.String("dir", ".", "project module directory")
+	manifest := fs.String("manifest", "plugins.yaml", "project plugin manifest")
+	out := fs.String("out", "internal/generated/fba_plugins.gen.go", "generated registration output")
+	lockOut := fs.String("lock-out", "plugins.lock", "module-aware plugin lock output")
+	packageName := fs.String("package", "generated", "generated package name")
+	version := fs.String("to", "", "target version for one plugin module")
+	dryRun := fs.Bool("dry-run", false, "print updates without changing the project")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	updates, err := fbplugin.Update(fbplugin.UpdateOptions{
+		ModuleDir: *moduleDir,
+		Manifest:  *manifest,
+		Out:       *out,
+		LockOut:   *lockOut,
+		Package:   *packageName,
+		Targets:   fs.Args(),
+		To:        *version,
+		DryRun:    *dryRun,
+	})
+	if err != nil {
+		return err
+	}
+	return writePluginUpdates(updates, *dryRun)
+}
+
+func writePluginModuleStatuses(statuses []fbplugin.ModuleStatus) error {
+	writer := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
+	if _, err := fmt.Fprintln(writer, "PLUGINS\tMODULE\tCURRENT\tAVAILABLE\tSTATUS"); err != nil {
+		return err
+	}
+	for _, status := range statuses {
+		current := displayedVersion(status.Current)
+		available := displayedVersion(status.Available)
+		state := "current"
+		switch {
+		case status.Main:
+			current = "main"
+			available = "-"
+			state = "main"
+		case status.Replace != nil:
+			available = "-"
+			state = "replace=" + displayedModuleReplace(status.Replace)
+		case status.Available != "" && status.Available != status.Current:
+			state = "update"
+		}
+		if _, err := fmt.Fprintf(
+			writer,
+			"%s\t%s\t%s\t%s\t%s\n",
+			strings.Join(status.PluginIDs, ","),
+			status.Module,
+			current,
+			available,
+			state,
+		); err != nil {
+			return err
+		}
+	}
+	return writer.Flush()
+}
+
+func writePluginUpdates(updates []fbplugin.ModuleUpdate, dryRun bool) error {
+	if len(updates) == 0 {
+		_, err := fmt.Fprintln(stdout, "all selected plugin modules are current")
+		return err
+	}
+	action := "updated"
+	if dryRun {
+		action = "would update"
+	}
+	for _, update := range updates {
+		if _, err := fmt.Fprintf(
+			stdout,
+			"%s %s %s -> %s (plugins: %s)\n",
+			action,
+			update.Module,
+			displayedVersion(update.From),
+			displayedVersion(update.To),
+			strings.Join(update.PluginIDs, ","),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func displayedVersion(version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return "-"
+	}
+	return version
+}
+
+func displayedModuleReplace(replacement *fbplugin.ModuleReplace) string {
+	if replacement == nil {
+		return "-"
+	}
+	if replacement.Version != "" {
+		return replacement.Path + "@" + replacement.Version
+	}
+	return replacement.Path
 }
 
 func runPluginScan(args []string) error {

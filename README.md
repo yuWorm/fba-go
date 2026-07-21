@@ -115,7 +115,10 @@ make run
 | `fbago template diff` | 基于 `.fbago.yaml` 查看模板 managed 文件变化 |
 | `fbago template update --dry-run` | 预览模板 managed 文件更新 |
 | `fbago plugin sync` | 根据 `plugins.yaml` 生成注册代码、整理依赖并写入版本锁 |
-| `fbago plugin sync --check` | 校验注册代码、`go.mod`、`go.sum` 和插件锁未过期 |
+| `fbago plugin sync --check` | 校验当前依赖图的注册代码、`go.mod`、`go.sum` 和插件锁；不查询远端版本 |
+| `fbago plugin outdated` | 查询 manifest 中插件模块的当前版本、可用版本和本地替换 |
+| `fbago plugin update --dry-run` | 预览 manifest 中插件模块的版本更新 |
+| `fbago plugin update [PLUGIN_OR_MODULE] [--to VERSION]` | 更新去重后的 Go module，并自动重新同步插件注册与锁文件 |
 | `fbago module use --path ../fba-go-admin github.com/yuWorm/fba-go-admin` | 使用本地 checkout 接管 Admin module |
 | `fbago module reset github.com/yuWorm/fba-go-admin` | 移除本地接管，恢复 `go.mod` 选择的版本 |
 | `make test` | 运行 core 测试 |

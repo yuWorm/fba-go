@@ -23,7 +23,7 @@ func TestRunInitUsesModuleArgument(t *testing.T) {
 	if !strings.Contains(string(content), "module github.com/acme/backend") {
 		t.Fatalf("go.mod = %q, missing module name", string(content))
 	}
-	if !strings.Contains(string(content), "github.com/yuWorm/fba-go-admin v0.1.0") {
+	if !strings.Contains(string(content), "github.com/yuWorm/fba-go-admin v0.1.1") {
 		t.Fatalf("go.mod = %q, missing default Admin dependency", string(content))
 	}
 }
@@ -181,6 +181,19 @@ func TestRunPluginSyncUsesProjectDefaults(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(path))); err != nil {
 			t.Fatalf("generated %s: %v", path, err)
 		}
+	}
+
+	var output bytes.Buffer
+	previous := stdout
+	stdout = &output
+	t.Cleanup(func() {
+		stdout = previous
+	})
+	if err := run([]string{"plugin", "sync", "--dir", dir, "--check"}); err != nil {
+		t.Fatalf("run plugin sync --check: %v", err)
+	}
+	if got := strings.TrimSpace(output.String()); got != "plugin state is synchronized; dependency updates were not checked" {
+		t.Fatalf("output = %q", got)
 	}
 }
 

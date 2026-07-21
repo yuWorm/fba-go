@@ -22,7 +22,7 @@ func TestInitWritesDefaultAdminScaffold(t *testing.T) {
 	}
 
 	assertFileContains(t, filepath.Join(dir, "go.mod"), "module github.com/acme/backend")
-	assertFileContains(t, filepath.Join(dir, "go.mod"), "github.com/yuWorm/fba-go-admin v0.1.0")
+	assertFileContains(t, filepath.Join(dir, "go.mod"), "github.com/yuWorm/fba-go-admin v0.1.1")
 	assertFileContains(t, filepath.Join(dir, "go.mod"), "replace github.com/yuWorm/fba-go => ")
 	assertFileNotContains(t, filepath.Join(dir, "go.mod"), "replace github.com/yuWorm/fba-go-admin =>")
 	assertFileContains(t, filepath.Join(dir, "cmd/api/main.go"), `admin "github.com/yuWorm/fba-go-admin"`)
