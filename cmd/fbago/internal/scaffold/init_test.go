@@ -1,6 +1,7 @@
 package scaffold_test
 
 import (
+	"encoding/base64"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/yuWorm/fba-go/cmd/fbago/internal/scaffold"
+	fbsecret "github.com/yuWorm/fba-go/cmd/fbago/internal/secret"
 )
 
 func TestInitWritesDefaultAdminScaffold(t *testing.T) {
@@ -31,6 +33,17 @@ func TestInitWritesDefaultAdminScaffold(t *testing.T) {
 	assertFileContains(t, filepath.Join(dir, "plugins.yaml"), "github.com/yuWorm/fba-go-admin/modules/admin")
 	assertFileContains(t, filepath.Join(dir, "plugins.lock"), `"module": "github.com/yuWorm/fba-go-admin"`)
 	assertFileContains(t, filepath.Join(dir, ".env"), "FASTAPI_API_V1_PATH=/api/v1")
+	jwtSecret := envValue(t, filepath.Join(dir, ".env"), "TOKEN_SECRET_KEY")
+	rawSecret, err := base64.RawURLEncoding.DecodeString(jwtSecret)
+	if err != nil {
+		t.Fatalf("decode generated JWT secret: %v", err)
+	}
+	if len(rawSecret) != fbsecret.DefaultBytes {
+		t.Fatalf("generated JWT entropy = %d bytes, want %d", len(rawSecret), fbsecret.DefaultBytes)
+	}
+	if exampleSecret := envValue(t, filepath.Join(dir, ".env.example"), "TOKEN_SECRET_KEY"); exampleSecret != "" {
+		t.Fatalf("example JWT secret = %q, want empty placeholder", exampleSecret)
+	}
 	assertFileContains(t, filepath.Join(dir, ".env.example"), "# CORS")
 	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "version: 1")
 	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "name: admin")
@@ -429,6 +442,22 @@ func TestInitDoesNotOverwriteExistingGoMod(t *testing.T) {
 	if !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("error = %q, want already exists", err.Error())
 	}
+}
+
+func envValue(t *testing.T, filename string, key string) string {
+	t.Helper()
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatalf("read %s: %v", filename, err)
+	}
+	prefix := key + "="
+	for _, line := range strings.Split(string(content), "\n") {
+		if value, ok := strings.CutPrefix(line, prefix); ok {
+			return value
+		}
+	}
+	t.Fatalf("%s has no %s entry", filename, key)
+	return ""
 }
 
 func assertFileContains(t *testing.T, path string, want string) {

@@ -17,6 +17,7 @@ import (
 	"text/template"
 
 	fbplugin "github.com/yuWorm/fba-go/cmd/fbago/internal/plugin"
+	fbsecret "github.com/yuWorm/fba-go/cmd/fbago/internal/secret"
 	"gopkg.in/yaml.v3"
 )
 
@@ -88,6 +89,7 @@ type templateData struct {
 	TemplateReplace string
 	CoreReplace     string
 	CoreVersion     string
+	JWTSecret       string
 }
 
 type localTemplateMetadata struct {
@@ -164,6 +166,10 @@ func Init(opts InitOptions) error {
 		return err
 	}
 	templateVersion, templateReplace := resolveTemplateDependency(bundle, opts.TemplateReplace)
+	jwtSecret, err := secretForTemplate(files)
+	if err != nil {
+		return err
+	}
 	data := templateData{
 		Module:          module,
 		TemplateModule:  bundle.TemplateModule,
@@ -177,6 +183,7 @@ func Init(opts InitOptions) error {
 		TemplateReplace: templateReplace,
 		CoreReplace:     coreReplace,
 		CoreVersion:     coreVersion,
+		JWTSecret:       jwtSecret,
 	}
 	renderedFiles, err := renderScaffoldFiles(files, data)
 	if err != nil {
@@ -230,6 +237,15 @@ func Init(opts InitOptions) error {
 		return err
 	}
 	return nil
+}
+
+func secretForTemplate(files []scaffoldFile) (string, error) {
+	for _, file := range files {
+		if file.Renderable && strings.Contains(file.Content, ".JWTSecret") {
+			return fbsecret.Generate(fbsecret.DefaultBytes)
+		}
+	}
+	return "", nil
 }
 
 func renderScaffoldFiles(files []scaffoldFile, data templateData) ([]renderedScaffoldFile, error) {

@@ -13,6 +13,7 @@ import (
 	fbmodule "github.com/yuWorm/fba-go/cmd/fbago/internal/modulecmd"
 	fbplugin "github.com/yuWorm/fba-go/cmd/fbago/internal/plugin"
 	"github.com/yuWorm/fba-go/cmd/fbago/internal/scaffold"
+	fbsecret "github.com/yuWorm/fba-go/cmd/fbago/internal/secret"
 	fbswagger "github.com/yuWorm/fba-go/cmd/fbago/internal/swagger"
 )
 
@@ -22,6 +23,7 @@ const initUsage = "usage: fbago init <module> [--template TEMPLATE] [--template-
 const templateDiffUsage = "usage: fbago template diff [--dir DIR] [--template TEMPLATE]"
 const templateUpdateUsage = "usage: fbago template update [--dir DIR] [--template TEMPLATE] [--dry-run] [--force]"
 const pluginSyncUsage = "usage: fbago plugin sync [--dir DIR] [--manifest FILE] [--out FILE] [--lock-out FILE] [--check]"
+const secretGenerateUsage = "usage: fbago secret generate [--bytes N]"
 const moduleUseUsage = "usage: fbago module use [--dir DIR] --path PATH <module>"
 const moduleResetUsage = "usage: fbago module reset [--dir DIR] <module>"
 
@@ -51,6 +53,8 @@ func run(args []string) error {
 		return runPluginOutdated(args[2:])
 	case "plugin update":
 		return runPluginUpdate(args[2:])
+	case "secret generate":
+		return runSecretGenerate(args[2:])
 	case "module use":
 		return runModuleUse(args[2:])
 	case "module reset":
@@ -73,7 +77,7 @@ func run(args []string) error {
 }
 
 func usage() error {
-	return fmt.Errorf("usage: fbago <init|template|plugin|module|swagger|contract> [command]")
+	return fmt.Errorf("usage: fbago <init|template|plugin|module|secret|swagger|contract> [command]")
 }
 
 func runInit(args []string) error {
@@ -205,6 +209,23 @@ func parseInitArgs(args []string) (scaffold.InitOptions, error) {
 		}
 	}
 	return opts, nil
+}
+
+func runSecretGenerate(args []string) error {
+	fs := flag.NewFlagSet("secret generate", flag.ContinueOnError)
+	size := fs.Int("bytes", fbsecret.DefaultBytes, "cryptographic random bytes before base64url encoding")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf(secretGenerateUsage)
+	}
+	value, err := fbsecret.Generate(*size)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(stdout, value)
+	return err
 }
 
 func runModuleUse(args []string) error {

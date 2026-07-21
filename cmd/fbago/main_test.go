@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,6 +123,26 @@ func TestRunUsageMentionsTemplateCommand(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "template") {
 		t.Fatalf("error = %q, want template command in usage", err.Error())
+	}
+}
+
+func TestRunSecretGeneratePrintsRequestedEntropy(t *testing.T) {
+	var output bytes.Buffer
+	previous := stdout
+	stdout = &output
+	t.Cleanup(func() {
+		stdout = previous
+	})
+
+	if err := run([]string{"secret", "generate", "--bytes", "64"}); err != nil {
+		t.Fatalf("run secret generate: %v", err)
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(output.String()))
+	if err != nil {
+		t.Fatalf("decode generated secret: %v", err)
+	}
+	if len(raw) != 64 {
+		t.Fatalf("generated entropy = %d bytes, want 64", len(raw))
 	}
 }
 

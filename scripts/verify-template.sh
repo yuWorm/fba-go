@@ -84,7 +84,8 @@ echo "==> testing generated project"
 	cd "${generated_dir}"
 	GOWORK=off go test ./...
 	GOWORK=off go build ./cmd/api
-	TOKEN_SECRET_KEY=0123456789abcdef0123456789abcdef GOWORK=off go run ./cmd/api --help >/dev/null
+	GOWORK=off go run ./cmd/api --help >/dev/null
+	DATABASE_DRIVER=sqlite DATABASE_DSN="file:${generated_dir}/.cache/verify.db" GOWORK=off go run ./cmd/api migrate up
 )
 
 echo "==> checking template drift"

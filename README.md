@@ -111,6 +111,7 @@ make run
 | `fbago init <module>` | 使用内置 Admin 模板创建项目 |
 | `fbago init <module> --template-replace ../fba-go-admin` | 使用本地 Admin checkout 初始化项目 |
 | `fbago init <module> --template basic` | 创建最小后端项目 |
+| `fbago secret generate [--bytes N]` | 生成适合 JWT、TOTP 等用途的 base64url 加密随机密钥，默认 32 字节 |
 | `go run ./cmd/fbago template list` | 查看内置模板，本地开发使用 |
 | `fbago template diff` | 基于 `.fbago.yaml` 查看模板 managed 文件变化 |
 | `fbago template update --dry-run` | 预览模板 managed 文件更新 |

@@ -31,6 +31,17 @@ go run ./cmd/api migrate up
 go run ./cmd/api migrate status
 ```
 
+`fbago init` writes a unique 32-byte development JWT secret to `.env`. Rotate
+it before deployment or whenever credentials may have been exposed:
+
+```bash
+fbago secret generate
+fbago secret generate --bytes 64
+```
+
+The command prints URL-safe key material only; copy it to `TOKEN_SECRET_KEY` or
+`TOTP_ENCRYPTION_KEY` as appropriate.
+
 Add project modules under `internal/app`, list their import paths in
 `plugins.yaml`, then run `fbago plugin sync`.
 
