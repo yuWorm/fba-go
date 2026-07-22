@@ -173,10 +173,11 @@ type DatabaseOptions struct {
 }
 
 type AuthOptions struct {
-	JWTSecret       string
-	JWTIssuer       string
-	AccessTokenTTL  time.Duration
-	RefreshTokenTTL time.Duration
+	JWTSecret              string
+	JWTIssuer              string
+	AdminBootstrapPassword string
+	AccessTokenTTL         time.Duration
+	RefreshTokenTTL        time.Duration
 }
 
 type IPLocationOptions struct {

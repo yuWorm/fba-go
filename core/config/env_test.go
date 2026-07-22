@@ -55,6 +55,7 @@ REDIS_PASSWORD='redis-secret'
 REDIS_DATABASE=2
 REDIS_TIMEOUT=7
 TOKEN_SECRET_KEY='token-secret'
+ADMIN_BOOTSTRAP_PASSWORD='Admin@Local2026!'
 TOKEN_EXPIRE_SECONDS=3600
 TOKEN_REFRESH_EXPIRE_SECONDS=7200
 TOKEN_REDIS_PREFIX='acme:token'
@@ -87,7 +88,10 @@ TASK_QUEUES='{"critical":6,"default":3}'
 	if opts.Redis.KeyPrefix != "acme" {
 		t.Fatalf("Redis.KeyPrefix = %q, want acme", opts.Redis.KeyPrefix)
 	}
-	if opts.Auth.JWTSecret != "token-secret" || opts.Auth.AccessTokenTTL != time.Hour || opts.Auth.RefreshTokenTTL != 2*time.Hour {
+	if opts.Auth.JWTSecret != "token-secret" ||
+		opts.Auth.AdminBootstrapPassword != "Admin@Local2026!" ||
+		opts.Auth.AccessTokenTTL != time.Hour ||
+		opts.Auth.RefreshTokenTTL != 2*time.Hour {
 		t.Fatalf("Auth options = %+v", opts.Auth)
 	}
 	if opts.Task.RedisDB != 3 {

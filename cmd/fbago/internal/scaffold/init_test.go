@@ -33,6 +33,7 @@ func TestInitWritesDefaultAdminScaffold(t *testing.T) {
 	assertFileContains(t, filepath.Join(dir, "plugins.yaml"), "github.com/yuWorm/fba-go-admin/modules/admin")
 	assertFileContains(t, filepath.Join(dir, "plugins.lock"), `"module": "github.com/yuWorm/fba-go-admin"`)
 	assertFileContains(t, filepath.Join(dir, ".env"), "FASTAPI_API_V1_PATH=/api/v1")
+	assertFileContains(t, filepath.Join(dir, ".env"), "ADMIN_BOOTSTRAP_PASSWORD=Admin@Local2026!")
 	jwtSecret := envValue(t, filepath.Join(dir, ".env"), "TOKEN_SECRET_KEY")
 	rawSecret, err := base64.RawURLEncoding.DecodeString(jwtSecret)
 	if err != nil {
@@ -43,6 +44,9 @@ func TestInitWritesDefaultAdminScaffold(t *testing.T) {
 	}
 	if exampleSecret := envValue(t, filepath.Join(dir, ".env.example"), "TOKEN_SECRET_KEY"); exampleSecret != "" {
 		t.Fatalf("example JWT secret = %q, want empty placeholder", exampleSecret)
+	}
+	if examplePassword := envValue(t, filepath.Join(dir, ".env.example"), "ADMIN_BOOTSTRAP_PASSWORD"); examplePassword != "" {
+		t.Fatalf("example Admin bootstrap password = %q, want empty placeholder", examplePassword)
 	}
 	assertFileContains(t, filepath.Join(dir, ".env.example"), "# CORS")
 	assertFileContains(t, filepath.Join(dir, ".fbago.yaml"), "version: 1")

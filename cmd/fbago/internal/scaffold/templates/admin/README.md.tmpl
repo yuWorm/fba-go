@@ -31,6 +31,22 @@ go run ./cmd/api migrate up
 go run ./cmd/api migrate status
 ```
 
+For a fresh local database, activate the disabled bootstrap administrator:
+
+```bash
+go run ./cmd/api admin bootstrap
+```
+
+The generated `.env` supplies the local-only password `Admin@Local2026!`, so
+the development login is `admin` / `Admin@Local2026!`. The command consumes
+that password once; remove or replace `ADMIN_BOOTSTRAP_PASSWORD` before
+deployment. To enter a different password through hidden terminal prompts,
+remove that setting or override it with an empty value:
+
+```bash
+ADMIN_BOOTSTRAP_PASSWORD= go run ./cmd/api admin bootstrap
+```
+
 `fbago init` writes a unique 32-byte development JWT secret to `.env`. Rotate
 it before deployment or whenever credentials may have been exposed:
 
