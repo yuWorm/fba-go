@@ -24,7 +24,7 @@ func TestRunInitUsesModuleArgument(t *testing.T) {
 	if !strings.Contains(string(content), "module github.com/acme/backend") {
 		t.Fatalf("go.mod = %q, missing module name", string(content))
 	}
-	if !strings.Contains(string(content), "github.com/yuWorm/fba-go-admin v0.1.1") {
+	if !strings.Contains(string(content), "github.com/yuWorm/fba-go-admin v0.1.4") {
 		t.Fatalf("go.mod = %q, missing default Admin dependency", string(content))
 	}
 }
