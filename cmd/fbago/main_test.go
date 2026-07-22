@@ -77,16 +77,21 @@ func TestRunInitAcceptsCoreReplaceFlag(t *testing.T) {
 	}
 }
 
-func TestParseInitArgsAcceptsTemplateReplaceFlag(t *testing.T) {
-	opts, err := parseInitArgs([]string{
-		"github.com/acme/backend",
-		"--template-replace", "../fba-go-admin",
+func TestRunInitHelpDocumentsFlags(t *testing.T) {
+	var output bytes.Buffer
+	previous := stdout
+	stdout = &output
+	t.Cleanup(func() {
+		stdout = previous
 	})
-	if err != nil {
-		t.Fatalf("parseInitArgs() error = %v", err)
+
+	if err := run([]string{"init", "--help"}); err != nil {
+		t.Fatalf("run init --help: %v", err)
 	}
-	if opts.TemplateReplace != "../fba-go-admin" {
-		t.Fatalf("TemplateReplace = %q, want ../fba-go-admin", opts.TemplateReplace)
+	for _, want := range []string{"Create a new FBA Go project", "--template-replace", "--core-version", "--force"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("help = %q, missing %q", output.String(), want)
+		}
 	}
 }
 
@@ -111,18 +116,44 @@ func TestRunInitRequiresModuleArgument(t *testing.T) {
 	if err == nil {
 		t.Fatal("run init succeeded, want module argument error")
 	}
-	if !strings.Contains(err.Error(), "usage: fbago init <module> [--template TEMPLATE]") {
-		t.Fatalf("error = %q, want fbago init usage", err.Error())
+	if !strings.Contains(err.Error(), "accepts 1 arg(s), received 0") {
+		t.Fatalf("error = %q, want exact argument error", err.Error())
 	}
 }
 
-func TestRunUsageMentionsTemplateCommand(t *testing.T) {
-	err := run(nil)
-	if err == nil {
-		t.Fatal("run succeeded, want usage error")
+func TestRunWithoutArgsPrintsHelp(t *testing.T) {
+	var output bytes.Buffer
+	previous := stdout
+	stdout = &output
+	t.Cleanup(func() {
+		stdout = previous
+	})
+
+	if err := run(nil); err != nil {
+		t.Fatalf("run without arguments: %v", err)
 	}
-	if !strings.Contains(err.Error(), "template") {
-		t.Fatalf("error = %q, want template command in usage", err.Error())
+	for _, want := range []string{"fbago creates and maintains FBA Go projects", "Available Commands:", "template", "--help"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("help = %q, missing %q", output.String(), want)
+		}
+	}
+}
+
+func TestRunPluginHelpListsSubcommands(t *testing.T) {
+	var output bytes.Buffer
+	previous := stdout
+	stdout = &output
+	t.Cleanup(func() {
+		stdout = previous
+	})
+
+	if err := run([]string{"plugin", "--help"}); err != nil {
+		t.Fatalf("run plugin --help: %v", err)
+	}
+	for _, want := range []string{"Available Commands:", "outdated", "scan", "sync", "update"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("help = %q, missing %q", output.String(), want)
+		}
 	}
 }
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/spf13/cobra"
 	fbcontract "github.com/yuWorm/fba-go/cmd/fbago/internal/contract"
 	fbmodule "github.com/yuWorm/fba-go/cmd/fbago/internal/modulecmd"
 	fbplugin "github.com/yuWorm/fba-go/cmd/fbago/internal/plugin"
@@ -19,327 +19,361 @@ import (
 
 var stdout io.Writer = os.Stdout
 
-const initUsage = "usage: fbago init <module> [--template TEMPLATE] [--template-replace PATH] [--dir DIR] [--core-replace PATH] [--core-version VERSION|latest]"
-const templateDiffUsage = "usage: fbago template diff [--dir DIR] [--template TEMPLATE]"
-const templateUpdateUsage = "usage: fbago template update [--dir DIR] [--template TEMPLATE] [--dry-run] [--force]"
-const pluginSyncUsage = "usage: fbago plugin sync [--dir DIR] [--manifest FILE] [--out FILE] [--lock-out FILE] [--check]"
-const secretGenerateUsage = "usage: fbago secret generate [--bytes N]"
-const moduleUseUsage = "usage: fbago module use [--dir DIR] --path PATH <module>"
-const moduleResetUsage = "usage: fbago module reset [--dir DIR] <module>"
-
 func main() {
-	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if err := execute(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		os.Exit(1)
 	}
 }
 
 func run(args []string) error {
-	if len(args) == 0 {
-		return usage()
+	return execute(args, stdout, io.Discard)
+}
+
+func execute(args []string, out, errOut io.Writer) error {
+	root := newRootCommand()
+	root.SetArgs(args)
+	root.SetOut(out)
+	root.SetErr(errOut)
+	return root.Execute()
+}
+
+func newRootCommand() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "fbago",
+		Short: "Develop and maintain FBA Go projects",
+		Long: "fbago creates and maintains FBA Go projects, templates, plugin wiring, " +
+			"local module overrides, OpenAPI documents, and API contracts.",
 	}
-	if args[0] == "init" {
-		return runInit(args[1:])
+	root.AddCommand(
+		newInitCommand(),
+		newTemplateCommand(),
+		newPluginCommand(),
+		newModuleCommand(),
+		newSecretCommand(),
+		newSwaggerCommand(),
+		newContractCommand(),
+	)
+	return root
+}
+
+// Cobra validates flags and arguments before RunE. Silence usage only after that
+// validation, so input mistakes include guidance while runtime failures stay concise.
+func runAction(cmd *cobra.Command, action func() error) error {
+	cmd.Root().SilenceUsage = true
+	return action()
+}
+
+func newInitCommand() *cobra.Command {
+	opts := scaffold.InitOptions{Dir: "."}
+	cmd := &cobra.Command{
+		Use:   "init <module>",
+		Short: "Create a new FBA Go project from a template",
+		Args:  cobra.ExactArgs(1),
+		Example: "  fbago init github.com/acme/backend --dir ./backend\n" +
+			"  fbago init github.com/acme/backend --template basic --dir ./backend",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts.Module = args[0]
+			return runAction(cmd, func() error {
+				return scaffold.Init(opts)
+			})
+		},
 	}
-	if len(args) < 2 {
-		return usage()
+	flags := cmd.Flags()
+	flags.StringVar(&opts.Dir, "dir", ".", "destination directory")
+	flags.BoolVar(&opts.Force, "force", false, "overwrite an existing destination")
+	flags.StringVar(&opts.Template, "template", "", "template name, local path, or Git spec (default admin)")
+	flags.StringVar(&opts.TemplateReplace, "template-replace", "", "local checkout replacing the template module")
+	flags.StringVar(&opts.CoreReplace, "core-replace", "", "local checkout replacing the FBA Go core module")
+	flags.StringVar(&opts.CoreVersion, "core-version", "", "FBA Go core version or latest")
+	return cmd
+}
+
+func newTemplateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "template",
+		Short: "Inspect and update template-managed files",
 	}
-	switch args[0] + " " + args[1] {
-	case "plugin scan":
-		return runPluginScan(args[2:])
-	case "plugin sync":
-		return runPluginSync(args[2:])
-	case "plugin outdated":
-		return runPluginOutdated(args[2:])
-	case "plugin update":
-		return runPluginUpdate(args[2:])
-	case "secret generate":
-		return runSecretGenerate(args[2:])
-	case "module use":
-		return runModuleUse(args[2:])
-	case "module reset":
-		return runModuleReset(args[2:])
-	case "swagger scan":
-		return runSwaggerScan(args[2:])
-	case "contract snapshot":
-		return runContractSnapshot(args[2:])
-	case "contract test":
-		return runContractTest(args[2:])
-	case "template list":
-		return runTemplateList(args[2:])
-	case "template diff":
-		return runTemplateDiff(args[2:])
-	case "template update":
-		return runTemplateUpdate(args[2:])
-	default:
-		return fmt.Errorf("unknown command %s %s", args[0], args[1])
+	cmd.AddCommand(
+		newTemplateListCommand(),
+		newTemplateDiffCommand(),
+		newTemplateUpdateCommand(),
+	)
+	return cmd
+}
+
+func newTemplateListCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List bundled project templates",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAction(cmd, func() error {
+				templates, err := scaffold.ListTemplates()
+				if err != nil {
+					return err
+				}
+				for _, template := range templates {
+					if _, err := fmt.Fprintln(cmd.OutOrStdout(), template); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		},
 	}
 }
 
-func usage() error {
-	return fmt.Errorf("usage: fbago <init|template|plugin|module|secret|swagger|contract> [command]")
+func newTemplateDiffCommand() *cobra.Command {
+	var dir string
+	var template string
+	cmd := &cobra.Command{
+		Use:     "diff",
+		Short:   "Show changes to template-managed files",
+		Args:    cobra.NoArgs,
+		Example: "  fbago template diff --dir ./backend",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAction(cmd, func() error {
+				result, err := scaffold.DiffTemplate(scaffold.TemplateDiffOptions{
+					Dir:      dir,
+					Template: template,
+				})
+				if err != nil {
+					return err
+				}
+				printTemplateChanges(cmd.OutOrStdout(), result.Entries)
+				return nil
+			})
+		},
+	}
+	cmd.Flags().StringVar(&dir, "dir", ".", "project directory")
+	cmd.Flags().StringVar(&template, "template", "", "template source override")
+	return cmd
 }
 
-func runInit(args []string) error {
-	opts, err := parseInitArgs(args)
-	if err != nil {
-		return err
+func newTemplateUpdateCommand() *cobra.Command {
+	var dir string
+	var template string
+	var dryRun bool
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Update template-managed files",
+		Args:  cobra.NoArgs,
+		Example: "  fbago template update --dry-run\n" +
+			"  fbago template update --force",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAction(cmd, func() error {
+				result, err := scaffold.UpdateTemplate(scaffold.TemplateUpdateOptions{
+					Dir:      dir,
+					Template: template,
+					DryRun:   dryRun,
+					Force:    force,
+				})
+				if err != nil && len(result.Entries) == 0 {
+					return err
+				}
+				printTemplateChanges(cmd.OutOrStdout(), result.Entries)
+				return err
+			})
+		},
 	}
-	if opts.Module == "" {
-		return fmt.Errorf(initUsage)
-	}
-	return scaffold.Init(opts)
+	flags := cmd.Flags()
+	flags.StringVar(&dir, "dir", ".", "project directory")
+	flags.StringVar(&template, "template", "", "template source override")
+	flags.BoolVar(&dryRun, "dry-run", false, "show changes without writing")
+	flags.BoolVar(&force, "force", false, "overwrite modified managed files")
+	return cmd
 }
 
-func runTemplateList(args []string) error {
-	if len(args) != 0 {
-		return fmt.Errorf("usage: fbago template list")
-	}
-	templates, err := scaffold.ListTemplates()
-	if err != nil {
-		return err
-	}
-	for _, template := range templates {
-		fmt.Fprintln(stdout, template)
-	}
-	return nil
-}
-
-func runTemplateDiff(args []string) error {
-	fs := flag.NewFlagSet("template diff", flag.ContinueOnError)
-	dir := fs.String("dir", ".", "project directory")
-	template := fs.String("template", "", "template source override")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() != 0 {
-		return fmt.Errorf(templateDiffUsage)
-	}
-	result, err := scaffold.DiffTemplate(scaffold.TemplateDiffOptions{
-		Dir:      *dir,
-		Template: *template,
-	})
-	if err != nil {
-		return err
-	}
-	printTemplateChanges(result.Entries)
-	return nil
-}
-
-func runTemplateUpdate(args []string) error {
-	fs := flag.NewFlagSet("template update", flag.ContinueOnError)
-	dir := fs.String("dir", ".", "project directory")
-	template := fs.String("template", "", "template source override")
-	dryRun := fs.Bool("dry-run", false, "show changes without writing")
-	force := fs.Bool("force", false, "overwrite modified managed files")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() != 0 {
-		return fmt.Errorf(templateUpdateUsage)
-	}
-	result, err := scaffold.UpdateTemplate(scaffold.TemplateUpdateOptions{
-		Dir:      *dir,
-		Template: *template,
-		DryRun:   *dryRun,
-		Force:    *force,
-	})
-	if err != nil && len(result.Entries) == 0 {
-		return err
-	}
-	printTemplateChanges(result.Entries)
-	return err
-}
-
-func printTemplateChanges(entries []scaffold.TemplateChange) {
+func printTemplateChanges(out io.Writer, entries []scaffold.TemplateChange) {
 	if len(entries) == 0 {
-		fmt.Fprintln(stdout, "no template changes")
+		fmt.Fprintln(out, "no template changes")
 		return
 	}
 	for _, entry := range entries {
-		fmt.Fprintf(stdout, "%s %s\n", entry.Status, entry.Path)
+		fmt.Fprintf(out, "%s %s\n", entry.Status, entry.Path)
 	}
 }
 
-func parseInitArgs(args []string) (scaffold.InitOptions, error) {
-	opts := scaffold.InitOptions{Dir: "."}
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch arg {
-		case "--dir", "-dir":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("missing value for %s", arg)
-			}
-			opts.Dir = args[i]
-		case "--force", "-force":
-			opts.Force = true
-		case "--template", "-template":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("missing value for %s", arg)
-			}
-			opts.Template = args[i]
-		case "--template-replace", "-template-replace":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("missing value for %s", arg)
-			}
-			opts.TemplateReplace = args[i]
-		case "--core-replace", "-core-replace":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("missing value for %s", arg)
-			}
-			opts.CoreReplace = args[i]
-		case "--core-version", "-core-version":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("missing value for %s", arg)
-			}
-			opts.CoreVersion = args[i]
-		default:
-			if strings.HasPrefix(arg, "-") {
-				return opts, fmt.Errorf("unknown init flag %s", arg)
-			}
-			if opts.Module != "" {
-				return opts, fmt.Errorf(initUsage)
-			}
-			opts.Module = arg
-		}
+func newPluginCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "plugin",
+		Short: "Generate and update project plugin wiring",
 	}
-	return opts, nil
+	cmd.AddCommand(
+		newPluginScanCommand(),
+		newPluginSyncCommand(),
+		newPluginOutdatedCommand(),
+		newPluginUpdateCommand(),
+	)
+	return cmd
 }
 
-func runSecretGenerate(args []string) error {
-	fs := flag.NewFlagSet("secret generate", flag.ContinueOnError)
-	size := fs.Int("bytes", fbsecret.DefaultBytes, "cryptographic random bytes before base64url encoding")
-	if err := fs.Parse(args); err != nil {
-		return err
+func newPluginScanCommand() *cobra.Command {
+	var mode string
+	var moduleDir string
+	var pluginsDir string
+	var manifest string
+	var out string
+	var lockOut string
+	var packageName string
+	cmd := &cobra.Command{
+		Use:   "scan",
+		Short: "Scan plugin sources and generate registration code",
+		Args:  cobra.NoArgs,
+		Example: "  fbago plugin scan --mode manifest --manifest plugins.yaml\n" +
+			"  fbago plugin scan --mode imports,local --plugins-dir ./plugins",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAction(cmd, func() error {
+				result, err := fbplugin.Scan(fbplugin.ScanOptions{
+					Modes:      splitModes(mode),
+					ModuleDir:  moduleDir,
+					PluginsDir: pluginsDir,
+					Manifest:   manifest,
+				})
+				if err != nil {
+					return err
+				}
+				lockPath := lockOut
+				if lockPath == "" {
+					lockPath = filepath.Join(filepath.Dir(out), "plugin_manifest.lock")
+				}
+				if err := fbplugin.WriteLock(lockPath, result); err != nil {
+					return err
+				}
+				return fbplugin.GenerateRegistration(out, packageName, result)
+			})
+		},
 	}
-	if fs.NArg() != 0 {
-		return fmt.Errorf(secretGenerateUsage)
-	}
-	value, err := fbsecret.Generate(*size)
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintln(stdout, value)
-	return err
+	flags := cmd.Flags()
+	flags.StringVar(&mode, "mode", "manifest", "comma-separated scan modes")
+	flags.StringVar(&moduleDir, "module", ".", "module directory")
+	flags.StringVar(&pluginsDir, "plugins-dir", "", "local plugins directory")
+	flags.StringVar(&manifest, "manifest", "", "plugins manifest")
+	flags.StringVar(&out, "out", "internal/generated/fba_plugins.gen.go", "generated registration output")
+	flags.StringVar(&lockOut, "lock-out", "", "plugin lock output")
+	flags.StringVar(&packageName, "package", "generated", "generated package name")
+	return cmd
 }
 
-func runModuleUse(args []string) error {
-	fs := flag.NewFlagSet("module use", flag.ContinueOnError)
-	projectDir := fs.String("dir", ".", "project module directory")
-	localPath := fs.String("path", "", "local module checkout")
-	if err := fs.Parse(args); err != nil {
-		return err
+func newPluginSyncCommand() *cobra.Command {
+	var moduleDir string
+	var manifest string
+	var out string
+	var lockOut string
+	var packageName string
+	var check bool
+	cmd := &cobra.Command{
+		Use:     "sync",
+		Short:   "Synchronize plugin registration, dependencies, and locks",
+		Args:    cobra.NoArgs,
+		Example: "  fbago plugin sync\n  fbago plugin sync --check",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAction(cmd, func() error {
+				if err := fbplugin.Sync(fbplugin.SyncOptions{
+					ModuleDir: moduleDir,
+					Manifest:  manifest,
+					Out:       out,
+					LockOut:   lockOut,
+					Package:   packageName,
+					Check:     check,
+				}); err != nil {
+					return err
+				}
+				if check {
+					_, err := fmt.Fprintln(cmd.OutOrStdout(), "plugin state is synchronized; dependency updates were not checked")
+					return err
+				}
+				return nil
+			})
+		},
 	}
-	if fs.NArg() != 1 || strings.TrimSpace(*localPath) == "" {
-		return fmt.Errorf(moduleUseUsage)
-	}
-	return fbmodule.Use(fbmodule.UseOptions{
-		ProjectDir: *projectDir,
-		Module:     fs.Arg(0),
-		Path:       *localPath,
-	})
+	flags := cmd.Flags()
+	flags.StringVar(&moduleDir, "dir", ".", "project module directory")
+	flags.StringVar(&manifest, "manifest", "plugins.yaml", "project plugin manifest")
+	flags.StringVar(&out, "out", "internal/generated/fba_plugins.gen.go", "generated registration output")
+	flags.StringVar(&lockOut, "lock-out", "plugins.lock", "module-aware plugin lock output")
+	flags.StringVar(&packageName, "package", "generated", "generated package name")
+	flags.BoolVar(&check, "check", false, "verify generated outputs without writing")
+	return cmd
 }
 
-func runModuleReset(args []string) error {
-	fs := flag.NewFlagSet("module reset", flag.ContinueOnError)
-	projectDir := fs.String("dir", ".", "project module directory")
-	if err := fs.Parse(args); err != nil {
-		return err
+func newPluginOutdatedCommand() *cobra.Command {
+	var moduleDir string
+	var manifest string
+	cmd := &cobra.Command{
+		Use:   "outdated [plugin-or-module ...]",
+		Short: "List available plugin module updates",
+		Example: "  fbago plugin outdated\n" +
+			"  fbago plugin outdated github.com/acme/fba-plugin",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAction(cmd, func() error {
+				statuses, err := fbplugin.Outdated(fbplugin.VersionOptions{
+					ModuleDir: moduleDir,
+					Manifest:  manifest,
+					Targets:   args,
+				})
+				if err != nil {
+					return err
+				}
+				if len(statuses) == 0 {
+					_, err := fmt.Fprintln(cmd.OutOrStdout(), "no plugin modules found")
+					return err
+				}
+				return writePluginModuleStatuses(cmd.OutOrStdout(), statuses)
+			})
+		},
 	}
-	if fs.NArg() != 1 {
-		return fmt.Errorf(moduleResetUsage)
-	}
-	return fbmodule.Reset(*projectDir, fs.Arg(0))
+	cmd.Flags().StringVar(&moduleDir, "dir", ".", "project module directory")
+	cmd.Flags().StringVar(&manifest, "manifest", "plugins.yaml", "project plugin manifest")
+	return cmd
 }
 
-func runPluginSync(args []string) error {
-	fs := flag.NewFlagSet("plugin sync", flag.ContinueOnError)
-	moduleDir := fs.String("dir", ".", "project module directory")
-	manifest := fs.String("manifest", "plugins.yaml", "project plugin manifest")
-	out := fs.String("out", "internal/generated/fba_plugins.gen.go", "generated registration output")
-	lockOut := fs.String("lock-out", "plugins.lock", "module-aware plugin lock output")
-	packageName := fs.String("package", "generated", "generated package name")
-	check := fs.Bool("check", false, "verify generated outputs without writing")
-	if err := fs.Parse(args); err != nil {
-		return err
+func newPluginUpdateCommand() *cobra.Command {
+	var moduleDir string
+	var manifest string
+	var out string
+	var lockOut string
+	var packageName string
+	var version string
+	var dryRun bool
+	cmd := &cobra.Command{
+		Use:   "update [plugin-or-module ...]",
+		Short: "Update plugin module dependencies",
+		Example: "  fbago plugin update --dry-run\n" +
+			"  fbago plugin update github.com/acme/fba-plugin --to v1.2.3",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAction(cmd, func() error {
+				updates, err := fbplugin.Update(fbplugin.UpdateOptions{
+					ModuleDir: moduleDir,
+					Manifest:  manifest,
+					Out:       out,
+					LockOut:   lockOut,
+					Package:   packageName,
+					Targets:   args,
+					To:        version,
+					DryRun:    dryRun,
+				})
+				if err != nil {
+					return err
+				}
+				return writePluginUpdates(cmd.OutOrStdout(), updates, dryRun)
+			})
+		},
 	}
-	if fs.NArg() != 0 {
-		return fmt.Errorf(pluginSyncUsage)
-	}
-	if err := fbplugin.Sync(fbplugin.SyncOptions{
-		ModuleDir: *moduleDir,
-		Manifest:  *manifest,
-		Out:       *out,
-		LockOut:   *lockOut,
-		Package:   *packageName,
-		Check:     *check,
-	}); err != nil {
-		return err
-	}
-	if *check {
-		_, err := fmt.Fprintln(stdout, "plugin state is synchronized; dependency updates were not checked")
-		return err
-	}
-	return nil
+	flags := cmd.Flags()
+	flags.StringVar(&moduleDir, "dir", ".", "project module directory")
+	flags.StringVar(&manifest, "manifest", "plugins.yaml", "project plugin manifest")
+	flags.StringVar(&out, "out", "internal/generated/fba_plugins.gen.go", "generated registration output")
+	flags.StringVar(&lockOut, "lock-out", "plugins.lock", "module-aware plugin lock output")
+	flags.StringVar(&packageName, "package", "generated", "generated package name")
+	flags.StringVar(&version, "to", "", "target version for one plugin module")
+	flags.BoolVar(&dryRun, "dry-run", false, "print updates without changing the project")
+	return cmd
 }
 
-func runPluginOutdated(args []string) error {
-	fs := flag.NewFlagSet("plugin outdated", flag.ContinueOnError)
-	moduleDir := fs.String("dir", ".", "project module directory")
-	manifest := fs.String("manifest", "plugins.yaml", "project plugin manifest")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	statuses, err := fbplugin.Outdated(fbplugin.VersionOptions{
-		ModuleDir: *moduleDir,
-		Manifest:  *manifest,
-		Targets:   fs.Args(),
-	})
-	if err != nil {
-		return err
-	}
-	if len(statuses) == 0 {
-		_, err := fmt.Fprintln(stdout, "no plugin modules found")
-		return err
-	}
-	return writePluginModuleStatuses(statuses)
-}
-
-func runPluginUpdate(args []string) error {
-	fs := flag.NewFlagSet("plugin update", flag.ContinueOnError)
-	moduleDir := fs.String("dir", ".", "project module directory")
-	manifest := fs.String("manifest", "plugins.yaml", "project plugin manifest")
-	out := fs.String("out", "internal/generated/fba_plugins.gen.go", "generated registration output")
-	lockOut := fs.String("lock-out", "plugins.lock", "module-aware plugin lock output")
-	packageName := fs.String("package", "generated", "generated package name")
-	version := fs.String("to", "", "target version for one plugin module")
-	dryRun := fs.Bool("dry-run", false, "print updates without changing the project")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	updates, err := fbplugin.Update(fbplugin.UpdateOptions{
-		ModuleDir: *moduleDir,
-		Manifest:  *manifest,
-		Out:       *out,
-		LockOut:   *lockOut,
-		Package:   *packageName,
-		Targets:   fs.Args(),
-		To:        *version,
-		DryRun:    *dryRun,
-	})
-	if err != nil {
-		return err
-	}
-	return writePluginUpdates(updates, *dryRun)
-}
-
-func writePluginModuleStatuses(statuses []fbplugin.ModuleStatus) error {
-	writer := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
+func writePluginModuleStatuses(out io.Writer, statuses []fbplugin.ModuleStatus) error {
+	writer := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 	if _, err := fmt.Fprintln(writer, "PLUGINS\tMODULE\tCURRENT\tAVAILABLE\tSTATUS"); err != nil {
 		return err
 	}
@@ -373,9 +407,9 @@ func writePluginModuleStatuses(statuses []fbplugin.ModuleStatus) error {
 	return writer.Flush()
 }
 
-func writePluginUpdates(updates []fbplugin.ModuleUpdate, dryRun bool) error {
+func writePluginUpdates(out io.Writer, updates []fbplugin.ModuleUpdate, dryRun bool) error {
 	if len(updates) == 0 {
-		_, err := fmt.Fprintln(stdout, "all selected plugin modules are current")
+		_, err := fmt.Fprintln(out, "all selected plugin modules are current")
 		return err
 	}
 	action := "updated"
@@ -384,7 +418,7 @@ func writePluginUpdates(updates []fbplugin.ModuleUpdate, dryRun bool) error {
 	}
 	for _, update := range updates {
 		if _, err := fmt.Fprintf(
-			stdout,
+			out,
 			"%s %s %s -> %s (plugins: %s)\n",
 			action,
 			update.Module,
@@ -416,55 +450,6 @@ func displayedModuleReplace(replacement *fbplugin.ModuleReplace) string {
 	return replacement.Path
 }
 
-func runPluginScan(args []string) error {
-	fs := flag.NewFlagSet("plugin scan", flag.ContinueOnError)
-	mode := fs.String("mode", "manifest", "comma-separated scan modes")
-	moduleDir := fs.String("module", ".", "module directory")
-	pluginsDir := fs.String("plugins-dir", "", "local plugins directory")
-	manifest := fs.String("manifest", "", "plugins manifest")
-	out := fs.String("out", "internal/generated/fba_plugins.gen.go", "generated registration output")
-	lockOut := fs.String("lock-out", "", "plugin lock output")
-	packageName := fs.String("package", "generated", "generated package name")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	result, err := fbplugin.Scan(fbplugin.ScanOptions{
-		Modes:      splitModes(*mode),
-		ModuleDir:  *moduleDir,
-		PluginsDir: *pluginsDir,
-		Manifest:   *manifest,
-	})
-	if err != nil {
-		return err
-	}
-	lockPath := *lockOut
-	if lockPath == "" {
-		lockPath = filepath.Join(filepath.Dir(*out), "plugin_manifest.lock")
-	}
-	if err := fbplugin.WriteLock(lockPath, result); err != nil {
-		return err
-	}
-	return fbplugin.GenerateRegistration(*out, *packageName, result)
-}
-
-func runSwaggerScan(args []string) error {
-	fs := flag.NewFlagSet("swagger scan", flag.ContinueOnError)
-	plugins := fs.String("plugins", "internal/generated/plugin_manifest.lock", "plugin manifest lock")
-	out := fs.String("out", "docs/openapi.json", "openapi output")
-	title := fs.String("title", "FBA API", "document title")
-	version := fs.String("version", "0.1.0", "document version")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	return fbswagger.Scan(fbswagger.ScanOptions{
-		PluginLock: *plugins,
-		Out:        *out,
-		Title:      *title,
-		Version:    *version,
-	})
-}
-
 func splitModes(value string) []string {
 	parts := strings.Split(value, ",")
 	modes := make([]string, 0, len(parts))
@@ -477,44 +462,199 @@ func splitModes(value string) []string {
 	return modes
 }
 
-func runContractSnapshot(args []string) error {
-	fs := flag.NewFlagSet("contract snapshot", flag.ContinueOnError)
-	contractDir := fs.String("contract", "contracts", "contract directory")
-	out := fs.String("out", "internal/generated/api.contract.snapshot.json", "snapshot output")
-	if err := fs.Parse(args); err != nil {
-		return err
+func newModuleCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "module",
+		Short: "Manage local Go module overrides",
 	}
-	contracts, err := fbcontract.Load(*contractDir)
-	if err != nil {
-		return err
-	}
-	snapshot, err := fbcontract.Snapshot(contracts)
-	if err != nil {
-		return err
-	}
-	return fbcontract.WriteSnapshot(*out, snapshot)
+	cmd.AddCommand(newModuleUseCommand(), newModuleResetCommand())
+	return cmd
 }
 
-func runContractTest(args []string) error {
-	fs := flag.NewFlagSet("contract test", flag.ContinueOnError)
-	baseURL := fs.String("base-url", "", "base URL")
-	contractDir := fs.String("contract", "contracts", "contract directory")
-	if err := fs.Parse(args); err != nil {
-		return err
+func newModuleUseCommand() *cobra.Command {
+	var projectDir string
+	var localPath string
+	cmd := &cobra.Command{
+		Use:   "use <module>",
+		Short: "Use a local checkout for a project dependency",
+		Args:  cobra.ExactArgs(1),
+		Example: "  fbago module use --path ../fba-go-admin " +
+			"github.com/yuWorm/fba-go-admin",
+		PreRunE: func(_ *cobra.Command, _ []string) error {
+			if strings.TrimSpace(localPath) == "" {
+				return fmt.Errorf("--path must not be empty")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAction(cmd, func() error {
+				return fbmodule.Use(fbmodule.UseOptions{
+					ProjectDir: projectDir,
+					Module:     args[0],
+					Path:       localPath,
+				})
+			})
+		},
 	}
-	contracts, err := fbcontract.Load(*contractDir)
-	if err != nil {
-		return err
+	cmd.Flags().StringVar(&projectDir, "dir", ".", "project module directory")
+	cmd.Flags().StringVar(&localPath, "path", "", "local module checkout")
+	if err := cmd.MarkFlagRequired("path"); err != nil {
+		panic(err)
 	}
-	result, err := fbcontract.Test(fbcontract.TestOptions{
-		BaseURL:   *baseURL,
-		Contracts: contracts,
-	})
-	if err != nil {
-		return err
+	return cmd
+}
+
+func newModuleResetCommand() *cobra.Command {
+	var projectDir string
+	cmd := &cobra.Command{
+		Use:     "reset <module>",
+		Short:   "Remove a local module override",
+		Args:    cobra.ExactArgs(1),
+		Example: "  fbago module reset github.com/yuWorm/fba-go-admin",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAction(cmd, func() error {
+				return fbmodule.Reset(projectDir, args[0])
+			})
+		},
 	}
-	if !result.Passed {
-		return fmt.Errorf("%s", fbcontract.FormatFailures(result))
+	cmd.Flags().StringVar(&projectDir, "dir", ".", "project module directory")
+	return cmd
+}
+
+func newSecretCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "secret",
+		Short: "Generate application secrets",
 	}
-	return nil
+	cmd.AddCommand(newSecretGenerateCommand())
+	return cmd
+}
+
+func newSecretGenerateCommand() *cobra.Command {
+	var size int
+	cmd := &cobra.Command{
+		Use:     "generate",
+		Short:   "Generate a cryptographically random base64url secret",
+		Args:    cobra.NoArgs,
+		Example: "  fbago secret generate\n  fbago secret generate --bytes 64",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAction(cmd, func() error {
+				value, err := fbsecret.Generate(size)
+				if err != nil {
+					return err
+				}
+				_, err = fmt.Fprintln(cmd.OutOrStdout(), value)
+				return err
+			})
+		},
+	}
+	cmd.Flags().IntVar(&size, "bytes", fbsecret.DefaultBytes, "cryptographic random bytes before base64url encoding")
+	return cmd
+}
+
+func newSwaggerCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "swagger",
+		Short: "Build OpenAPI documents",
+	}
+	cmd.AddCommand(newSwaggerScanCommand())
+	return cmd
+}
+
+func newSwaggerScanCommand() *cobra.Command {
+	var plugins string
+	var out string
+	var title string
+	var version string
+	cmd := &cobra.Command{
+		Use:     "scan",
+		Short:   "Aggregate plugin OpenAPI fragments",
+		Args:    cobra.NoArgs,
+		Example: "  fbago swagger scan --out docs/openapi.json",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAction(cmd, func() error {
+				return fbswagger.Scan(fbswagger.ScanOptions{
+					PluginLock: plugins,
+					Out:        out,
+					Title:      title,
+					Version:    version,
+				})
+			})
+		},
+	}
+	flags := cmd.Flags()
+	flags.StringVar(&plugins, "plugins", "internal/generated/plugin_manifest.lock", "plugin manifest lock")
+	flags.StringVar(&out, "out", "docs/openapi.json", "OpenAPI output")
+	flags.StringVar(&title, "title", "FBA API", "document title")
+	flags.StringVar(&version, "version", "0.1.0", "document version")
+	return cmd
+}
+
+func newContractCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "contract",
+		Short: "Manage API contract snapshots and checks",
+	}
+	cmd.AddCommand(newContractSnapshotCommand(), newContractTestCommand())
+	return cmd
+}
+
+func newContractSnapshotCommand() *cobra.Command {
+	var contractDir string
+	var out string
+	cmd := &cobra.Command{
+		Use:     "snapshot",
+		Short:   "Generate an API contract snapshot",
+		Args:    cobra.NoArgs,
+		Example: "  fbago contract snapshot --contract contracts --out internal/generated/api.contract.snapshot.json",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAction(cmd, func() error {
+				contracts, err := fbcontract.Load(contractDir)
+				if err != nil {
+					return err
+				}
+				snapshot, err := fbcontract.Snapshot(contracts)
+				if err != nil {
+					return err
+				}
+				return fbcontract.WriteSnapshot(out, snapshot)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&contractDir, "contract", "contracts", "contract directory")
+	cmd.Flags().StringVar(&out, "out", "internal/generated/api.contract.snapshot.json", "snapshot output")
+	return cmd
+}
+
+func newContractTestCommand() *cobra.Command {
+	var baseURL string
+	var contractDir string
+	cmd := &cobra.Command{
+		Use:     "test",
+		Short:   "Run API contract checks against a server",
+		Args:    cobra.NoArgs,
+		Example: "  fbago contract test --base-url http://127.0.0.1:8001",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAction(cmd, func() error {
+				contracts, err := fbcontract.Load(contractDir)
+				if err != nil {
+					return err
+				}
+				result, err := fbcontract.Test(fbcontract.TestOptions{
+					BaseURL:   baseURL,
+					Contracts: contracts,
+				})
+				if err != nil {
+					return err
+				}
+				if !result.Passed {
+					return fmt.Errorf("%s", fbcontract.FormatFailures(result))
+				}
+				return nil
+			})
+		},
+	}
+	cmd.Flags().StringVar(&baseURL, "base-url", "", "base URL")
+	cmd.Flags().StringVar(&contractDir, "contract", "contracts", "contract directory")
+	return cmd
 }
