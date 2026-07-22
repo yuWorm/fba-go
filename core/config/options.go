@@ -174,6 +174,7 @@ type DatabaseOptions struct {
 
 type AuthOptions struct {
 	JWTSecret              string
+	TOTPEncryptionKey      string
 	JWTIssuer              string
 	AdminBootstrapPassword string
 	AccessTokenTTL         time.Duration

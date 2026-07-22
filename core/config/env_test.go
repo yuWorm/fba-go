@@ -55,6 +55,7 @@ REDIS_PASSWORD='redis-secret'
 REDIS_DATABASE=2
 REDIS_TIMEOUT=7
 TOKEN_SECRET_KEY='token-secret'
+TOTP_ENCRYPTION_KEY='totp-encryption-key'
 ADMIN_BOOTSTRAP_PASSWORD='Admin@Local2026!'
 TOKEN_EXPIRE_SECONDS=3600
 TOKEN_REFRESH_EXPIRE_SECONDS=7200
@@ -89,6 +90,7 @@ TASK_QUEUES='{"critical":6,"default":3}'
 		t.Fatalf("Redis.KeyPrefix = %q, want acme", opts.Redis.KeyPrefix)
 	}
 	if opts.Auth.JWTSecret != "token-secret" ||
+		opts.Auth.TOTPEncryptionKey != "totp-encryption-key" ||
 		opts.Auth.AdminBootstrapPassword != "Admin@Local2026!" ||
 		opts.Auth.AccessTokenTTL != time.Hour ||
 		opts.Auth.RefreshTokenTTL != 2*time.Hour {

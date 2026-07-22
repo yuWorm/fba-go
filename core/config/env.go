@@ -195,6 +195,9 @@ func applyAuthEnv(opts *Options, values map[string]string) {
 	if value, ok := values["TOKEN_SECRET_KEY"]; ok {
 		opts.Auth.JWTSecret = value
 	}
+	if value, ok := values["TOTP_ENCRYPTION_KEY"]; ok {
+		opts.Auth.TOTPEncryptionKey = value
+	}
 	if value, ok := values["ADMIN_BOOTSTRAP_PASSWORD"]; ok {
 		opts.Auth.AdminBootstrapPassword = value
 	}
