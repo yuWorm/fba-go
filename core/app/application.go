@@ -107,9 +107,25 @@ func New(opts config.Options) (Application, error) {
 		return nil, err
 	}
 	if !opts.Realtime.Disabled {
+		if err := container.Provide(func() realtime.SessionDisconnecter { return hub }); err != nil {
+			return nil, err
+		}
+	}
+	if !opts.Realtime.Disabled {
+		defaultAuthenticator := realtime.NewJWTAuthenticator(
+			tokenService,
+			opts,
+			realtime.WithAccessSessionValidatorResolver(container),
+		)
+		authenticatorRegistry := realtime.NewAuthenticatorRegistry(defaultAuthenticator)
+		if err := container.Provide(func() realtime.AuthenticatorRegistry {
+			return authenticatorRegistry
+		}); err != nil {
+			return nil, err
+		}
 		server := realtime.NewSocketIOServer(hub, realtime.SocketIOServerOptions{
 			Config:        opts,
-			Authenticator: realtime.NewJWTAuthenticator(tokenService, opts, realtime.WithAccessSessionValidatorResolver(container)),
+			Authenticator: authenticatorRegistry,
 		})
 		server.Mount(fx.App)
 		// Realtime JWTs must remain coupled to a revocable server-side session.

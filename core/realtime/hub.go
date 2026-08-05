@@ -37,6 +37,12 @@ type Hub interface {
 	OnlineStore() OnlineStore
 }
 
+// SessionDisconnecter invalidates every local realtime connection bound to a
+// server-side access session. Multi-instance callers must fan out separately.
+type SessionDisconnecter interface {
+	DisconnectSession(sessionUUID string)
+}
+
 type OnlineStore interface {
 	Connect(sid string, sessionUUID string)
 	Disconnect(sid string)
@@ -159,6 +165,12 @@ func (h *MemoryHub) On(event string, handler EventHandler) {
 
 func (h *MemoryHub) OnlineStore() OnlineStore {
 	return h.store
+}
+
+func (h *MemoryHub) DisconnectSession(sessionUUID string) {
+	for _, socketID := range h.store.SIDs(sessionUUID) {
+		h.store.Disconnect(socketID)
+	}
 }
 
 func (h *MemoryHub) Events() []Event {

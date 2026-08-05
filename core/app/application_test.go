@@ -8,6 +8,7 @@ import (
 
 	fba "github.com/yuWorm/fba-go"
 	"github.com/yuWorm/fba-go/core/config"
+	"github.com/yuWorm/fba-go/core/realtime"
 	"github.com/yuWorm/fba-go/core/redisx"
 	coretask "github.com/yuWorm/fba-go/core/task"
 )
@@ -237,5 +238,13 @@ func TestRealtimeRedisLifecycleFollowsRealtimeState(t *testing.T) {
 	}
 	if err := enabledRedis.Ping(context.Background()).Err(); err == nil {
 		t.Fatal("realtime Redis Ping() error = nil after application shutdown")
+	}
+	var authenticatorRegistry realtime.AuthenticatorRegistry
+	if !enabledApp.Container().Resolve(&authenticatorRegistry) || authenticatorRegistry == nil {
+		t.Fatal("enabled realtime did not provide authenticator registry")
+	}
+	var disconnecter realtime.SessionDisconnecter
+	if !enabledApp.Container().Resolve(&disconnecter) || disconnecter == nil {
+		t.Fatal("enabled realtime did not provide session disconnecter")
 	}
 }

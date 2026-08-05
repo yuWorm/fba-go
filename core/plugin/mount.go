@@ -25,10 +25,15 @@ func (fn AuthenticatorFunc) Authenticate(c fiber.Ctx) (*rbac.CurrentUser, error)
 	return fn(c)
 }
 
+// OuterRouteHandler wraps the fully assembled route handler. It receives the
+// concrete route so policy extensions can make deny-by-default decisions from
+// copied route metadata without maintaining a second method/path registry.
+type OuterRouteHandler func(Route, fiber.Handler) fiber.Handler
 type MountOption func(*mountOptions)
 
 type mountOptions struct {
 	authenticator Authenticator
+	outerHandler  OuterRouteHandler
 	container     *di.Container
 }
 
@@ -41,6 +46,14 @@ func WithAuthenticator(authenticator Authenticator) MountOption {
 func WithContainer(container *di.Container) MountOption {
 	return func(opts *mountOptions) {
 		opts.container = container
+	}
+}
+
+// WithOuterRouteHandler installs one wrapper outside built-in authentication
+// and RBAC. The wrapper therefore runs first and must delegate explicitly.
+func WithOuterRouteHandler(handler OuterRouteHandler) MountOption {
+	return func(opts *mountOptions) {
+		opts.outerHandler = handler
 	}
 }
 
@@ -61,6 +74,9 @@ func MountRoutes(router fiber.Router, routes []Route, options ...MountOption) {
 		handler := route.Handler
 		if route.AuthRequired || route.Permission != "" || route.SuperuserRequired {
 			handler = authHandler(route, opts.authenticator)
+		}
+		if opts.outerHandler != nil {
+			handler = opts.outerHandler(route, handler)
 		}
 		router.Add([]string{strings.ToUpper(route.Method)}, route.Path, handler)
 	}

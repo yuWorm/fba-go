@@ -24,6 +24,7 @@ func TestRouteHelpersApplyCommonOptions(t *testing.T) {
 		plugin.Perm("sys:user:list"),
 		plugin.Superuser(),
 		plugin.Tags("sys", "users"),
+		plugin.Metadata(map[string]string{"example.policy": "read"}),
 	)
 
 	if route.Method != "GET" {
@@ -46,6 +47,9 @@ func TestRouteHelpersApplyCommonOptions(t *testing.T) {
 	}
 	if len(route.Tags) != 2 || route.Tags[0] != "sys" || route.Tags[1] != "users" {
 		t.Fatalf("Tags = %v, want [sys users]", route.Tags)
+	}
+	if route.Metadata["example.policy"] != "read" {
+		t.Fatalf("Metadata = %v, want copied policy", route.Metadata)
 	}
 	if route.Handler == nil {
 		t.Fatal("Handler is nil")
@@ -369,6 +373,53 @@ func TestMountRoutesAllowsSuperuserRouteForSuperAdmin(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("GET /plugins status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestRouteMetadataCopiesInput(t *testing.T) {
+	values := map[string]string{"example.policy": "read"}
+	route := plugin.GET("/items", "Items", func(fiber.Ctx) error { return nil }, plugin.Metadata(values))
+
+	values["example.policy"] = "write"
+	if route.Metadata["example.policy"] != "read" {
+		t.Fatalf("Metadata = %v, want immutable input copy", route.Metadata)
+	}
+}
+
+func TestMountRoutesOuterHandlerRunsBeforeAuthentication(t *testing.T) {
+	app := fiber.New()
+	var calls []string
+	route := plugin.GET("/secure", "Secure", func(c fiber.Ctx) error {
+		calls = append(calls, "handler")
+		return c.SendString("ok")
+	}, plugin.Auth(), plugin.Metadata(map[string]string{"example.policy": "read"}))
+	authenticator := plugin.AuthenticatorFunc(func(fiber.Ctx) (*rbac.CurrentUser, error) {
+		calls = append(calls, "auth")
+		return &rbac.CurrentUser{ID: 1}, nil
+	})
+	outer := func(route plugin.Route, next fiber.Handler) fiber.Handler {
+		if route.Metadata["example.policy"] != "read" {
+			t.Fatalf("outer route metadata = %v", route.Metadata)
+		}
+		return func(c fiber.Ctx) error {
+			calls = append(calls, "outer")
+			return next(c)
+		}
+	}
+	plugin.MountRoutes(
+		app.Group("/api/v1"),
+		[]plugin.Route{route},
+		plugin.WithAuthenticator(authenticator),
+		plugin.WithOuterRouteHandler(outer),
+	)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/v1/secure", nil))
+	if err != nil {
+		t.Fatalf("GET /secure error = %v", err)
+	}
+	defer resp.Body.Close()
+	if got := strings.Join(calls, ","); got != "outer,auth,handler" {
+		t.Fatalf("call order = %q, want outer,auth,handler", got)
 	}
 }
 

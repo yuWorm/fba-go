@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 
 	coreauth "github.com/yuWorm/fba-go/core/auth"
 	"github.com/yuWorm/fba-go/core/config"
@@ -22,6 +23,39 @@ type AuthPayload struct {
 
 type Authenticator interface {
 	Authenticate(ctx context.Context, payload AuthPayload) error
+}
+
+// AuthenticatorRegistry is a stable indirection whose delegate may be
+// replaced after plugins register but before the server starts accepting
+// connections.
+type AuthenticatorRegistry interface {
+	Authenticator
+	SetAuthenticator(Authenticator)
+}
+
+type authenticatorRegistry struct {
+	mu      sync.RWMutex
+	current Authenticator
+}
+
+func NewAuthenticatorRegistry(initial Authenticator) AuthenticatorRegistry {
+	return &authenticatorRegistry{current: initial}
+}
+
+func (r *authenticatorRegistry) SetAuthenticator(authenticator Authenticator) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.current = authenticator
+}
+
+func (r *authenticatorRegistry) Authenticate(ctx context.Context, payload AuthPayload) error {
+	r.mu.RLock()
+	authenticator := r.current
+	r.mu.RUnlock()
+	if authenticator == nil {
+		return ErrInvalidAuth
+	}
+	return authenticator.Authenticate(ctx, payload)
 }
 
 // AccessSessionValidator confirms that a signed JWT still maps to an active,

@@ -85,6 +85,34 @@ func TestJWTAuthenticatorRejectsFormerNoAuthMarkerInEveryEnvironment(t *testing.
 	}
 }
 
+func TestAuthenticatorRegistryReplacesDelegateAtomically(t *testing.T) {
+	firstErr := errors.New("first")
+	secondErr := errors.New("second")
+	registry := realtime.NewAuthenticatorRegistry(authenticatorFunc(
+		func(context.Context, realtime.AuthPayload) error { return firstErr },
+	))
+
+	if err := registry.Authenticate(context.Background(), realtime.AuthPayload{}); !errors.Is(err, firstErr) {
+		t.Fatalf("Authenticate() error = %v, want first delegate", err)
+	}
+	registry.SetAuthenticator(authenticatorFunc(
+		func(context.Context, realtime.AuthPayload) error { return secondErr },
+	))
+	if err := registry.Authenticate(context.Background(), realtime.AuthPayload{}); !errors.Is(err, secondErr) {
+		t.Fatalf("Authenticate() error = %v, want second delegate", err)
+	}
+	registry.SetAuthenticator(nil)
+	if err := registry.Authenticate(context.Background(), realtime.AuthPayload{}); !errors.Is(err, realtime.ErrInvalidAuth) {
+		t.Fatalf("Authenticate() error = %v, want ErrInvalidAuth", err)
+	}
+}
+
+type authenticatorFunc func(context.Context, realtime.AuthPayload) error
+
+func (f authenticatorFunc) Authenticate(ctx context.Context, payload realtime.AuthPayload) error {
+	return f(ctx, payload)
+}
+
 type accessSessionValidatorFunc func(context.Context, int64, string, string) error
 
 func (f accessSessionValidatorFunc) ValidateRealtimeSession(ctx context.Context, userID int64, sessionUUID string, accessToken string) error {

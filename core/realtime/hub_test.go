@@ -52,3 +52,20 @@ func TestMemoryHubRecordsTaskNotificationPayload(t *testing.T) {
 		t.Fatalf("payload msg = %q", payload.Msg)
 	}
 }
+
+func TestMemoryHubDisconnectSessionRemovesEverySocket(t *testing.T) {
+	store := realtime.NewMemoryOnlineStore()
+	hub := realtime.NewMemoryHub(store)
+	store.Connect("sid-1", "session-1")
+	store.Connect("sid-2", "session-1")
+	store.Connect("sid-3", "session-2")
+
+	hub.DisconnectSession("session-1")
+
+	if got := store.SIDs("session-1"); len(got) != 0 {
+		t.Fatalf("session-1 SIDs = %v, want empty", got)
+	}
+	if got := store.SIDs("session-2"); len(got) != 1 || got[0] != "sid-3" {
+		t.Fatalf("session-2 SIDs = %v, want [sid-3]", got)
+	}
+}

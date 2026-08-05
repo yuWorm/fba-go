@@ -7,6 +7,7 @@ type Route struct {
 	Path              string
 	Summary           string
 	Tags              []string
+	Metadata          map[string]string
 	Permission        string
 	AuthRequired      bool
 	SuperuserRequired bool
@@ -37,6 +38,21 @@ func Superuser() RouteOption {
 func Tags(tags ...string) RouteOption {
 	return func(route *Route) {
 		route.Tags = append([]string(nil), tags...)
+	}
+}
+
+// Metadata copies extension metadata onto a route. Framework consumers should
+// reserve namespaced keys so independently developed plugins cannot collide.
+func Metadata(values map[string]string) RouteOption {
+	return func(route *Route) {
+		if len(values) == 0 {
+			route.Metadata = nil
+			return
+		}
+		route.Metadata = make(map[string]string, len(values))
+		for key, value := range values {
+			route.Metadata[key] = value
+		}
 	}
 }
 

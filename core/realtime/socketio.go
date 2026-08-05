@@ -154,6 +154,23 @@ func (h *SocketIOHub) disconnect(socketID string) {
 	h.store.Disconnect(socketID)
 }
 
+func (h *SocketIOHub) DisconnectSession(sessionUUID string) {
+	socketIDs := h.store.SIDs(sessionUUID)
+	h.mu.Lock()
+	connections := make([]*socketio.Websocket, 0, len(socketIDs))
+	for _, socketID := range socketIDs {
+		if conn := h.connections[socketID]; conn != nil {
+			connections = append(connections, conn)
+			delete(h.connections, socketID)
+		}
+		h.store.Disconnect(socketID)
+	}
+	h.mu.Unlock()
+	for _, conn := range connections {
+		conn.Close()
+	}
+}
+
 func (h *SocketIOHub) dispatch(event string, payload EventPayload) {
 	h.mu.RLock()
 	handlers := append([]EventHandler(nil), h.handlers[event]...)
