@@ -22,7 +22,12 @@ func NewErrorHandler(opts config.Options) fiber.ErrorHandler {
 			msg = err.Error()
 		}
 
-		return c.Status(mapped.status).JSON(response.Error(mapped.code, msg, requestIDFromCtx(c)))
+		responseErr := c.Status(mapped.status).JSON(response.Error(mapped.code, msg, requestIDFromCtx(c)))
+		// The request logger defers errors until this final response has been
+		// written so Fiber's parser traversal cannot misreport an intermediate
+		// middleware error as the access status.
+		finishRequestLog(c, err)
+		return responseErr
 	}
 }
 

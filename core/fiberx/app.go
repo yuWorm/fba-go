@@ -22,7 +22,7 @@ func New(opts config.Options) *CoreApp {
 		app.Use(middleware.RequestID())
 	}
 	if opts.Middleware.AccessLog.Enabled || opts.Middleware.ErrorLog.Enabled {
-		app.Use(middleware.HTTPLogger(opts))
+		app.Use(middleware.HTTPLogger(app, opts))
 	}
 	if opts.Middleware.Recover.Enabled {
 		app.Use(middleware.Recover(middleware.RecoverConfig{

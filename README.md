@@ -126,6 +126,14 @@ make run
 | `make test` | 运行 core 测试 |
 | `make verify-template` | 验证内置 Admin starter 与独立 Admin module 的集成 |
 
+## HTTP 日志升级说明（v0.0.14）
+
+访问日志记录最终 HTTP 响应状态；请求体超限等解析错误记录为实际返回的 `413`，不会记录 Fiber 中间件遍历期间的临时 `405`。
+
+使用 `fiberx.New` 的应用无需调整。手动组装 Fiber 中间件的应用，需将
+`middleware.HTTPLogger(opts)` 改为 `middleware.HTTPLogger(app, opts)`，在路由前注册，
+并将 `middleware.NewErrorHandler(opts)` 配置为应用的错误处理器；两者共同完成错误响应的最终日志记录。
+
 ## 本地开发
 
 ```bash

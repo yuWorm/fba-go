@@ -121,6 +121,16 @@ make run
 | `make test` | Run core tests |
 | `make verify-template` | Verify the embedded Admin starter against the independent Admin module |
 
+## HTTP logging upgrade (v0.0.14)
+
+Access logs record the final HTTP response status. Parser failures such as an oversized
+request body are logged as the actual `413`, not a provisional `405` from Fiber's middleware traversal.
+
+Applications using `fiberx.New` need no changes. For manually assembled Fiber middleware,
+replace `middleware.HTTPLogger(opts)` with `middleware.HTTPLogger(app, opts)`, register it
+before routes, and configure `middleware.NewErrorHandler(opts)` as the application's error
+handler. Both components cooperate to log the final error response.
+
 ## Local Development
 
 ```bash
